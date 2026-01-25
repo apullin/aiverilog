@@ -1,0 +1,5 @@
+# Commits to ignore for git blame
+# Configure with: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Apply clang-format to entire codebase
+45d38925e5730f0a96b1a86ab08f419e62261a79
