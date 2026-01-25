@@ -29,7 +29,7 @@ void preload_std_funcs();
 void delete_std_funcs();
 
 // Adds a subprogram to the standard library subprogram set
-void register_std_subprogram(SubprogramHeader*header);
+void register_std_subprogram(SubprogramHeader* header);
 
 // Returns subprogram header for a requested function or NULL if it does not exist.
 SubHeaderList find_std_subprogram(perm_string name);

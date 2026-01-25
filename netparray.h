@@ -20,81 +20,70 @@
  *    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-# include  "nettypes.h"
-# include  <vector>
+#include "nettypes.h"
+#include <vector>
 
 /*
  * Arrays with static dimensions (packed and unpacked) share this
  * common base type.
  */
 class netsarray_t : public netarray_t {
+  public:
+    explicit netsarray_t(const netranges_t& packed, ivl_type_t etype);
+    ~netsarray_t() override;
 
-    public:
-      explicit netsarray_t(const netranges_t&packed, ivl_type_t etype);
-      ~netsarray_t() override;
+  public:
+    // Virtual methods from the ivl_type_s type...
 
-    public:
-	// Virtual methods from the ivl_type_s type...
+  public:
+    inline const netranges_t& static_dimensions() const {
+        return dims_;
+    }
 
-    public:
-      inline const netranges_t& static_dimensions() const
-      { return dims_; }
-
-    private:
-      netranges_t dims_;
-
+  private:
+    netranges_t dims_;
 };
 
-inline netsarray_t::netsarray_t(const netranges_t&pd, ivl_type_t etype)
-: netarray_t(etype), dims_(pd)
-{
-}
+inline netsarray_t::netsarray_t(const netranges_t& pd, ivl_type_t etype)
+    : netarray_t(etype), dims_(pd) {}
 
 /*
  * Packed arrays.
  */
 class netparray_t : public netsarray_t {
+  public:
+    explicit netparray_t(const netranges_t& packed, ivl_type_t etype);
+    ~netparray_t() override;
 
-    public:
-      explicit netparray_t(const netranges_t&packed, ivl_type_t etype);
-      ~netparray_t() override;
+  public:
+    // Virtual methods from the ivl_type_s type...
+    bool packed(void) const override;
+    long packed_width(void) const override;
+    netranges_t slice_dimensions() const override;
 
-    public:
-	// Virtual methods from the ivl_type_s type...
-      bool packed(void) const override;
-      long packed_width(void) const override;
-      netranges_t slice_dimensions() const override;
-
-    private:
-      bool test_compatibility(ivl_type_t that) const override;
-      bool test_equivalence(ivl_type_t that) const override;
+  private:
+    bool test_compatibility(ivl_type_t that) const override;
+    bool test_equivalence(ivl_type_t that) const override;
 };
 
-inline netparray_t::netparray_t(const netranges_t&pd, ivl_type_t etype)
-: netsarray_t(pd, etype)
-{
-}
+inline netparray_t::netparray_t(const netranges_t& pd, ivl_type_t etype) : netsarray_t(pd, etype) {}
 
 /*
  * Unpacked arrays are very similar, but lack packed slices.
  */
 class netuarray_t : public netsarray_t {
+  public:
+    explicit netuarray_t(const netranges_t& packed, ivl_type_t etype);
+    ~netuarray_t() override;
 
-    public:
-      explicit netuarray_t(const netranges_t&packed, ivl_type_t etype);
-      ~netuarray_t() override;
+  public:
+    // Virtual methods from the ivl_type_s type...
+    netranges_t slice_dimensions() const override;
 
-    public:
-	// Virtual methods from the ivl_type_s type...
-      netranges_t slice_dimensions() const override;
-
-    private:
-      bool test_equivalence(ivl_type_t that) const override;
+  private:
+    bool test_equivalence(ivl_type_t that) const override;
 };
 
-inline netuarray_t::netuarray_t(const netranges_t&pd, ivl_type_t etype)
-: netsarray_t(pd, etype)
-{
-}
+inline netuarray_t::netuarray_t(const netranges_t& pd, ivl_type_t etype) : netsarray_t(pd, etype) {}
 
 #endif /* IVL_netarray_H */

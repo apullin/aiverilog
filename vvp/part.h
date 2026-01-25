@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "schedule.h"
-# include  "config.h"
+#include "schedule.h"
+#include "config.h"
 
 /* vvp_fun_part
  * This node takes a part select of the input vector. Input 0 is the
@@ -28,69 +28,74 @@
  * select starts. Input 2, which is typically constant, is the width
  * of the result.
  */
-class vvp_fun_part  : public vvp_net_fun_t {
+class vvp_fun_part : public vvp_net_fun_t {
+  public:
+    vvp_fun_part(unsigned base, unsigned wid);
+    ~vvp_fun_part() override;
 
-    public:
-      vvp_fun_part(unsigned base, unsigned wid);
-      ~vvp_fun_part() override;
+    unsigned get_base() const {
+        return base_;
+    }
+    unsigned get_wid() const {
+        return wid_;
+    }
 
-      unsigned get_base() const { return base_; }
-      unsigned get_wid() const { return wid_; }
-
-    protected:
-      unsigned base_;
-      unsigned wid_;
+  protected:
+    unsigned base_;
+    unsigned wid_;
 };
 
 /*
  * Statically allocated vvp_fun_part.
  */
-class vvp_fun_part_sa  : public vvp_fun_part, public vvp_gen_event_s {
+class vvp_fun_part_sa : public vvp_fun_part, public vvp_gen_event_s {
+  public:
+    vvp_fun_part_sa(unsigned base, unsigned wid);
+    ~vvp_fun_part_sa() override;
 
-    public:
-      vvp_fun_part_sa(unsigned base, unsigned wid);
-      ~vvp_fun_part_sa() override;
+  public:
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t) override;
 
-    public:
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override;
+  private:
+    void run_run() override;
 
-    private:
-      void run_run() override;
-
-    private:
-      vvp_vector4_t val_;
-      vvp_net_t*net_;
+  private:
+    vvp_vector4_t val_;
+    vvp_net_t* net_;
 };
 
 /*
  * Automatically allocated vvp_fun_part.
  */
-class vvp_fun_part_aa  : public vvp_fun_part, public automatic_hooks_s {
+class vvp_fun_part_aa : public vvp_fun_part, public automatic_hooks_s {
+  public:
+    vvp_fun_part_aa(unsigned base, unsigned wid);
+    ~vvp_fun_part_aa() override;
 
-    public:
-      vvp_fun_part_aa(unsigned base, unsigned wid);
-      ~vvp_fun_part_aa() override;
-
-    public:
-      void alloc_instance(vvp_context_t context) override;
-      void reset_instance(vvp_context_t context) override;
+  public:
+    void alloc_instance(vvp_context_t context) override;
+    void reset_instance(vvp_context_t context) override;
 #ifdef CHECK_WITH_VALGRIND
-      void free_instance(vvp_context_t context) override;
+    void free_instance(vvp_context_t context) override;
 #endif
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t context) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t context) override;
 
-    private:
-      __vpiScope*context_scope_;
-      unsigned context_idx_;
+  private:
+    __vpiScope* context_scope_;
+    unsigned context_idx_;
 };
 
 /* vvp_fun_part_pv
@@ -100,25 +105,26 @@ class vvp_fun_part_aa  : public vvp_fun_part, public automatic_hooks_s {
  * both statically and automatically allocated scopes, as it has no
  * dynamic state.
  */
-class vvp_fun_part_pv  : public vvp_net_fun_t {
+class vvp_fun_part_pv : public vvp_net_fun_t {
+  public:
+    vvp_fun_part_pv(unsigned base, unsigned wid, unsigned vec_wid);
+    ~vvp_fun_part_pv() override;
 
-    public:
-      vvp_fun_part_pv(unsigned base, unsigned wid, unsigned vec_wid);
-      ~vvp_fun_part_pv() override;
+  public:
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-    public:
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                        unsigned base, unsigned vwid, vvp_context_t) override;
+    void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t& bit) override;
 
-      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override;
-
-    private:
-      unsigned base_;
-      unsigned wid_;
-      unsigned vwid_;
+  private:
+    unsigned base_;
+    unsigned wid_;
+    unsigned vwid_;
 };
 
 /*
@@ -126,69 +132,72 @@ class vvp_fun_part_pv  : public vvp_net_fun_t {
  * part in port 0, and the base of the part in port 1. The width of
  * the part to take out is fixed.
  */
-class vvp_fun_part_var  : public vvp_net_fun_t {
+class vvp_fun_part_var : public vvp_net_fun_t {
+  public:
+    explicit vvp_fun_part_var(unsigned wid, bool is_signed);
+    ~vvp_fun_part_var() override;
 
-    public:
-      explicit vvp_fun_part_var(unsigned wid, bool is_signed);
-      ~vvp_fun_part_var() override;
+  protected:
+    bool recv_vec4_(vvp_net_ptr_t port,
+                    const vvp_vector4_t& bit,
+                    int& base,
+                    vvp_vector4_t& source,
+                    vvp_vector4_t& ref);
 
-    protected:
-      bool recv_vec4_(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                      int&base, vvp_vector4_t&source,
-                      vvp_vector4_t&ref);
-
-      unsigned wid_;
-      bool is_signed_;
+    unsigned wid_;
+    bool is_signed_;
 };
 
 /*
  * Statically allocated vvp_fun_part_var.
  */
-class vvp_fun_part_var_sa  : public vvp_fun_part_var {
+class vvp_fun_part_var_sa : public vvp_fun_part_var {
+  public:
+    explicit vvp_fun_part_var_sa(unsigned wid, bool is_signed);
+    ~vvp_fun_part_var_sa() override;
 
-    public:
-      explicit vvp_fun_part_var_sa(unsigned wid, bool is_signed);
-      ~vvp_fun_part_var_sa() override;
+  public:
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t) override;
 
-    public:
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override;
-
-    private:
-      int base_;
-      vvp_vector4_t source_;
-	// Save the last output, for detecting change.
-      vvp_vector4_t ref_;
+  private:
+    int base_;
+    vvp_vector4_t source_;
+    // Save the last output, for detecting change.
+    vvp_vector4_t ref_;
 };
 
 /*
  * Automatically allocated vvp_fun_part_var.
  */
-class vvp_fun_part_var_aa  : public vvp_fun_part_var, public automatic_hooks_s {
+class vvp_fun_part_var_aa : public vvp_fun_part_var, public automatic_hooks_s {
+  public:
+    explicit vvp_fun_part_var_aa(unsigned wid, bool is_signed);
+    ~vvp_fun_part_var_aa() override;
 
-    public:
-      explicit vvp_fun_part_var_aa(unsigned wid, bool is_signed);
-      ~vvp_fun_part_var_aa() override;
-
-    public:
-      void alloc_instance(vvp_context_t context) override;
-      void reset_instance(vvp_context_t context) override;
+  public:
+    void alloc_instance(vvp_context_t context) override;
+    void reset_instance(vvp_context_t context) override;
 #ifdef CHECK_WITH_VALGRIND
-      void free_instance(vvp_context_t context) override;
+    void free_instance(vvp_context_t context) override;
 #endif
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t context) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t context) override;
 
-    private:
-      __vpiScope*context_scope_;
-      unsigned context_idx_;
+  private:
+    __vpiScope* context_scope_;
+    unsigned context_idx_;
 };
 
 #endif /* IVL_part_H */

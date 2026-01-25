@@ -19,6 +19,6 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-extern int lexor_keyword_code (const char*str, unsigned len);
+extern int lexor_keyword_code(const char* str, unsigned len);
 
 #endif /* IVL_lexor_keyword_H */

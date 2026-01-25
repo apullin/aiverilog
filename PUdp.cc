@@ -17,21 +17,16 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PUdp.h"
+#include "PUdp.h"
 
 PUdp::PUdp(perm_string n, unsigned nports)
-: ports(nports), sequential(false), initial(verinum::Vx), name_(n)
-{
+    : ports(nports), sequential(false), initial(verinum::Vx), name_(n) {}
+
+unsigned PUdp::find_port(const char* name) {
+    for (unsigned idx = 0; idx < ports.size(); idx += 1) {
+        if (ports[idx] == name)
+            return idx;
+    }
+
+    return ports.size();
 }
-
-unsigned PUdp::find_port(const char*name)
-{
-      for (unsigned idx = 0 ;  idx < ports.size() ;  idx += 1) {
-
-	    if (ports[idx] == name)
-		  return idx;
-      }
-
-      return ports.size();
-}
-

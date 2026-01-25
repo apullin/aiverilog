@@ -19,96 +19,99 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "vvp_net.h"
-# include  "array.h"
-# include  "vthread.h"
-# include  "config.h"
+#include "vvp_net.h"
+#include "array.h"
+#include "vthread.h"
+#include "config.h"
 
 class evctl {
+  public:
+    explicit evctl(unsigned long ecount);
+    bool dec_and_run();
+    virtual void run_run() = 0;
+    virtual ~evctl() {}
+    evctl* next;
 
-    public:
-      explicit evctl(unsigned long ecount);
-      bool dec_and_run();
-      virtual void run_run() = 0;
-      virtual ~evctl() {}
-      evctl*next;
-
-    private:
-      unsigned long ecount_;
+  private:
+    unsigned long ecount_;
 };
 
 class evctl_real : public evctl {
+  public:
+    explicit evctl_real(class __vpiHandle* handle, double value, unsigned long ecount);
+    virtual ~evctl_real() override {}
+    void run_run() override;
 
-    public:
-      explicit evctl_real(class __vpiHandle*handle, double value,
-                          unsigned long ecount);
-      virtual ~evctl_real() override {}
-      void run_run() override;
-
-    private:
-      class __vpiHandle*handle_;
-      double value_;
+  private:
+    class __vpiHandle* handle_;
+    double value_;
 };
 
 class evctl_vector : public evctl {
+  public:
+    explicit evctl_vector(vvp_net_ptr_t ptr,
+                          const vvp_vector4_t& value,
+                          unsigned off,
+                          unsigned wid,
+                          unsigned long ecount);
+    virtual ~evctl_vector() override {}
+    void run_run() override;
 
-    public:
-      explicit evctl_vector(vvp_net_ptr_t ptr, const vvp_vector4_t&value,
-                            unsigned off, unsigned wid, unsigned long ecount);
-      virtual ~evctl_vector() override {}
-      void run_run() override;
-
-    private:
-      vvp_net_ptr_t ptr_;
-      vvp_vector4_t value_;
-      unsigned off_;
-      unsigned wid_;
+  private:
+    vvp_net_ptr_t ptr_;
+    vvp_vector4_t value_;
+    unsigned off_;
+    unsigned wid_;
 };
 
 class evctl_array : public evctl {
+  public:
+    explicit evctl_array(vvp_array_t memory,
+                         unsigned index,
+                         const vvp_vector4_t& value,
+                         unsigned off,
+                         unsigned long ecount);
+    virtual ~evctl_array() override {}
+    virtual void run_run() override;
 
-    public:
-      explicit evctl_array(vvp_array_t memory, unsigned index,
-                           const vvp_vector4_t&value, unsigned off,
-                           unsigned long ecount);
-      virtual ~evctl_array() override {}
-      virtual void run_run() override;
-
-    private:
-      vvp_array_t mem_;
-      unsigned idx_;
-      vvp_vector4_t value_;
-      unsigned off_;
+  private:
+    vvp_array_t mem_;
+    unsigned idx_;
+    vvp_vector4_t value_;
+    unsigned off_;
 };
 
 class evctl_array_r : public evctl {
+  public:
+    explicit evctl_array_r(vvp_array_t memory, unsigned index, double value, unsigned long ecount);
+    virtual ~evctl_array_r() override {}
+    virtual void run_run() override;
 
-    public:
-      explicit evctl_array_r(vvp_array_t memory, unsigned index,
-                           double value, unsigned long ecount);
-      virtual ~evctl_array_r() override {}
-      virtual void run_run() override;
-
-    private:
-      vvp_array_t mem_;
-      unsigned idx_;
-      double value_;
+  private:
+    vvp_array_t mem_;
+    unsigned idx_;
+    double value_;
 };
 
-extern void schedule_evctl(class __vpiHandle*handle, double value,
-                           vvp_net_t*event, unsigned long ecount);
+extern void
+schedule_evctl(class __vpiHandle* handle, double value, vvp_net_t* event, unsigned long ecount);
 
-extern void schedule_evctl(vvp_net_ptr_t ptr, const vvp_vector4_t&value,
-                           unsigned offset, unsigned wid,
-                           vvp_net_t*event, unsigned long ecount);
+extern void schedule_evctl(vvp_net_ptr_t ptr,
+                           const vvp_vector4_t& value,
+                           unsigned offset,
+                           unsigned wid,
+                           vvp_net_t* event,
+                           unsigned long ecount);
 
-extern void schedule_evctl(vvp_array_t memory, unsigned index,
-                           const vvp_vector4_t&value, unsigned offset,
-                           vvp_net_t*event, unsigned long ecount);
+extern void schedule_evctl(vvp_array_t memory,
+                           unsigned index,
+                           const vvp_vector4_t& value,
+                           unsigned offset,
+                           vvp_net_t* event,
+                           unsigned long ecount);
 
-extern void schedule_evctl(vvp_array_t memory, unsigned index,
-                           double value,
-                           vvp_net_t*event, unsigned long ecount);
+extern void schedule_evctl(
+    vvp_array_t memory, unsigned index, double value, vvp_net_t* event, unsigned long ecount);
 
 /*
  *  Event / edge detection functors
@@ -119,18 +122,19 @@ extern void schedule_evctl(vvp_array_t memory, unsigned index,
  * on. This includes the infrastructure needed to hold threads.
  */
 struct waitable_hooks_s {
+  public:
+    waitable_hooks_s() : event_ctls(0) {
+        last = &event_ctls;
+    }
+    virtual ~waitable_hooks_s() {}
 
-    public:
-      waitable_hooks_s() : event_ctls(0) { last = &event_ctls; }
-      virtual ~waitable_hooks_s() {}
+    virtual vthread_t add_waiting_thread(vthread_t thread) = 0;
 
-      virtual vthread_t add_waiting_thread(vthread_t thread) = 0;
+    evctl* event_ctls;
+    evctl** last;
 
-      evctl*event_ctls;
-      evctl**last;
-
-    protected:
-      void run_waiting_threads_(vthread_t&threads);
+  protected:
+    void run_waiting_threads_(vthread_t& threads);
 };
 
 /*
@@ -139,9 +143,9 @@ struct waitable_hooks_s {
  * needed is the list of threads waiting on that instance.
  */
 struct waitable_state_s {
-      waitable_state_s() : threads(0) {}
+    waitable_state_s() : threads(0) {}
 
-      vthread_t threads;
+    vthread_t threads;
 };
 
 /*
@@ -150,20 +154,18 @@ struct waitable_state_s {
  * the output of a signal that we wish to watch for edges.
  */
 class vvp_fun_edge : public vvp_net_fun_t, public waitable_hooks_s {
+  public:
+    typedef unsigned short edge_t;
+    explicit vvp_fun_edge(edge_t e);
+    virtual ~vvp_fun_edge() override;
 
-    public:
-      typedef unsigned short edge_t;
-      explicit vvp_fun_edge(edge_t e);
-      virtual ~vvp_fun_edge() override;
+  protected:
+    bool recv_vec4_(const vvp_vector4_t& bit, vvp_bit4_t& old_bit, vthread_t& threads);
 
-    protected:
-      bool recv_vec4_(const vvp_vector4_t&bit,
-                      vvp_bit4_t&old_bit, vthread_t&threads);
+    vvp_bit4_t bits_[4];
 
-      vvp_bit4_t bits_[4];
-
-    private:
-      edge_t edge_;
+  private:
+    edge_t edge_;
 };
 
 extern const vvp_fun_edge::edge_t vvp_edge_edge;
@@ -175,45 +177,44 @@ extern const vvp_fun_edge::edge_t vvp_edge_none;
  * Statically allocated vvp_fun_edge.
  */
 class vvp_fun_edge_sa : public vvp_fun_edge {
+  public:
+    explicit vvp_fun_edge_sa(edge_t e);
+    virtual ~vvp_fun_edge_sa() override;
 
-    public:
-      explicit vvp_fun_edge_sa(edge_t e);
-      virtual ~vvp_fun_edge_sa() override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t context) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t context) override;
-
-    private:
-      vthread_t threads_;
+  private:
+    vthread_t threads_;
 };
 
 /*
  * Automatically allocated vvp_fun_edge.
  */
 class vvp_fun_edge_aa : public vvp_fun_edge, public automatic_hooks_s {
+  public:
+    explicit vvp_fun_edge_aa(edge_t e);
+    virtual ~vvp_fun_edge_aa() override;
 
-    public:
-      explicit vvp_fun_edge_aa(edge_t e);
-      virtual ~vvp_fun_edge_aa() override;
-
-      void alloc_instance(vvp_context_t context) override;
-      void reset_instance(vvp_context_t context) override;
+    void alloc_instance(vvp_context_t context) override;
+    void reset_instance(vvp_context_t context) override;
 #ifdef CHECK_WITH_VALGRIND
-      void free_instance(vvp_context_t context) override;
+    void free_instance(vvp_context_t context) override;
 #endif
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-    private:
-      __vpiScope*context_scope_;
-      unsigned context_idx_;
+  private:
+    __vpiScope* context_scope_;
+    unsigned context_idx_;
 };
 
 /*
@@ -233,72 +234,65 @@ class anyedge_value;
  * to an event trigger.
  */
 class vvp_fun_anyedge : public vvp_net_fun_t, public waitable_hooks_s {
+  public:
+    explicit vvp_fun_anyedge();
+    virtual ~vvp_fun_anyedge() override;
 
-    public:
-      explicit vvp_fun_anyedge();
-      virtual ~vvp_fun_anyedge() override;
-
-    protected:
-      anyedge_value*last_value_[4];
+  protected:
+    anyedge_value* last_value_[4];
 };
 
 /*
  * Statically allocated vvp_fun_anyedge.
  */
 class vvp_fun_anyedge_sa : public vvp_fun_anyedge {
+  public:
+    explicit vvp_fun_anyedge_sa();
+    virtual ~vvp_fun_anyedge_sa() override;
 
-    public:
-      explicit vvp_fun_anyedge_sa();
-      virtual ~vvp_fun_anyedge_sa() override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t context) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t context) override;
+    void recv_real(vvp_net_ptr_t port, double bit, vvp_context_t context) override;
 
-      void recv_real(vvp_net_ptr_t port, double bit,
-                     vvp_context_t context) override;
+    void recv_string(vvp_net_ptr_t port, const std::string& bit, vvp_context_t context) override;
+    void recv_object(vvp_net_ptr_t port, vvp_object_t bit, vvp_context_t context) override;
 
-      void recv_string(vvp_net_ptr_t port, const std::string&bit,
-		       vvp_context_t context) override;
-      void recv_object(vvp_net_ptr_t port, vvp_object_t bit,
-		       vvp_context_t context) override;
-
-    private:
-      vthread_t threads_;
+  private:
+    vthread_t threads_;
 };
 
 /*
  * Automatically allocated vvp_fun_anyedge.
  */
 class vvp_fun_anyedge_aa : public vvp_fun_anyedge, public automatic_hooks_s {
+  public:
+    explicit vvp_fun_anyedge_aa();
+    virtual ~vvp_fun_anyedge_aa() override;
 
-    public:
-      explicit vvp_fun_anyedge_aa();
-      virtual ~vvp_fun_anyedge_aa() override;
-
-      void alloc_instance(vvp_context_t context) override;
-      void reset_instance(vvp_context_t context) override;
+    void alloc_instance(vvp_context_t context) override;
+    void reset_instance(vvp_context_t context) override;
 #ifdef CHECK_WITH_VALGRIND
-      void free_instance(vvp_context_t context) override;
+    void free_instance(vvp_context_t context) override;
 #endif
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-      void recv_real(vvp_net_ptr_t port, double bit,
-                     vvp_context_t context) override;
+    void recv_real(vvp_net_ptr_t port, double bit, vvp_context_t context) override;
 
-      void recv_string(vvp_net_ptr_t port, const std::string&bit,
-		       vvp_context_t context) override;
+    void recv_string(vvp_net_ptr_t port, const std::string& bit, vvp_context_t context) override;
 
-    private:
-      __vpiScope*context_scope_;
-      unsigned context_idx_;
+  private:
+    __vpiScope* context_scope_;
+    unsigned context_idx_;
 };
 
 /*
@@ -308,56 +302,51 @@ class vvp_fun_anyedge_aa : public vvp_fun_anyedge, public automatic_hooks_s {
  * net that is used for output.
  */
 class vvp_fun_event_or : public vvp_net_fun_t, public waitable_hooks_s {
+  public:
+    explicit vvp_fun_event_or(vvp_net_t* base_net);
+    ~vvp_fun_event_or() override;
 
-    public:
-      explicit vvp_fun_event_or(vvp_net_t*base_net);
-      ~vvp_fun_event_or() override;
-
-    protected:
-      vvp_net_t*base_net_;
+  protected:
+    vvp_net_t* base_net_;
 };
 
 /*
  * Statically allocated vvp_fun_event_or.
  */
 class vvp_fun_event_or_sa : public vvp_fun_event_or {
+  public:
+    explicit vvp_fun_event_or_sa(vvp_net_t* base_net);
+    ~vvp_fun_event_or_sa() override;
 
-    public:
-      explicit vvp_fun_event_or_sa(vvp_net_t*base_net);
-      ~vvp_fun_event_or_sa() override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
-
-    private:
-      vthread_t threads_;
+  private:
+    vthread_t threads_;
 };
 
 /*
  * Automatically allocated vvp_fun_event_or.
  */
 class vvp_fun_event_or_aa : public vvp_fun_event_or, public automatic_hooks_s {
+  public:
+    explicit vvp_fun_event_or_aa(vvp_net_t* base_net);
+    ~vvp_fun_event_or_aa() override;
 
-    public:
-      explicit vvp_fun_event_or_aa(vvp_net_t*base_net);
-      ~vvp_fun_event_or_aa() override;
-
-      void alloc_instance(vvp_context_t context) override;
-      void reset_instance(vvp_context_t context) override;
+    void alloc_instance(vvp_context_t context) override;
+    void reset_instance(vvp_context_t context) override;
 #ifdef CHECK_WITH_VALGRIND
-      void free_instance(vvp_context_t context) override;
+    void free_instance(vvp_context_t context) override;
 #endif
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-    private:
-      __vpiScope*context_scope_;
-      unsigned context_idx_;
+  private:
+    __vpiScope* context_scope_;
+    unsigned context_idx_;
 };
 
 /*
@@ -366,55 +355,50 @@ class vvp_fun_event_or_aa : public vvp_fun_event_or, public automatic_hooks_s {
  * can use a %set/v instruction to trigger the event.
  */
 class vvp_named_event : public vvp_net_fun_t, public waitable_hooks_s {
+  public:
+    explicit vvp_named_event(class __vpiHandle* eh);
+    ~vvp_named_event() override;
 
-    public:
-      explicit vvp_named_event(class __vpiHandle*eh);
-      ~vvp_named_event() override;
-
-    protected:
-      class __vpiHandle*handle_;
+  protected:
+    class __vpiHandle* handle_;
 };
 
 /*
  * Statically allocated vvp_named_event.
  */
 class vvp_named_event_sa : public vvp_named_event {
+  public:
+    explicit vvp_named_event_sa(class __vpiHandle* eh);
+    ~vvp_named_event_sa() override;
 
-    public:
-      explicit vvp_named_event_sa(class __vpiHandle*eh);
-      ~vvp_named_event_sa() override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
-
-    private:
-      vthread_t threads_;
+  private:
+    vthread_t threads_;
 };
 
 /*
  * Automatically allocated vvp_named_event.
  */
 class vvp_named_event_aa : public vvp_named_event, public automatic_hooks_s {
+  public:
+    explicit vvp_named_event_aa(class __vpiHandle* eh);
+    ~vvp_named_event_aa() override;
 
-    public:
-      explicit vvp_named_event_aa(class __vpiHandle*eh);
-      ~vvp_named_event_aa() override;
-
-      void alloc_instance(vvp_context_t context) override;
-      void reset_instance(vvp_context_t context) override;
+    void alloc_instance(vvp_context_t context) override;
+    void reset_instance(vvp_context_t context) override;
 #ifdef CHECK_WITH_VALGRIND
-      void free_instance(vvp_context_t context) override;
+    void free_instance(vvp_context_t context) override;
 #endif
 
-      vthread_t add_waiting_thread(vthread_t thread) override;
+    vthread_t add_waiting_thread(vthread_t thread) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-    private:
-      unsigned context_idx_;
+  private:
+    unsigned context_idx_;
 };
 
 #endif /* IVL_event_H */

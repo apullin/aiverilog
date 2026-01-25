@@ -19,14 +19,14 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <ivl_target.h>
-# include  <stdio.h>
+#include <ivl_target.h>
+#include <stdio.h>
 
 /*
  * This is the output file where the generated result should be
  * written.
  */
-extern FILE*out;
+extern FILE* out;
 
 /*
  * Keep a running count of errors that the stub detects. This will be
@@ -75,8 +75,8 @@ extern void show_type_of_signal(ivl_signal_t);
 extern void show_switch(ivl_switch_t net);
 
 /*
-*/
-extern const char*data_type_string(ivl_variable_type_t vtype);
+ */
+extern const char* data_type_string(ivl_variable_type_t vtype);
 
 extern void show_net_type(ivl_type_t net_type);
 #endif /* IVL_priv_H */

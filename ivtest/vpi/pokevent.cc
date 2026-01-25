@@ -27,28 +27,25 @@
 #include <stdlib.h>
 #include "vpi_user.h"
 
-extern "C" PLI_INT32
-CallbackPeek(s_cb_data *data) {
-
-    static s_vpi_time	zero_delay = { vpiNoDelay, 0, 0, 0 };
+extern "C" PLI_INT32 CallbackPeek(s_cb_data* data) {
+    static s_vpi_time zero_delay = {vpiNoDelay, 0, 0, 0};
 
     vpi_printf(" callback\n");
 
     // Toggle poke event
-    vpiHandle poke_e = *(vpiHandle *)data->user_data;
+    vpiHandle poke_e = *(vpiHandle*)data->user_data;
     vpi_put_value(poke_e, NULL, &zero_delay, vpiInertialDelay);
 
     return 0;
 }
 
-static vpiHandle
-FindPoke(const char *name)
-{
-    vpiHandle	module, iterate, handle;
+static vpiHandle FindPoke(const char* name) {
+    vpiHandle module, iterate, handle;
 
     // get top module handle
     iterate = vpi_iterate(vpiModule, NULL);
-    if (iterate == NULL) return NULL;
+    if (iterate == NULL)
+        return NULL;
     module = vpi_scan(iterate);
     vpi_free_object(iterate);
 
@@ -56,27 +53,26 @@ FindPoke(const char *name)
     handle = NULL;
     iterate = vpi_iterate(vpiNamedEvent, module);
     if (iterate != NULL) {
-	while ((handle = vpi_scan(iterate))) {
-	    if (!strcmp(name, vpi_get_str(vpiName, handle))) {
-		vpi_free_object(iterate);
-		break;
-	    }
-	}
+        while ((handle = vpi_scan(iterate))) {
+            if (!strcmp(name, vpi_get_str(vpiName, handle))) {
+                vpi_free_object(iterate);
+                break;
+            }
+        }
     }
 
     return handle;
 }
 
-static void
-RegisterPeek(const char *name, vpiHandle poke)
-{
-    vpiHandle	module, iterate, handle;
-    s_cb_data	vc_cb_data;
-    static vpiHandle	user_data = poke;
+static void RegisterPeek(const char* name, vpiHandle poke) {
+    vpiHandle module, iterate, handle;
+    s_cb_data vc_cb_data;
+    static vpiHandle user_data = poke;
 
     // get top module handle
     iterate = vpi_iterate(vpiModule, NULL);
-    if (iterate == NULL) return;
+    if (iterate == NULL)
+        return;
     module = vpi_scan(iterate);
     vpi_free_object(iterate);
 
@@ -84,50 +80,44 @@ RegisterPeek(const char *name, vpiHandle poke)
     handle = NULL;
     iterate = vpi_iterate(vpiNamedEvent, module);
     if (iterate != NULL) {
-	while ((handle = vpi_scan(iterate))) {
-	    if (!strcmp(name, vpi_get_str(vpiName, handle))) {
-		vpi_free_object(iterate);
-		break;
-	    }
-	}
+        while ((handle = vpi_scan(iterate))) {
+            if (!strcmp(name, vpi_get_str(vpiName, handle))) {
+                vpi_free_object(iterate);
+                break;
+            }
+        }
     }
 
     // Register callback
     vc_cb_data.time = NULL;
     vc_cb_data.value = NULL;
-    vc_cb_data.user_data = (char *)&user_data;
+    vc_cb_data.user_data = (char*)&user_data;
     vc_cb_data.obj = handle;
     vc_cb_data.reason = cbValueChange;
     vc_cb_data.cb_rtn = CallbackPeek;
     vpi_register_cb(&vc_cb_data);
 }
 
-extern "C" PLI_INT32
-EndofCompile(s_cb_data * /*cb_data*/)
-{
+extern "C" PLI_INT32 EndofCompile(s_cb_data* /*cb_data*/) {
     RegisterPeek("e_Peek", FindPoke("e_Poke"));
     return 0;
 }
 
-extern "C" void my_Register(void)
-{
-        s_cb_data cb_data;
+extern "C" void my_Register(void) {
+    s_cb_data cb_data;
 
-        vpi_printf("!!!C++:     Registering Callbacks\n");
+    vpi_printf("!!!C++:     Registering Callbacks\n");
 
-        cb_data.time = NULL;
-        cb_data.value = NULL;
-        cb_data.user_data = (char *) NULL;
-        cb_data.obj = NULL;
-        cb_data.reason = cbEndOfCompile;
-        cb_data.cb_rtn = EndofCompile;
-        vpi_register_cb(&cb_data);
+    cb_data.time = NULL;
+    cb_data.value = NULL;
+    cb_data.user_data = (char*)NULL;
+    cb_data.obj = NULL;
+    cb_data.reason = cbEndOfCompile;
+    cb_data.cb_rtn = EndofCompile;
+    vpi_register_cb(&cb_data);
 }
 
 #ifdef __SUNPRO_CC
 extern "C"
 #endif
-void (*vlog_startup_routines[]) () = {
-  my_Register,
-  0
-};
+    void (*vlog_startup_routines[])() = {my_Register, 0};

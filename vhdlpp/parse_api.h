@@ -19,10 +19,10 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <cstdio>
-# include  "entity.h"
+#include <cstdio>
+#include "entity.h"
 
-typedef void*yyscan_t;
+typedef void* yyscan_t;
 
 /*
  * The yyltype supports the passing of detailed source file location
@@ -30,11 +30,14 @@ typedef void*yyscan_t;
  * YYLTYPE compels the lexor to use this type and not something other.
  */
 struct yyltype {
-      unsigned first_line;
-      const char*text;
-      yyltype() { first_line = 1; text = ""; }
+    unsigned first_line;
+    const char* text;
+    yyltype() {
+        first_line = 1;
+        text = "";
+    }
 };
-# define YYLTYPE struct yyltype
+#define YYLTYPE struct yyltype
 
 /*
  * This calls the bison-generated parser with the given file path as
@@ -43,16 +46,18 @@ struct yyltype {
  * being parsed. If this is a regular source file, then this name is
  * nil. Note that the "work" library is handled specially.
  */
-extern int parse_source_file(const char*file_path, perm_string library_name);
+extern int parse_source_file(const char* file_path, perm_string library_name);
 
 /*
  * Use this function during parse to generate error messages. The "loc"
  * is the location of the token that triggered the error, and the fmt
  * is printf-style format.
  */
-extern void errormsg(const YYLTYPE&loc, const char*fmt, ...) __attribute__((format (printf, 2, 3)));
+extern void errormsg(const YYLTYPE& loc, const char* fmt, ...)
+    __attribute__((format(printf, 2, 3)));
 
-extern void sorrymsg(const YYLTYPE&loc, const char*fmt, ...) __attribute__((format (printf, 2, 3)));
+extern void sorrymsg(const YYLTYPE& loc, const char* fmt, ...)
+    __attribute__((format(printf, 2, 3)));
 
 /*
  * Set this to a non-zero value to enable parser debug output.

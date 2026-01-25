@@ -19,7 +19,7 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "config.h"
+#include "config.h"
 
 class __vpiScope;
 
@@ -50,49 +50,53 @@ class __vpiScope;
  */
 
 class ufunc_core : public vvp_wide_fun_core {
+  public:
+    ufunc_core(unsigned ow,
+               vvp_net_t* ptr,
+               unsigned nports,
+               vvp_net_t** ports,
+               vvp_code_t start_address,
+               __vpiScope* call_scope,
+               char* scope_label);
+    virtual ~ufunc_core() override = 0;
 
-    public:
-      ufunc_core(unsigned ow, vvp_net_t*ptr,
-		 unsigned nports, vvp_net_t**ports,
-		 vvp_code_t start_address,
-		 __vpiScope*call_scope,
-		 char*scope_label);
-      virtual ~ufunc_core() override =0;
+    __vpiScope* call_scope() {
+        return call_scope_;
+    }
+    __vpiScope* func_scope() {
+        return func_scope_;
+    }
 
-      __vpiScope*call_scope() { return call_scope_; }
-      __vpiScope*func_scope() { return func_scope_; }
+    void assign_bits_to_ports(vvp_context_t context);
+    virtual void finish_thread() = 0;
 
-      void assign_bits_to_ports(vvp_context_t context);
-      virtual void finish_thread() =0;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t context) override;
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t context) override;
+  protected:
+    void finish_thread_real_();
+    void finish_thread_vec4_();
 
-    protected:
-      void finish_thread_real_();
-      void finish_thread_vec4_();
+  private:
+    void recv_vec4_from_inputs(unsigned port) override;
+    void recv_real_from_inputs(unsigned port) override;
 
-    private:
-      void recv_vec4_from_inputs(unsigned port) override;
-      void recv_real_from_inputs(unsigned port) override;
-
-      void invoke_thread_(void);
+    void invoke_thread_(void);
 
 
-    private:
-	// output width of the function node.
-      unsigned owid_;
-	// The vvp_net_t* objects for the function input ports. We use
-	// these to write the input values to the reg input variable
-	// functors for the thread.
-      vvp_net_t**ports_;
+  private:
+    // output width of the function node.
+    unsigned owid_;
+    // The vvp_net_t* objects for the function input ports. We use
+    // these to write the input values to the reg input variable
+    // functors for the thread.
+    vvp_net_t** ports_;
 
-	// This is a thread to execute the behavioral portion of the
-	// function.
-      vthread_t thread_;
-      __vpiScope*call_scope_;
-      __vpiScope*func_scope_;
-      vvp_code_t code_;
+    // This is a thread to execute the behavioral portion of the
+    // function.
+    vthread_t thread_;
+    __vpiScope* call_scope_;
+    __vpiScope* func_scope_;
+    vvp_code_t code_;
 };
 
 #endif /* IVL_ufunc_H */

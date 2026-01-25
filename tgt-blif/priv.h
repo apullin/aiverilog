@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "ivl_target.h"
-# include  <cstdio>
+#include "ivl_target.h"
+#include <cstdio>
 
 /*
  * Errors are counted here. When the blif processing is done, this
@@ -28,27 +28,27 @@
  */
 extern int blif_errors;
 
-extern int print_logic_gate(FILE*fd, ivl_net_logic_t net);
+extern int print_logic_gate(FILE* fd, ivl_net_logic_t net);
 
-extern int print_lpm(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_add(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_ff(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_sub(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_cmp_eq(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_cmp_gt(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_cmp_ne(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_mux(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_part_vp(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_re_logic(FILE*fd, ivl_lpm_t net);
-extern int print_lpm_shift(FILE*fd, ivl_lpm_t net, bool left);
-extern int print_lpm_sign_ext(FILE*fd, ivl_lpm_t net);
+extern int print_lpm(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_add(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_ff(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_sub(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_cmp_eq(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_cmp_gt(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_cmp_ne(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_mux(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_part_vp(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_re_logic(FILE* fd, ivl_lpm_t net);
+extern int print_lpm_shift(FILE* fd, ivl_lpm_t net, bool left);
+extern int print_lpm_sign_ext(FILE* fd, ivl_lpm_t net);
 
 /*
  * Emit all the constants for a model. This works by scanning the
  * design for all constants, testing that they are part of the model,
  * and writing them out as .names records.
  */
-extern void emit_constants(FILE*fd, ivl_design_t des, ivl_scope_t model);
+extern void emit_constants(FILE* fd, ivl_design_t des, ivl_scope_t model);
 
 /*
  * Return true if the passed scope is under the model scope, at any

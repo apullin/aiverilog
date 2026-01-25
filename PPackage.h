@@ -20,11 +20,11 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PScope.h"
-# include  "LineInfo.h"
-# include  "StringHeap.h"
-# include  <iostream>
-# include  <vector>
+#include "PScope.h"
+#include "LineInfo.h"
+#include "StringHeap.h"
+#include <iostream>
+#include <vector>
 
 /*
  * SystemVerilog supports class declarations with their own lexical
@@ -33,23 +33,22 @@
  */
 
 class PPackage : public PScopeExtra, public LineInfo {
+  public:
+    explicit PPackage(perm_string name, LexicalScope* parent);
+    ~PPackage() override;
 
-    public:
-      explicit PPackage (perm_string name, LexicalScope*parent);
-      ~PPackage() override;
+    bool elaborate_scope(Design* des, NetScope* scope);
+    bool elaborate_sig(Design* des, NetScope* scope) const;
+    bool elaborate(Design* des, NetScope* scope) const;
 
-      bool elaborate_scope(Design*des, NetScope*scope);
-      bool elaborate_sig(Design*des, NetScope*scope) const;
-      bool elaborate(Design*des, NetScope*scope) const;
+    void pform_dump(std::ostream& out) const;
 
-      void pform_dump(std::ostream&out) const;
+    struct export_t {
+        PPackage* pkg;
+        perm_string name;
+    };
 
-      struct export_t {
-	    PPackage *pkg;
-	    perm_string name;
-      };
-
-      std::vector<export_t> exports;
+    std::vector<export_t> exports;
 };
 
 #endif /* IVL_PPackage_H */

@@ -17,42 +17,34 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "netdarray.h"
-# include  "netqueue.h"
-# include  <iostream>
+#include "netdarray.h"
+#include "netqueue.h"
+#include <iostream>
 
 using namespace std;
 
-netdarray_t::netdarray_t(ivl_type_t vec)
-: netarray_t(vec)
-{
+netdarray_t::netdarray_t(ivl_type_t vec) : netarray_t(vec) {}
+
+netdarray_t::~netdarray_t() {}
+
+ivl_variable_type_t netdarray_t::base_type(void) const {
+    return IVL_VT_DARRAY;
 }
 
-netdarray_t::~netdarray_t()
-{
+bool netdarray_t::test_equivalence(ivl_type_t that) const {
+    // Queues and dynamic arrays are not equivalent, so check for the base
+    // type to make sure both are either dynamic array or queue.
+    if (base_type() != that->base_type())
+        return false;
+
+    return test_compatibility(that);
 }
 
-ivl_variable_type_t netdarray_t::base_type(void) const
-{
-      return IVL_VT_DARRAY;
-}
+bool netdarray_t::test_compatibility(ivl_type_t that) const {
+    // This will match both queues and dynamic arrays
+    const netdarray_t* that_da = dynamic_cast<const netdarray_t*>(that);
+    if (!that_da)
+        return false;
 
-bool netdarray_t::test_equivalence(ivl_type_t that) const
-{
-      // Queues and dynamic arrays are not equivalent, so check for the base
-      // type to make sure both are either dynamic array or queue.
-      if (base_type() != that->base_type())
-	    return false;
-
-      return test_compatibility(that);
-}
-
-bool netdarray_t::test_compatibility(ivl_type_t that) const
-{
-      // This will match both queues and dynamic arrays
-      const netdarray_t *that_da = dynamic_cast<const netdarray_t*>(that);
-      if (!that_da)
-	    return false;
-
-      return element_type()->type_equivalent(that_da->element_type());
+    return element_type()->type_equivalent(that_da->element_type());
 }

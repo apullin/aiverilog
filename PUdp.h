@@ -19,11 +19,11 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <map>
-# include  <vector>
-# include  "LineInfo.h"
-# include  "StringHeap.h"
-# include  "verinum.h"
+#include <map>
+#include <vector>
+#include "LineInfo.h"
+#include "StringHeap.h"
+#include "verinum.h"
 
 class PExpr;
 
@@ -49,31 +49,30 @@ class PExpr;
  * initial value assigned in the source, or 'x' if none is given.
  */
 class PUdp : public LineInfo {
+  public:
+    explicit PUdp(perm_string n, unsigned nports);
 
-    public:
-      explicit PUdp(perm_string n, unsigned nports);
+    std::vector<std::string> ports;
+    unsigned find_port(const char* name);
 
-      std::vector<std::string> ports;
-      unsigned find_port(const char*name);
+    bool sequential;
 
-      bool sequential;
+    std::vector<std::string> tinput;
+    std::vector<char> tcurrent;
+    std::vector<char> toutput;
 
-      std::vector<std::string> tinput;
-      std::vector<char> tcurrent;
-      std::vector<char> toutput;
+    verinum::V initial;
 
-      verinum::V initial;
+    std::map<std::string, PExpr*> attributes;
 
-      std::map<std::string,PExpr*> attributes;
+    void dump(std::ostream& out) const;
 
-      void dump(std::ostream&out) const;
+    perm_string name_;
 
-      perm_string name_;
-    private:
-
-    private: // Not implemented
-      PUdp(const PUdp&);
-      PUdp& operator= (const PUdp&);
+  private:
+  private:  // Not implemented
+    PUdp(const PUdp&);
+    PUdp& operator=(const PUdp&);
 };
 
 #endif /* IVL_PUdp_H */

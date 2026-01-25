@@ -19,44 +19,43 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "config.h"
-# include  "ivl_target.h"
+#include "config.h"
+#include "ivl_target.h"
 
-# include  <map>
-# include  <cstdio>
+#include <map>
+#include <cstdio>
 
 struct sizer_statistics {
-	// These are the accumulated global statistics
-      unsigned flop_count;
-      unsigned gate_count;
-	// Count adders of various dimension
-      std::map<unsigned,unsigned> adder_count;
-	// count equality comparators
-      std::map<unsigned,unsigned> equality_count;
-	// count equality (with wildcard) comparators
-      std::map<unsigned,unsigned> equality_wc_count;
-	// Count magnitude comparators
-      std::map<unsigned,unsigned> magnitude_count;
-	// Count mux's of various dimension
-      std::map<unsigned,unsigned> mux_count;
-	// Different kinds of nodes that we have not accounted for
-      std::map<ivl_lpm_type_t,unsigned> lpm_bytype;
-      std::map<ivl_logic_t,unsigned>    log_bytype;
+    // These are the accumulated global statistics
+    unsigned flop_count;
+    unsigned gate_count;
+    // Count adders of various dimension
+    std::map<unsigned, unsigned> adder_count;
+    // count equality comparators
+    std::map<unsigned, unsigned> equality_count;
+    // count equality (with wildcard) comparators
+    std::map<unsigned, unsigned> equality_wc_count;
+    // Count magnitude comparators
+    std::map<unsigned, unsigned> magnitude_count;
+    // Count mux's of various dimension
+    std::map<unsigned, unsigned> mux_count;
+    // Different kinds of nodes that we have not accounted for
+    std::map<ivl_lpm_type_t, unsigned> lpm_bytype;
+    std::map<ivl_logic_t, unsigned> log_bytype;
 
-      inline sizer_statistics()
-      {
-	    flop_count = 0;
-	    gate_count = 0;
-      }
+    inline sizer_statistics() {
+        flop_count = 0;
+        gate_count = 0;
+    }
 
-      struct sizer_statistics& operator += (const struct sizer_statistics&that);
+    struct sizer_statistics& operator+=(const struct sizer_statistics& that);
 };
 
 extern int sizer_errors;
-extern FILE*sizer_out;
+extern FILE* sizer_out;
 
-extern void scan_logs(ivl_scope_t scope, struct sizer_statistics&stats);
-extern void scan_lpms(ivl_scope_t scope, struct sizer_statistics&stats);
+extern void scan_logs(ivl_scope_t scope, struct sizer_statistics& stats);
+extern void scan_lpms(ivl_scope_t scope, struct sizer_statistics& stats);
 
 
 extern unsigned get_nexus_width(ivl_nexus_t nex);

@@ -17,56 +17,55 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <cstdarg>
-# include  "config.h"
-# include  "compiler.h"
-# include  "pform.h"
-# include  "parse_misc.h"
-# include  "AStatement.h"
+#include <cstdarg>
+#include "config.h"
+#include "compiler.h"
+#include "pform.h"
+#include "parse_misc.h"
+#include "AStatement.h"
 
 using namespace std;
 
-AContrib* pform_contribution_statement(const struct vlltype&loc,
-					 PExpr*lval, PExpr*rval)
-{
-      AContrib*tmp = new AContrib(lval, rval);
-      FILE_NAME(tmp, loc);
-      return tmp;
+AContrib* pform_contribution_statement(const struct vlltype& loc, PExpr* lval, PExpr* rval) {
+    AContrib* tmp = new AContrib(lval, rval);
+    FILE_NAME(tmp, loc);
+    return tmp;
 }
 
-void pform_make_analog_behavior(const struct vlltype&loc, ivl_process_type_t pt,
-				Statement*statement)
-{
-      AProcess*proc = new AProcess(pt, statement);
-      FILE_NAME(proc, loc);
+void pform_make_analog_behavior(const struct vlltype& loc,
+                                ivl_process_type_t pt,
+                                Statement* statement) {
+    AProcess* proc = new AProcess(pt, statement);
+    FILE_NAME(proc, loc);
 
-      pform_put_behavior_in_scope(proc);
+    pform_put_behavior_in_scope(proc);
 }
 
-PExpr* pform_make_branch_probe_expression(const struct vlltype&loc,
-					  const char*name, const char*n1, const char*n2)
-{
-      vector<named_pexpr_t> parms (2);
-      parms[0].parm = new PEIdent(lex_strings.make(n1), loc.lexical_pos);
-      FILE_NAME(parms[0].parm, loc);
+PExpr* pform_make_branch_probe_expression(const struct vlltype& loc,
+                                          const char* name,
+                                          const char* n1,
+                                          const char* n2) {
+    vector<named_pexpr_t> parms(2);
+    parms[0].parm = new PEIdent(lex_strings.make(n1), loc.lexical_pos);
+    FILE_NAME(parms[0].parm, loc);
 
-      parms[1].parm = new PEIdent(lex_strings.make(n2), loc.lexical_pos);
-      FILE_NAME(parms[1].parm, loc);
+    parms[1].parm = new PEIdent(lex_strings.make(n2), loc.lexical_pos);
+    FILE_NAME(parms[1].parm, loc);
 
-      PECallFunction*res = new PECallFunction(lex_strings.make(name), parms);
-      FILE_NAME(res, loc);
-      return res;
+    PECallFunction* res = new PECallFunction(lex_strings.make(name), parms);
+    FILE_NAME(res, loc);
+    return res;
 }
 
-PExpr* pform_make_branch_probe_expression(const struct vlltype&loc,
-					  const char*name, const char*branch_name)
-{
-      vector<named_pexpr_t> parms (1);
-      parms[0].parm = new PEIdent(lex_strings.make(branch_name), loc.lexical_pos);
-      FILE_NAME(parms[0].parm, loc);
+PExpr* pform_make_branch_probe_expression(const struct vlltype& loc,
+                                          const char* name,
+                                          const char* branch_name) {
+    vector<named_pexpr_t> parms(1);
+    parms[0].parm = new PEIdent(lex_strings.make(branch_name), loc.lexical_pos);
+    FILE_NAME(parms[0].parm, loc);
 
-      PECallFunction*res = new PECallFunction(lex_strings.make(name), parms);
-      FILE_NAME(res, loc);
+    PECallFunction* res = new PECallFunction(lex_strings.make(name), parms);
+    FILE_NAME(res, loc);
 
-      return res;
+    return res;
 }

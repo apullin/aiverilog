@@ -24,25 +24,24 @@
 #include "vpi_user.h"
 
 // A 76 bit value
-const char *str[4] = {
- "f00cafababedeabbeef",
- "70850123451113459662575",
- "17001453725653733652737357",
- "1111000000001100101011111010101110101011111011011110101010111011111011101111"
-};
+const char* str[4] = {
+    "f00cafababedeabbeef",
+    "70850123451113459662575",
+    "17001453725653733652737357",
+    "1111000000001100101011111010101110101011111011011110101010111011111011101111"};
 
-extern "C" PLI_INT32 MemPeek(PLI_BYTE8 *)
-{
-    vpiHandle	mod_h, mem_h, iterate, handle;
-    s_vpi_value	value;
-    int		cnt = 0;
-    const char	*orig;
+extern "C" PLI_INT32 MemPeek(PLI_BYTE8*) {
+    vpiHandle mod_h, mem_h, iterate, handle;
+    s_vpi_value value;
+    int cnt = 0;
+    const char* orig;
 
     vpi_printf("MemPeek Callback\n");
 
     // get top module handle
     iterate = vpi_iterate(vpiModule, NULL);
-    if (iterate == NULL) return -1;
+    if (iterate == NULL)
+        return -1;
     mod_h = vpi_scan(iterate);
     vpi_free_object(iterate);
 
@@ -52,14 +51,14 @@ extern "C" PLI_INT32 MemPeek(PLI_BYTE8 *)
     if (iterate != NULL) {
         while ((handle = vpi_scan(iterate))) {
             if (!strcmp("m_peek", vpi_get_str(vpiName, handle))) {
-		vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
-		vpi_printf("  Found %s (%d deep x %d bits)\n",
-		    vpi_get_str(vpiName, handle),
-		    (int)vpi_get(vpiSize, handle),
-		    (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
-		vpi_free_object(memw_iter);
-		mem_h = handle;
-		vpi_free_object(iterate);
+                vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
+                vpi_printf("  Found %s (%d deep x %d bits)\n",
+                           vpi_get_str(vpiName, handle),
+                           (int)vpi_get(vpiSize, handle),
+                           (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
+                vpi_free_object(memw_iter);
+                mem_h = handle;
+                vpi_free_object(iterate);
                 break;
             }
         }
@@ -69,45 +68,45 @@ extern "C" PLI_INT32 MemPeek(PLI_BYTE8 *)
     orig = "";
     iterate = vpi_iterate(vpiMemoryWord, mem_h);
     while ((handle = vpi_scan(iterate))) {
-	switch (cnt % 4) {
-	    case 0:
-		value.format=vpiBinStrVal;
-		orig = str[3];
-		break;
-	    case 1:
-		value.format=vpiOctStrVal;
-		orig = str[2];
-		break;
-	    case 2:
-		value.format=vpiDecStrVal;
-		orig = str[1];
-		break;
-	    case 3:
-		value.format=vpiHexStrVal;
-		orig = str[0];
-		break;
-	}
-	// Get current value
-	vpi_get_value(handle, &value);
-	vpi_printf("%0d: %s%s\n", cnt, value.value.str,
-	    strcmp(orig, value.value.str) ? " ERROR" : "");
-	cnt++;
+        switch (cnt % 4) {
+            case 0:
+                value.format = vpiBinStrVal;
+                orig = str[3];
+                break;
+            case 1:
+                value.format = vpiOctStrVal;
+                orig = str[2];
+                break;
+            case 2:
+                value.format = vpiDecStrVal;
+                orig = str[1];
+                break;
+            case 3:
+                value.format = vpiHexStrVal;
+                orig = str[0];
+                break;
+        }
+        // Get current value
+        vpi_get_value(handle, &value);
+        vpi_printf(
+            "%0d: %s%s\n", cnt, value.value.str, strcmp(orig, value.value.str) ? " ERROR" : "");
+        cnt++;
     }
 
     return 0;
 }
 
-extern "C" PLI_INT32 MemPoke(PLI_BYTE8 *)
-{
-    vpiHandle	mod_h, mem_h, iterate, handle;
-    s_vpi_value	value;
-    int		cnt = 0;
+extern "C" PLI_INT32 MemPoke(PLI_BYTE8*) {
+    vpiHandle mod_h, mem_h, iterate, handle;
+    s_vpi_value value;
+    int cnt = 0;
 
     vpi_printf("MemPoke Callback\n");
 
     // get top module handle
     iterate = vpi_iterate(vpiModule, NULL);
-    if (iterate == NULL) return -1;
+    if (iterate == NULL)
+        return -1;
     mod_h = vpi_scan(iterate);
     vpi_free_object(iterate);
 
@@ -117,14 +116,14 @@ extern "C" PLI_INT32 MemPoke(PLI_BYTE8 *)
     if (iterate != NULL) {
         while ((handle = vpi_scan(iterate))) {
             if (!strcmp("m_poke", vpi_get_str(vpiName, handle))) {
-		vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
-		vpi_printf("  Found %s (%d deep x %d bits)\n",
-		    vpi_get_str(vpiName, handle),
-		    (int)vpi_get(vpiSize, handle),
-		    (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
-		vpi_free_object(memw_iter);
-		mem_h = handle;
-		vpi_free_object(iterate);
+                vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
+                vpi_printf("  Found %s (%d deep x %d bits)\n",
+                           vpi_get_str(vpiName, handle),
+                           (int)vpi_get(vpiSize, handle),
+                           (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
+                vpi_free_object(memw_iter);
+                mem_h = handle;
+                vpi_free_object(iterate);
                 break;
             }
         }
@@ -133,36 +132,34 @@ extern "C" PLI_INT32 MemPoke(PLI_BYTE8 *)
     // Poke memory using strings
     iterate = vpi_iterate(vpiMemoryWord, mem_h);
     while ((handle = vpi_scan(iterate))) {
-	switch (cnt % 4) {
-	    case 0:
-		value.format=vpiHexStrVal;
-		value.value.str = strdup(str[0]);
-		break;
-	    case 1:
-		value.format=vpiDecStrVal;
-		value.value.str = strdup(str[1]);
-		break;
-	    case 2:
-		value.format=vpiOctStrVal;
-		value.value.str = strdup(str[2]);
-		break;
-	    case 3:
-		value.format=vpiBinStrVal;
-		value.value.str = strdup(str[3]);
-		break;
-	}
-	vpi_printf("%0d: %s\n", cnt, value.value.str);
-	vpi_put_value(handle, &value, NULL, vpiNoDelay);
-	free(value.value.str);
-	cnt++;
+        switch (cnt % 4) {
+            case 0:
+                value.format = vpiHexStrVal;
+                value.value.str = strdup(str[0]);
+                break;
+            case 1:
+                value.format = vpiDecStrVal;
+                value.value.str = strdup(str[1]);
+                break;
+            case 2:
+                value.format = vpiOctStrVal;
+                value.value.str = strdup(str[2]);
+                break;
+            case 3:
+                value.format = vpiBinStrVal;
+                value.value.str = strdup(str[3]);
+                break;
+        }
+        vpi_printf("%0d: %s\n", cnt, value.value.str);
+        vpi_put_value(handle, &value, NULL, vpiNoDelay);
+        free(value.value.str);
+        cnt++;
     }
 
     return 0;
 }
 
-extern "C" void
-RegisterCallbacks(void)
-{
+extern "C" void RegisterCallbacks(void) {
     s_vpi_systf_data tf_data;
 
     vpi_printf("Registering Callbacks\n");
@@ -182,8 +179,4 @@ RegisterCallbacks(void)
 #ifdef __SUNPRO_CC
 extern "C"
 #endif
-void (*vlog_startup_routines[])() =
-{
-    RegisterCallbacks,
-    0
-};
+    void (*vlog_startup_routines[])() = {RegisterCallbacks, 0};

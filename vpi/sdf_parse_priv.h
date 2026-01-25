@@ -24,8 +24,8 @@
  * used to share declarations between the parse and the lexor.
  */
 
-  /* Path to source for error messages. */
-extern const char*sdf_parse_path;
+/* Path to source for error messages. */
+extern const char* sdf_parse_path;
 
 /* Hierarchy separator character to use. */
 extern char sdf_use_hchar;

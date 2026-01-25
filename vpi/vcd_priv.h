@@ -22,12 +22,12 @@
 #include "vpi_user.h"
 
 #ifdef __cplusplus
-# define EXTERN extern "C"
+#define EXTERN extern "C"
 #else
-# define EXTERN extern
+#define EXTERN extern
 #endif
 
-EXTERN int is_escaped_id(const char *name);
+EXTERN int is_escaped_id(const char* name);
 
 EXTERN int vcd_instance_contains_dumpable_items(const int dumpable_types[], vpiHandle item);
 
@@ -35,33 +35,32 @@ struct vcd_names_s;
 EXTERN struct stringheap_s name_heap;
 
 struct vcd_names_list_s {
-      struct vcd_names_s *vcd_names_list;
-      const char **vcd_names_sorted;
-      int listed_names, sorted_names;
+    struct vcd_names_s* vcd_names_list;
+    const char** vcd_names_sorted;
+    int listed_names, sorted_names;
 };
 
-EXTERN void vcd_names_add(struct vcd_names_list_s*tab, const char *name);
+EXTERN void vcd_names_add(struct vcd_names_list_s* tab, const char* name);
 
-EXTERN const char *vcd_names_search(const struct vcd_names_list_s*tab,
-				    const char *key);
+EXTERN const char* vcd_names_search(const struct vcd_names_list_s* tab, const char* key);
 
-EXTERN void vcd_names_sort(struct vcd_names_list_s*tab);
+EXTERN void vcd_names_sort(struct vcd_names_list_s* tab);
 
-EXTERN void vcd_names_delete(struct vcd_names_list_s*tab);
+EXTERN void vcd_names_delete(struct vcd_names_list_s* tab);
 
 /*
  * Keep a map of nexus ident's to help with alias detection.
  */
-EXTERN const char*find_nexus_ident(int nex);
-EXTERN void       set_nexus_ident(int nex, const char *id);
+EXTERN const char* find_nexus_ident(int nex);
+EXTERN void set_nexus_ident(int nex, const char* id);
 
 EXTERN void nexus_ident_delete(void);
 
 /*
  * Keep a set of scope names to help with duplicate detection.
  */
-EXTERN void vcd_scope_names_add(const char*name);
-EXTERN int  vcd_scope_names_test(const char*name);
+EXTERN void vcd_scope_names_add(const char* name);
+EXTERN int vcd_scope_names_test(const char* name);
 EXTERN void vcd_scope_names_delete(void);
 
 /*
@@ -70,28 +69,28 @@ EXTERN void vcd_scope_names_delete(void);
  */
 
 typedef enum vcd_work_item_type_e {
-      WT_NONE,
-      WT_EMIT_BITS,
-      WT_EMIT_DOUBLE,
-      WT_DUMPON,
-      WT_DUMPOFF,
-      WT_FLUSH,
-      WT_TERMINATE
+    WT_NONE,
+    WT_EMIT_BITS,
+    WT_EMIT_DOUBLE,
+    WT_DUMPON,
+    WT_DUMPOFF,
+    WT_FLUSH,
+    WT_TERMINATE
 } vcd_work_item_type_t;
 
 struct lxt2_wr_symbol;
 
 struct vcd_work_item_s {
-      vcd_work_item_type_t type;
-      uint64_t time;
-      union {
-	    struct lxt2_wr_symbol*lxt2;
-      } sym_;
+    vcd_work_item_type_t type;
+    uint64_t time;
+    union {
+        struct lxt2_wr_symbol* lxt2;
+    } sym_;
 
-      union {
-	    double val_double;
-	    char*val_char;
-      } op_;
+    union {
+        double val_double;
+        char* val_char;
+    } op_;
 };
 
 /*
@@ -112,7 +111,7 @@ EXTERN void vcd_work_thread_pop(void);
  * function. This blocks until the work thread is done all the work it
  * has so far.
  */
-EXTERN void vcd_work_start( void* (*fun) (void*arg), void*arg);
+EXTERN void vcd_work_start(void* (*fun)(void* arg), void* arg);
 EXTERN void vcd_work_terminate(void);
 
 EXTERN void vcd_work_sync(void);
@@ -125,19 +124,19 @@ EXTERN void vcd_work_flush(void); /* Drain output caches. */
 EXTERN void vcd_work_set_time(uint64_t val);
 EXTERN void vcd_work_dumpon(void);
 EXTERN void vcd_work_dumpoff(void);
-EXTERN void vcd_work_emit_double(struct lxt2_wr_symbol*sym, double val);
-EXTERN void vcd_work_emit_bits(struct lxt2_wr_symbol*sym, const char*bits);
+EXTERN void vcd_work_emit_double(struct lxt2_wr_symbol* sym, double val);
+EXTERN void vcd_work_emit_bits(struct lxt2_wr_symbol* sym, const char* bits);
 
 /* The compiletf routines are common for the VCD, LXT and LXT2 dumpers. */
-EXTERN PLI_INT32 sys_dumpvars_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
+EXTERN PLI_INT32 sys_dumpvars_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
 
 /*
  * Common implementation of the sys_dumpfile calltf.
  */
-EXTERN PLI_INT32 sys_dumpfile_common(const char*title, const char*suffix);
-EXTERN void vcd_set_dump_path_default(const char*text);
-EXTERN char* vcd_get_dump_path(const char*suffix);
-EXTERN void  vcd_free_dump_path(void);
+EXTERN PLI_INT32 sys_dumpfile_common(const char* title, const char* suffix);
+EXTERN void vcd_set_dump_path_default(const char* text);
+EXTERN char* vcd_get_dump_path(const char* suffix);
+EXTERN void vcd_free_dump_path(void);
 EXTERN int dumpvars_status;
 
 /*
@@ -151,22 +150,22 @@ EXTERN int dumpvars_status;
  * values.
  */
 #define DECLARE_VCD_INFO(type_name, ident_type) \
-      struct type_name { \
-	    vpiHandle item; \
-	    vpiHandle cb;\
-	    struct t_vpi_time time; \
-	    struct vcd_info *next; \
-	    struct vcd_info *dmp_next; \
-	    int scheduled; \
-	    ident_type ident; \
-      }
+    struct type_name {                          \
+        vpiHandle item;                         \
+        vpiHandle cb;                           \
+        struct t_vpi_time time;                 \
+        struct vcd_info* next;                  \
+        struct vcd_info* dmp_next;              \
+        int scheduled;                          \
+        ident_type ident;                       \
+    }
 
-#define ITERATE_VCD_INFO(use_list, use_type, use_next, method)	\
-      do {							\
-	    struct use_type*cur;				\
-	    for (cur = use_list ; cur ; cur = cur->use_next)	\
-		  method(cur);					\
-      } while (0)
+#define ITERATE_VCD_INFO(use_list, use_type, use_next, method) \
+    do {                                                       \
+        struct use_type* cur;                                  \
+        for (cur = use_list; cur; cur = cur->use_next)         \
+            method(cur);                                       \
+    } while (0)
 
 
 #undef EXTERN

@@ -19,59 +19,58 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "ivl_target.h"
-# include  <vector>
-# include  <cstddef>
+#include "ivl_target.h"
+#include <vector>
+#include <cstddef>
 
 /*
  * The ivl_target.h API allows for binding data to a nexus. This class
  * represents the data that we want to attach to a nexus.
  */
 class blif_nex_data_t {
+  private:
+    // The constructors are private. Only the get_nex_data()
+    // function can create these objects.
+    explicit blif_nex_data_t(ivl_nexus_t nex);
+    ~blif_nex_data_t();
+    blif_nex_data_t(const blif_nex_data_t&) = delete;
+    blif_nex_data_t& operator=(const blif_nex_data_t&) = delete;
 
-    private:
-	// The constructors are private. Only the get_nex_data()
-	// function can create these objects.
-      explicit blif_nex_data_t(ivl_nexus_t nex);
-      ~blif_nex_data_t();
-      blif_nex_data_t(const blif_nex_data_t&) = delete;
-      blif_nex_data_t& operator=(const blif_nex_data_t&) = delete;
+  public:
+    // Return the blif_nex_data_t object that is associated with
+    // the given nexus. If the nexus does not have a nex_data_t
+    // object, then create it and bind it to the nexus. Thus, this
+    // function will always return the same nex_data instance for
+    // the same nexus.
+    static blif_nex_data_t* get_nex_data(ivl_nexus_t nex);
 
-    public:
-	// Return the blif_nex_data_t object that is associated with
-	// the given nexus. If the nexus does not have a nex_data_t
-	// object, then create it and bind it to the nexus. Thus, this
-	// function will always return the same nex_data instance for
-	// the same nexus.
-      static blif_nex_data_t* get_nex_data(ivl_nexus_t nex);
+    // In certain situations, we know a priori what we want the
+    // nexus name to be. In those cases, the context can use this
+    // method to set the name (by the signal from width the name
+    // is derived). Note that this must be called before the name
+    // is otherwise queried.
+    void set_name(ivl_signal_t sig);
 
-	// In certain situations, we know a priori what we want the
-	// nexus name to be. In those cases, the context can use this
-	// method to set the name (by the signal from width the name
-	// is derived). Note that this must be called before the name
-	// is otherwise queried.
-      void set_name(ivl_signal_t sig);
+    // Get the symbolic name chosen for this nexus.
+    const char* get_name(void);
 
-	// Get the symbolic name chosen for this nexus.
-      const char*get_name(void);
+    // Map a canonical bit index (0 : width-1) to the bit number
+    // as understood by the signal. This is normally a null
+    // mapping, but sometimes the signal name used for the mapping
+    // has a non-canonical bit numbering.
+    const char* get_name_index(unsigned bit);
 
-	// Map a canonical bit index (0 : width-1) to the bit number
-	// as understood by the signal. This is normally a null
-	// mapping, but sometimes the signal name used for the mapping
-	// has a non-canonical bit numbering.
-      const char*get_name_index(unsigned bit);
+    // Get the vector width for this nexus.
+    size_t get_width(void);
 
-	// Get the vector width for this nexus.
-      size_t get_width(void);
+  public:
+    ivl_nexus_t nex_;
+    char* name_;
+    std::vector<char*> name_index_;
 
-    public:
-      ivl_nexus_t nex_;
-      char*name_;
-      std::vector<char*> name_index_;
-
-    private:
-      void select_name_(void);
-      void make_name_from_sig_(ivl_signal_t sig);
+  private:
+    void select_name_(void);
+    void make_name_from_sig_(ivl_signal_t sig);
 };
 
 #endif /* IVL_nex_data_H */

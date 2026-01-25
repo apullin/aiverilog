@@ -17,19 +17,13 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PClass.h"
+#include "PClass.h"
 
-PClass::PClass(perm_string name, LexicalScope*parent)
-: PScopeExtra(name, parent), type(0)
-{
-}
+PClass::PClass(perm_string name, LexicalScope* parent) : PScopeExtra(name, parent), type(0) {}
 
 
-PClass::~PClass()
-{
-}
+PClass::~PClass() {}
 
-PNamedItem::SymbolType PClass::symbol_type() const
-{
-      return CLASS;
+PNamedItem::SymbolType PClass::symbol_type() const {
+    return CLASS;
 }

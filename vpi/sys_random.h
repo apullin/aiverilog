@@ -19,12 +19,12 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <vpi_user.h>
+#include <vpi_user.h>
 
 /*
  * Common compiletf routines for the different random implementations.
  */
-extern PLI_INT32 sys_rand_three_args_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
-extern PLI_INT32 sys_random_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
+extern PLI_INT32 sys_rand_three_args_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
+extern PLI_INT32 sys_random_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
 
 #endif /* IVL_sys_random_H */

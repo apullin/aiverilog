@@ -19,10 +19,10 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "StringHeap.h"
-# include  <fstream>
+#include "StringHeap.h"
+#include <fstream>
 
-const int GN_KEYWORD_2008  = 0x0001;
+const int GN_KEYWORD_2008 = 0x0001;
 
 // TRUE if processing is supposed to dump progress to stderr.
 extern bool verbose_flag;

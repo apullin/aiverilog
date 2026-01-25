@@ -17,15 +17,14 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include "config.h"
+#include "config.h"
 
-# include  "functor.h"
-# include  "netlist.h"
-# include  <cassert>
+#include "functor.h"
+#include "netlist.h"
+#include <cassert>
 
-bool NetAssign::is_asynchronous()
-{
-      return true;
+bool NetAssign::is_asynchronous() {
+    return true;
 }
 
 /*
@@ -38,49 +37,46 @@ bool NetAssign::is_asynchronous()
  * unaccounted for in the sensitivity list then the statement is a
  * latch.
  */
-bool NetEvWait::is_asynchronous()
-{
-	/* The "sense" set contains the set of Nexa that are in the
-	   sensitivity list. We also require that the events are all
-	   level sensitive, but the nex_async_ method takes care of
-	   that test. */
-      NexusSet*sense = new NexusSet;
-      for (unsigned idx = 0 ;  idx < events_.size() ;  idx += 1) {
-	    NexusSet*tmp = events_[idx]->nex_async_();
-	    if (tmp == 0) {
-		  delete sense;
-		  return false;
-	    }
+bool NetEvWait::is_asynchronous() {
+    /* The "sense" set contains the set of Nexa that are in the
+       sensitivity list. We also require that the events are all
+       level sensitive, but the nex_async_ method takes care of
+       that test. */
+    NexusSet* sense = new NexusSet;
+    for (unsigned idx = 0; idx < events_.size(); idx += 1) {
+        NexusSet* tmp = events_[idx]->nex_async_();
+        if (tmp == 0) {
+            delete sense;
+            return false;
+        }
 
-	    sense->add(*tmp);
-	    delete tmp;
-      }
+        sense->add(*tmp);
+        delete tmp;
+    }
 
-      NexusSet*inputs = statement_->nex_input();
+    NexusSet* inputs = statement_->nex_input();
 
-      if (! sense->contains(*inputs)) {
-	    delete sense;
-	    delete inputs;
-	    return false;
-      }
+    if (!sense->contains(*inputs)) {
+        delete sense;
+        delete inputs;
+        return false;
+    }
 
-      delete sense;
-      delete inputs;
+    delete sense;
+    delete inputs;
 
-	/* If it passes all the other tests, then this statement is
-	   asynchronous. */
-      return true;
+    /* If it passes all the other tests, then this statement is
+       asynchronous. */
+    return true;
 }
 
-bool NetProc::is_asynchronous()
-{
-      return false;
+bool NetProc::is_asynchronous() {
+    return false;
 }
 
-bool NetProcTop::is_asynchronous() const
-{
-      if (type_ == IVL_PR_INITIAL)
-	    return false;
+bool NetProcTop::is_asynchronous() const {
+    if (type_ == IVL_PR_INITIAL)
+        return false;
 
-      return statement_->is_asynchronous();
+    return statement_->is_asynchronous();
 }

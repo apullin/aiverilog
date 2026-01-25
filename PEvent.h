@@ -19,9 +19,9 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PNamedItem.h"
-# include  "StringHeap.h"
-# include  <string>
+#include "PNamedItem.h"
+#include "StringHeap.h"
+#include <string>
 
 class Design;
 class NetScope;
@@ -32,28 +32,29 @@ class NetScope;
  * constructor is the "foo" part of the declaration.
  */
 class PEvent : public PNamedItem {
+  public:
+    // The name is a perm-allocated string. It is the simple name
+    // of the event, without any scope.
+    explicit PEvent(perm_string name, unsigned lexical_pos);
+    ~PEvent() override;
 
-    public:
-	// The name is a perm-allocated string. It is the simple name
-	// of the event, without any scope.
-      explicit PEvent(perm_string name, unsigned lexical_pos);
-      ~PEvent() override;
+    perm_string name() const;
 
-      perm_string name() const;
+    unsigned lexical_pos() const {
+        return lexical_pos_;
+    }
 
-      unsigned lexical_pos() const { return lexical_pos_; }
+    void elaborate_scope(Design* des, NetScope* scope) const;
 
-      void elaborate_scope(Design*des, NetScope*scope) const;
+    SymbolType symbol_type() const override;
 
-      SymbolType symbol_type() const override;
+  private:
+    perm_string name_;
+    unsigned lexical_pos_;
 
-    private:
-      perm_string name_;
-      unsigned lexical_pos_;
-
-    private: // not implemented
-      PEvent(const PEvent&);
-      PEvent& operator= (const PEvent&);
+  private:  // not implemented
+    PEvent(const PEvent&);
+    PEvent& operator=(const PEvent&);
 };
 
 #endif /* IVL_PEvent_H */

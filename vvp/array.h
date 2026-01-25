@@ -29,7 +29,7 @@ class value_callback;
  * This function tries to find the array (by label) in the global
  * table of all the arrays in the design.
  */
-extern vvp_array_t array_find(const char*label);
+extern vvp_array_t array_find(const char* label);
 
 /* VPI hooks */
 extern value_callback* vpip_array_word_change(p_cb_data data);

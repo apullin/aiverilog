@@ -18,38 +18,36 @@
  */
 
 
-# include  "sizer_priv.h"
+#include "sizer_priv.h"
 
-void scan_logs_gates(ivl_scope_t, ivl_net_logic_t log, struct sizer_statistics&stats)
-{
-      unsigned wid = ivl_logic_width(log);
+void scan_logs_gates(ivl_scope_t, ivl_net_logic_t log, struct sizer_statistics& stats) {
+    unsigned wid = ivl_logic_width(log);
 
-      stats.gate_count += wid;
+    stats.gate_count += wid;
 }
 
-void scan_logs(ivl_scope_t scope, struct sizer_statistics&stats)
-{
-      for (unsigned idx = 0 ; idx < ivl_scope_logs(scope) ; idx += 1) {
-	    ivl_net_logic_t log = ivl_scope_log(scope, idx);
-	    switch (ivl_logic_type(log)) {
-		    // These logic gate types don't really exist in a
-		    // mapped design.
-		case IVL_LO_BUFZ:
-		  break;
+void scan_logs(ivl_scope_t scope, struct sizer_statistics& stats) {
+    for (unsigned idx = 0; idx < ivl_scope_logs(scope); idx += 1) {
+        ivl_net_logic_t log = ivl_scope_log(scope, idx);
+        switch (ivl_logic_type(log)) {
+                // These logic gate types don't really exist in a
+                // mapped design.
+            case IVL_LO_BUFZ:
+                break;
 
-		case IVL_LO_AND:
-		case IVL_LO_OR:
-		case IVL_LO_XOR:
-		case IVL_LO_NAND:
-		case IVL_LO_NOR:
-		case IVL_LO_XNOR:
-		case IVL_LO_BUF:
-		case IVL_LO_NOT:
-		  scan_logs_gates(scope, log, stats);
-		  break;
-		default:
-		  stats.log_bytype[ivl_logic_type(log)] += 1;
-		  break;
-	    }
-      }
+            case IVL_LO_AND:
+            case IVL_LO_OR:
+            case IVL_LO_XOR:
+            case IVL_LO_NAND:
+            case IVL_LO_NOR:
+            case IVL_LO_XNOR:
+            case IVL_LO_BUF:
+            case IVL_LO_NOT:
+                scan_logs_gates(scope, log, stats);
+                break;
+            default:
+                stats.log_bytype[ivl_logic_type(log)] += 1;
+                break;
+        }
+    }
 }

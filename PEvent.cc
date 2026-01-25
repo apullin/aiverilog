@@ -17,25 +17,18 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include "config.h"
+#include "config.h"
 
-# include  "PEvent.h"
+#include "PEvent.h"
 
-PEvent::PEvent(perm_string n, unsigned lexical_pos)
-: name_(n), lexical_pos_(lexical_pos)
-{
+PEvent::PEvent(perm_string n, unsigned lexical_pos) : name_(n), lexical_pos_(lexical_pos) {}
+
+PEvent::~PEvent() {}
+
+perm_string PEvent::name() const {
+    return name_;
 }
 
-PEvent::~PEvent()
-{
-}
-
-perm_string  PEvent::name() const
-{
-      return name_;
-}
-
-PNamedItem::SymbolType PEvent::symbol_type() const
-{
-      return EVENT;
+PNamedItem::SymbolType PEvent::symbol_type() const {
+    return EVENT;
 }

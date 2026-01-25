@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "StringHeap.h"
-# include  "libmisc/LineInfo.h"
+#include "StringHeap.h"
+#include "libmisc/LineInfo.h"
 
 /*
  * There are lots of places where names are attached to objects. This
@@ -28,8 +28,8 @@
  */
 
 template <class T> struct named : public LineInfo {
-      perm_string name;
-      T parm;
+    perm_string name;
+    T parm;
 };
 
 #endif /* IVL_named_H */

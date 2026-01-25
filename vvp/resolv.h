@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "config.h"
-# include  "vvp_net.h"
+#include "config.h"
+#include "vvp_net.h"
 
 /*
  * Resolver nodes are similar to wide functors, in that they may have
@@ -31,69 +31,79 @@
  */
 
 class resolv_core : public vvp_net_fun_t {
+  public:
+    explicit resolv_core(unsigned nports, vvp_net_t* net);
+    virtual ~resolv_core() override;
 
-    public:
-      explicit resolv_core(unsigned nports, vvp_net_t*net);
-      virtual ~resolv_core() override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t) override {
+        recv_vec4_(port.port(), bit);
+    }
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t) override
-            { recv_vec4_(port.port(), bit); }
+    void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t& bit) override {
+        recv_vec8_(port.port(), bit);
+    }
 
-      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override
-            { recv_vec8_(port.port(), bit); }
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override {
+        recv_vec4_pv_(port.port(), bit, base, vwid);
+    }
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override
-            { recv_vec4_pv_(port.port(), bit, base, vwid); }
+    void recv_vec8_pv(vvp_net_ptr_t port,
+                      const vvp_vector8_t& bit,
+                      unsigned base,
+                      unsigned vwid) override {
+        recv_vec8_pv_(port.port(), bit, base, vwid);
+    }
 
-      void recv_vec8_pv(vvp_net_ptr_t port, const vvp_vector8_t&bit,
-			unsigned base, unsigned vwid) override
-            { recv_vec8_pv_(port.port(), bit, base, vwid); }
+    virtual void count_drivers(unsigned bit_idx, unsigned counts[3]) = 0;
 
-      virtual void count_drivers(unsigned bit_idx, unsigned counts[3]) =0;
+  private:
+    friend class resolv_extend;
+    virtual void recv_vec4_(unsigned port, const vvp_vector4_t& bit) = 0;
+    virtual void recv_vec8_(unsigned port, const vvp_vector8_t& bit) = 0;
 
-    private:
-      friend class resolv_extend;
-      virtual void recv_vec4_(unsigned port, const vvp_vector4_t&bit) =0;
-      virtual void recv_vec8_(unsigned port, const vvp_vector8_t&bit) =0;
+    void recv_vec4_pv_(unsigned port, const vvp_vector4_t& bit, unsigned base, unsigned vwid);
+    void recv_vec8_pv_(unsigned port, const vvp_vector8_t& bit, unsigned base, unsigned vwid);
 
-      void recv_vec4_pv_(unsigned port, const vvp_vector4_t&bit,
-			 unsigned base, unsigned vwid);
-      void recv_vec8_pv_(unsigned port, const vvp_vector8_t&bit,
-			 unsigned base, unsigned vwid);
-
-    protected:
-      unsigned nports_;
-      vvp_net_t*net_;
+  protected:
+    unsigned nports_;
+    vvp_net_t* net_;
 };
 
 class resolv_extend : public vvp_net_fun_t {
+  public:
+    resolv_extend(resolv_core* core, unsigned port_base);
+    ~resolv_extend() override;
 
-    public:
-      resolv_extend(resolv_core*core, unsigned port_base);
-      ~resolv_extend() override;
+    void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t& bit, vvp_context_t) override {
+        core_->recv_vec4_(port_base_ + port.port(), bit);
+    }
 
-      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-                     vvp_context_t) override
-            { core_->recv_vec4_(port_base_ + port.port(), bit); }
+    void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t& bit) override {
+        core_->recv_vec8_(port_base_ + port.port(), bit);
+    }
 
-      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override
-            { core_->recv_vec8_(port_base_ + port.port(), bit); }
+    void recv_vec4_pv(vvp_net_ptr_t port,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override {
+        core_->recv_vec4_pv_(port_base_ + port.port(), bit, base, vwid);
+    }
 
-      void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override
-            { core_->recv_vec4_pv_(port_base_ + port.port(), bit,
-                                   base, vwid); }
+    void recv_vec8_pv(vvp_net_ptr_t port,
+                      const vvp_vector8_t& bit,
+                      unsigned base,
+                      unsigned vwid) override {
+        core_->recv_vec8_pv_(port_base_ + port.port(), bit, base, vwid);
+    }
 
-      void recv_vec8_pv(vvp_net_ptr_t port, const vvp_vector8_t&bit,
-			unsigned base, unsigned vwid) override
-            { core_->recv_vec8_pv_(port_base_ + port.port(), bit,
-                                   base, vwid); }
-
-    private:
-      resolv_core*core_;
-      unsigned port_base_;
+  private:
+    resolv_core* core_;
+    unsigned port_base_;
 };
 
 /*
@@ -109,23 +119,21 @@ class resolv_extend : public vvp_net_fun_t {
  * propagated value is a vvp_vector8_t value.
  */
 class resolv_tri : public resolv_core {
+  public:
+    explicit resolv_tri(unsigned nports, vvp_net_t* net, vvp_scalar_t hiz_value);
+    ~resolv_tri() override;
 
-    public:
-      explicit resolv_tri(unsigned nports, vvp_net_t*net,
-                          vvp_scalar_t hiz_value);
-      ~resolv_tri() override;
+    void count_drivers(unsigned bit_idx, unsigned counts[3]) override;
 
-      void count_drivers(unsigned bit_idx, unsigned counts[3]) override;
+  private:
+    void recv_vec4_(unsigned port, const vvp_vector4_t& bit) override;
+    void recv_vec8_(unsigned port, const vvp_vector8_t& bit) override;
 
-    private:
-      void recv_vec4_(unsigned port, const vvp_vector4_t&bit) override;
-      void recv_vec8_(unsigned port, const vvp_vector8_t&bit) override;
-
-    private:
-        // The puller value to be used when a bit is not driven.
-      vvp_scalar_t hiz_value_;
-        // The array of input values.
-      vvp_vector8_t*val_;
+  private:
+    // The puller value to be used when a bit is not driven.
+    vvp_scalar_t hiz_value_;
+    // The array of input values.
+    vvp_vector8_t* val_;
 };
 
 /*
@@ -138,43 +146,40 @@ class resolv_tri : public resolv_core {
  * 4-state values for the sake of resolution.
  */
 class resolv_wired_logic : public resolv_core {
+  public:
+    explicit resolv_wired_logic(unsigned nports, vvp_net_t* net);
+    virtual ~resolv_wired_logic() override;
 
-    public:
-      explicit resolv_wired_logic(unsigned nports, vvp_net_t*net);
-      virtual ~resolv_wired_logic() override;
+    void count_drivers(unsigned bit_idx, unsigned counts[3]) override;
 
-      void count_drivers(unsigned bit_idx, unsigned counts[3]) override;
+  protected:
+    virtual vvp_vector4_t wired_logic_math_(vvp_vector4_t& a, vvp_vector4_t& b) = 0;
 
-    protected:
-      virtual vvp_vector4_t wired_logic_math_(vvp_vector4_t&a, vvp_vector4_t&b) =0;
+  private:
+    void recv_vec4_(unsigned port, const vvp_vector4_t& bit) override;
+    void recv_vec8_(unsigned port, const vvp_vector8_t& bit) override;
 
-    private:
-      void recv_vec4_(unsigned port, const vvp_vector4_t&bit) override;
-      void recv_vec8_(unsigned port, const vvp_vector8_t&bit) override;
-
-    private:
-        // The array of input values.
-      vvp_vector4_t*val_;
+  private:
+    // The array of input values.
+    vvp_vector4_t* val_;
 };
 
 class resolv_triand : public resolv_wired_logic {
+  public:
+    explicit resolv_triand(unsigned nports, vvp_net_t* net);
+    ~resolv_triand() override;
 
-    public:
-      explicit resolv_triand(unsigned nports, vvp_net_t*net);
-      ~resolv_triand() override;
-
-    private:
-      virtual vvp_vector4_t wired_logic_math_(vvp_vector4_t&a, vvp_vector4_t&b) override;
+  private:
+    virtual vvp_vector4_t wired_logic_math_(vvp_vector4_t& a, vvp_vector4_t& b) override;
 };
 
 class resolv_trior : public resolv_wired_logic {
+  public:
+    explicit resolv_trior(unsigned nports, vvp_net_t* net);
+    ~resolv_trior() override;
 
-    public:
-      explicit resolv_trior(unsigned nports, vvp_net_t*net);
-      ~resolv_trior() override;
-
-    private:
-      virtual vvp_vector4_t wired_logic_math_(vvp_vector4_t&a, vvp_vector4_t&b) override;
+  private:
+    virtual vvp_vector4_t wired_logic_math_(vvp_vector4_t& a, vvp_vector4_t& b) override;
 };
 
 #endif /* IVL_resolv_H */

@@ -19,13 +19,13 @@
  *    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-# include  <string>
+#include <string>
 
 /*
  * This is the interface function that the user invokes to parse a
  * footprint file. The argument is the path to the element.
  */
-extern int parse_fp_file(const std::string&file_path);
+extern int parse_fp_file(const std::string& file_path);
 
 /*
  * The yyltype supports the passing of detailed source file location
@@ -33,26 +33,30 @@ extern int parse_fp_file(const std::string&file_path);
  * YYLTYPE compels the lexor to use this type and not something other.
  */
 struct yyltype {
-      unsigned first_line;
-      yyltype() { first_line = 1; }
+    unsigned first_line;
+    yyltype() {
+        first_line = 1;
+    }
 };
-# define YYLTYPE struct yyltype
+#define YYLTYPE struct yyltype
 
 /*
  * Use this function during parse to generate error messages. The "loc"
  * is the location of the token that triggered the error, and the fmt
  * is printf-style format.
  */
-extern void errormsg(const YYLTYPE&loc, const char*fmt, ...) __attribute__((format (printf, 2, 3)));
+extern void errormsg(const YYLTYPE& loc, const char* fmt, ...)
+    __attribute__((format(printf, 2, 3)));
 
-extern void sorrymsg(const YYLTYPE&loc, const char*fmt, ...) __attribute__((format (printf, 2, 3)));
+extern void sorrymsg(const YYLTYPE& loc, const char* fmt, ...)
+    __attribute__((format(printf, 2, 3)));
 
 extern void callback_fp_element(const struct fp_element_t&);
 
 /*
  * Set this to a non-zero value to enable parser debug output.
  */
-//extern int yydebug;
+// extern int yydebug;
 
 /*
  * The parser counts the errors that is handed in the parse_errors
@@ -60,7 +64,7 @@ extern void callback_fp_element(const struct fp_element_t&);
  * caller sets its initial value.) The sorrys are the count of
  * unsupported constructs that are encountered.
  */
-//extern int parse_errors;
+// extern int parse_errors;
 extern int parse_fp_sorrys;
 
 #endif /* IVL_fp_api_H */

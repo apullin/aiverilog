@@ -19,9 +19,9 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <string>
-# include  <list>
-# include  <iostream>
+#include <string>
+#include <list>
+#include <iostream>
 
 class Design;
 class NetScope;
@@ -33,36 +33,36 @@ class PExpr;
  * fall and decay times. This class arranges to carry the triplet.
  */
 class PDelays {
+  public:
+    PDelays();
+    ~PDelays();
 
-    public:
-      PDelays();
-      ~PDelays();
+    /* Set the delay expressions. If the delete_flag is true, then
+       this object takes ownership of the expressions, and will
+       delete it in the destructor. */
+    void set_delay(PExpr*);
+    void set_delays(const std::list<PExpr*>* del, bool delete_flag = true);
 
-	/* Set the delay expressions. If the delete_flag is true, then
-	   this object takes ownership of the expressions, and will
-	   delete it in the destructor. */
-      void set_delay(PExpr*);
-      void set_delays(const std::list<PExpr*>*del, bool delete_flag=true);
+    unsigned delay_count() const;
 
-      unsigned delay_count() const;
+    void eval_delays(Design* des,
+                     NetScope* scope,
+                     NetExpr*& rise_time,
+                     NetExpr*& fall_time,
+                     NetExpr*& decay_time,
+                     bool as_nets_flag = false) const;
 
-      void eval_delays(Design*des, NetScope*scope,
-		       NetExpr*&rise_time,
-		       NetExpr*&fall_time,
-		       NetExpr*&decay_time,
-		       bool as_nets_flag =false) const;
+    void dump_delays(std::ostream& out) const;
 
-      void dump_delays(std::ostream&out) const;
+  private:
+    PExpr* delay_[3];
+    bool delete_flag_;
 
-    private:
-      PExpr* delay_[3];
-      bool delete_flag_;
-
-    private: // not implemented
-      PDelays(const PDelays&);
-      PDelays& operator= (const PDelays&);
+  private:  // not implemented
+    PDelays(const PDelays&);
+    PDelays& operator=(const PDelays&);
 };
 
-std::ostream& operator << (std::ostream&o, const PDelays&);
+std::ostream& operator<<(std::ostream& o, const PDelays&);
 
 #endif /* IVL_PDelays_H */

@@ -17,11 +17,11 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "config.h"
-# include  "netlist.h"
-# include  "compiler.h"
-# include  "PExpr.h"
-# include  <iostream>
+#include "config.h"
+#include "netlist.h"
+#include "compiler.h"
+#include "PExpr.h"
+#include <iostream>
 
 using namespace std;
 
@@ -31,46 +31,38 @@ using namespace std;
  * which accounts for all the inputs, plus one for the phantom output
  * that is the result.
  */
-NetUserFunc::NetUserFunc(NetScope*s, perm_string n, NetScope*d,
-                         NetEvWait*trigger__)
-: NetNode(s, n, d->func_def()->port_count()+1),
-  def_(d), trigger_(trigger__)
-{
-      pin(0).set_dir(Link::OUTPUT);
+NetUserFunc::NetUserFunc(NetScope* s, perm_string n, NetScope* d, NetEvWait* trigger__)
+    : NetNode(s, n, d->func_def()->port_count() + 1), def_(d), trigger_(trigger__) {
+    pin(0).set_dir(Link::OUTPUT);
 
-      for (unsigned idx = 1 ;  idx < pin_count() ;  idx += 1) {
-
-	    pin(idx).set_dir(Link::INPUT);
-	    pin(idx).drive0(IVL_DR_HiZ);
-	    pin(idx).drive1(IVL_DR_HiZ);
-      }
+    for (unsigned idx = 1; idx < pin_count(); idx += 1) {
+        pin(idx).set_dir(Link::INPUT);
+        pin(idx).drive0(IVL_DR_HiZ);
+        pin(idx).drive1(IVL_DR_HiZ);
+    }
 }
 
-NetUserFunc::~NetUserFunc()
-{
+NetUserFunc::~NetUserFunc() {}
+
+unsigned NetUserFunc::port_width(unsigned port) const {
+    const NetFuncDef* fdef = def_->func_def();
+
+    /* Port 0 is the return port. */
+    if (port == 0) {
+        const NetNet* sig = fdef->return_sig();
+        assert(sig);
+        return sig->vector_width();
+    }
+
+    port -= 1;
+    assert(port < fdef->port_count());
+    const NetNet* port_sig = fdef->port(port);
+
+    return port_sig->vector_width();
 }
 
-unsigned NetUserFunc::port_width(unsigned port) const
-{
-      const NetFuncDef*fdef = def_->func_def();
-
-	/* Port 0 is the return port. */
-      if (port == 0) {
-	    const NetNet*sig = fdef->return_sig();
-	    assert(sig);
-	    return sig->vector_width();
-      }
-
-      port -= 1;
-      assert(port < fdef->port_count());
-      const NetNet*port_sig = fdef->port(port);
-
-      return port_sig->vector_width();
-}
-
-const NetScope* NetUserFunc::def() const
-{
-      return def_;
+const NetScope* NetUserFunc::def() const {
+    return def_;
 }
 
 /*
@@ -78,51 +70,45 @@ const NetScope* NetUserFunc::def() const
  * of the PECallFunction match the function definition. This is used
  * during elaboration to validate the parameters before using them.
  */
-bool PECallFunction::check_call_matches_definition_(Design*des, NetScope*dscope) const
-{
-      assert(dscope);
+bool PECallFunction::check_call_matches_definition_(Design* des, NetScope* dscope) const {
+    assert(dscope);
 
-      if (dscope->type() != NetScope::FUNC) {
-	    cerr << get_fileline() << ": error: Attempt to call scope "
-		 << scope_path(dscope) << " as a function." << endl;
-	    des->errors += 1;
-	    return false;
-      }
+    if (dscope->type() != NetScope::FUNC) {
+        cerr << get_fileline() << ": error: Attempt to call scope " << scope_path(dscope)
+             << " as a function." << endl;
+        des->errors += 1;
+        return false;
+    }
 
-      return true;
+    return true;
 }
 
 
-NetSysFunc::NetSysFunc(NetScope*s, perm_string n,
-		       const struct sfunc_return_type*def,
-		       unsigned ports, NetEvWait*trigger__)
-: NetNode(s, n, ports), def_(def), trigger_(trigger__)
-{
-      pin(0).set_dir(Link::OUTPUT); // Q
+NetSysFunc::NetSysFunc(NetScope* s,
+                       perm_string n,
+                       const struct sfunc_return_type* def,
+                       unsigned ports,
+                       NetEvWait* trigger__)
+    : NetNode(s, n, ports), def_(def), trigger_(trigger__) {
+    pin(0).set_dir(Link::OUTPUT);  // Q
 
-      for (unsigned idx = 1 ;  idx < pin_count() ;  idx += 1) {
-
-	    pin(idx).set_dir(Link::INPUT);
-	    pin(idx).drive0(IVL_DR_HiZ);
-	    pin(idx).drive1(IVL_DR_HiZ);
-      }
+    for (unsigned idx = 1; idx < pin_count(); idx += 1) {
+        pin(idx).set_dir(Link::INPUT);
+        pin(idx).drive0(IVL_DR_HiZ);
+        pin(idx).drive1(IVL_DR_HiZ);
+    }
 }
 
-NetSysFunc::~NetSysFunc()
-{
+NetSysFunc::~NetSysFunc() {}
+
+const char* NetSysFunc::func_name() const {
+    return def_->name;
 }
 
-const char*NetSysFunc::func_name() const
-{
-      return def_->name;
+ivl_variable_type_t NetSysFunc::data_type() const {
+    return def_->type;
 }
 
-ivl_variable_type_t NetSysFunc::data_type() const
-{
-      return def_->type;
-}
-
-unsigned NetSysFunc::vector_width() const
-{
-      return def_->wid;
+unsigned NetSysFunc::vector_width() const {
+    return def_->wid;
 }

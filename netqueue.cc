@@ -17,21 +17,15 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "netqueue.h"
-# include  <iostream>
+#include "netqueue.h"
+#include <iostream>
 
 using namespace std;
 
-netqueue_t::netqueue_t(ivl_type_t vec, long max_idx)
-: netdarray_t(vec), max_idx_(max_idx)
-{
-}
+netqueue_t::netqueue_t(ivl_type_t vec, long max_idx) : netdarray_t(vec), max_idx_(max_idx) {}
 
-netqueue_t::~netqueue_t()
-{
-}
+netqueue_t::~netqueue_t() {}
 
-ivl_variable_type_t netqueue_t::base_type() const
-{
-      return IVL_VT_QUEUE;
+ivl_variable_type_t netqueue_t::base_type() const {
+    return IVL_VT_QUEUE;
 }

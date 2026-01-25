@@ -17,56 +17,46 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PTimingCheck.h"
+#include "PTimingCheck.h"
 
 PRecRem::PRecRem(event_t* reference_event,
-      event_t* data_event,
-      PExpr* setup_limit,
-      PExpr* hold_limit,
-      pform_name_t* notifier,
-      PExpr* timestamp_cond,
-      PExpr* timecheck_cond,
-      pform_name_t* delayed_reference,
-      pform_name_t* delayed_data)
-      :
-      reference_event_ (reference_event),
-      data_event_ (data_event),
-      setup_limit_ (setup_limit),
-      hold_limit_ (hold_limit),
-      notifier_ (notifier),
-      timestamp_cond_ (timestamp_cond),
-      timecheck_cond_ (timecheck_cond),
-      delayed_reference_ (delayed_reference),
-      delayed_data_ (delayed_data)
-{
-}
+                 event_t* data_event,
+                 PExpr* setup_limit,
+                 PExpr* hold_limit,
+                 pform_name_t* notifier,
+                 PExpr* timestamp_cond,
+                 PExpr* timecheck_cond,
+                 pform_name_t* delayed_reference,
+                 pform_name_t* delayed_data)
+    : reference_event_(reference_event),
+      data_event_(data_event),
+      setup_limit_(setup_limit),
+      hold_limit_(hold_limit),
+      notifier_(notifier),
+      timestamp_cond_(timestamp_cond),
+      timecheck_cond_(timecheck_cond),
+      delayed_reference_(delayed_reference),
+      delayed_data_(delayed_data) {}
 
-PRecRem::~PRecRem()
-{
-}
+PRecRem::~PRecRem() {}
 
 PSetupHold::PSetupHold(event_t* reference_event,
-      event_t* data_event,
-      PExpr* setup_limit,
-      PExpr* hold_limit,
-      pform_name_t* notifier,
-      PExpr* timestamp_cond,
-      PExpr* timecheck_cond,
-      pform_name_t* delayed_reference,
-      pform_name_t* delayed_data)
-      :
-      reference_event_ (reference_event),
-      data_event_ (data_event),
-      setup_limit_ (setup_limit),
-      hold_limit_ (hold_limit),
-      notifier_ (notifier),
-      timestamp_cond_ (timestamp_cond),
-      timecheck_cond_ (timecheck_cond),
-      delayed_reference_ (delayed_reference),
-      delayed_data_ (delayed_data)
-{
-}
+                       event_t* data_event,
+                       PExpr* setup_limit,
+                       PExpr* hold_limit,
+                       pform_name_t* notifier,
+                       PExpr* timestamp_cond,
+                       PExpr* timecheck_cond,
+                       pform_name_t* delayed_reference,
+                       pform_name_t* delayed_data)
+    : reference_event_(reference_event),
+      data_event_(data_event),
+      setup_limit_(setup_limit),
+      hold_limit_(hold_limit),
+      notifier_(notifier),
+      timestamp_cond_(timestamp_cond),
+      timecheck_cond_(timecheck_cond),
+      delayed_reference_(delayed_reference),
+      delayed_data_(delayed_data) {}
 
-PSetupHold::~PSetupHold()
-{
-}
+PSetupHold::~PSetupHold() {}

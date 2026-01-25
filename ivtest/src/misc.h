@@ -24,38 +24,37 @@
 #include "globals.h"
 
 #define SYMPRIME 4093
-#define WAVE_DECOMPRESSOR "gzip -cd "	/* zcat alone doesn't cut it for AIX */
+#define WAVE_DECOMPRESSOR "gzip -cd " /* zcat alone doesn't cut it for AIX */
 
-struct symbol
-{
-struct symbol *altsym;	/* points to sym in alt vcd file */
+struct symbol {
+    struct symbol* altsym; /* points to sym in alt vcd file */
 
-struct symbol *nextinaet;/* for aet node chaining */
-struct HistEnt *h;	 /* points to previous one */
+    struct symbol* nextinaet; /* for aet node chaining */
+    struct HistEnt* h;        /* points to previous one */
 
-struct symbol *vec_root, *vec_chain;
+    struct symbol *vec_root, *vec_chain;
 
-struct symbol *next;	/* for hash chain */
-char *name;
+    struct symbol* next; /* for hash chain */
+    char* name;
 
-struct Node *n;
+    struct Node* n;
 };
 
 
-struct symbol *symfind(struct globals *, char *);
-struct symbol *symadd(struct globals *, char *, int);
-int hash(char *s);
+struct symbol* symfind(struct globals*, char*);
+struct symbol* symadd(struct globals*, char*, int);
+int hash(char* s);
 
-int sigcmp(char *, char *);
-void quicksort(struct symbol **, int, int);
+int sigcmp(char*, char*);
+void quicksort(struct symbol**, int, int);
 
 
 extern struct symbol **sym, **facs;
 extern char facs_are_sorted;
 extern int numfacs;
 extern int regions;
-extern struct symbol *firstnode;
-extern struct symbol *curnode;
+extern struct symbol* firstnode;
+extern struct symbol* curnode;
 extern int longestname;
 extern char hier_delimeter;
 

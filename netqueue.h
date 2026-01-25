@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "netdarray.h"
-# include  "ivl_target.h"
+#include "netdarray.h"
+#include "ivl_target.h"
 
 /*
  * A queue type is actually a dynamic array with a few extra
@@ -28,22 +28,23 @@
  * run-time, but for the most part this applies during elaboration.
  */
 class netqueue_t : public netdarray_t {
+  public:
+    explicit netqueue_t(ivl_type_t vec, long max_idx);
+    ~netqueue_t() override;
 
-    public:
-      explicit netqueue_t(ivl_type_t vec, long max_idx);
-      ~netqueue_t() override;
+    // This is the "base_type()" virtual method of the
+    // nettype_base_t. The ivl_target api expects this to return
+    // IVL_VT_QUEUE for queues.
+    ivl_variable_type_t base_type() const override;
 
-	// This is the "base_type()" virtual method of the
-	// nettype_base_t. The ivl_target api expects this to return
-	// IVL_VT_QUEUE for queues.
-      ivl_variable_type_t base_type() const override;
+    long max_idx(void) const {
+        return max_idx_;
+    }
 
-      long max_idx(void) const { return max_idx_; }
+    std::ostream& debug_dump(std::ostream&) const override;
 
-      std::ostream& debug_dump(std::ostream&) const override;
-
-    private:
-      long max_idx_;
+  private:
+    long max_idx_;
 };
 
 #endif

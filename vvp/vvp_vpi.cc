@@ -3,7 +3,4 @@
 #include "vpi_user.h"
 
 
-void vvp_vpi_init()
-{
-}
-
+void vvp_vpi_init() {}

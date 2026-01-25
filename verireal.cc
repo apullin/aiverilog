@@ -17,128 +17,112 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include "config.h"
-# include "compiler.h"
+#include "config.h"
+#include "compiler.h"
 
-# include  "verireal.h"
-# include  "verinum.h"
-# include  <cstdlib>
-# include  <cctype>
-# include  <iostream>
-# include  <cmath>
-# include  <cassert>
-# include  <cstring>
+#include "verireal.h"
+#include "verinum.h"
+#include <cstdlib>
+#include <cctype>
+#include <iostream>
+#include <cmath>
+#include <cassert>
+#include <cstring>
 
 using namespace std;
 
-verireal::verireal()
-{
-      value_ = 0.0;
+verireal::verireal() {
+    value_ = 0.0;
 }
 
-verireal::verireal(const char*txt)
-{
-      char*tmp = new char[strlen(txt)+1];
-      char*cp = tmp;
-      for (unsigned idx = 0 ;  txt[idx] ;  idx += 1) {
-	    if (txt[idx] == '_')
-		  continue;
+verireal::verireal(const char* txt) {
+    char* tmp = new char[strlen(txt) + 1];
+    char* cp = tmp;
+    for (unsigned idx = 0; txt[idx]; idx += 1) {
+        if (txt[idx] == '_')
+            continue;
 
-	    *cp++ = txt[idx];
-      }
-      cp[0] = 0;
+        *cp++ = txt[idx];
+    }
+    cp[0] = 0;
 
-      value_ = strtod(tmp, 0);
-      delete[]tmp;
+    value_ = strtod(tmp, 0);
+    delete[] tmp;
 }
 
-verireal::verireal(long val)
-{
-      value_ = (double)val;
+verireal::verireal(long val) {
+    value_ = (double)val;
 }
 
-verireal::verireal(double val)
-{
-      value_ = val;
+verireal::verireal(double val) {
+    value_ = val;
 }
 
-verireal::~verireal()
-{
+verireal::~verireal() {}
+
+long verireal::as_long() const {
+    double out = value_;
+    double outf;
+
+    outf = std::round(out);
+
+    return (long)outf;
 }
 
-long verireal::as_long() const
-{
-      double out = value_;
-      double outf;
+int64_t verireal::as_long64(int shift) const {
+    double out = value_ * pow(10.0, shift);
+    double outf;
 
-      outf = std::round(out);
+    outf = std::round(out);
 
-      return (long) outf;
+    return (int64_t)outf;
 }
 
-int64_t verireal::as_long64(int shift) const
-{
-      double out = value_ * pow(10.0,shift);
-      double outf;
-
-      outf = std::round(out);
-
-      return (int64_t) outf;
+double verireal::as_double() const {
+    return value_;
 }
 
-double verireal::as_double() const
-{
-      return value_;
+verireal operator+(const verireal& l, const verireal& r) {
+    verireal res;
+    res.value_ = l.value_ + r.value_;
+    return res;
 }
 
-verireal operator+ (const verireal&l, const verireal&r)
-{
-      verireal res;
-      res.value_ = l.value_ + r.value_;
-      return res;
+verireal operator-(const verireal& l, const verireal& r) {
+    verireal res;
+    res.value_ = l.value_ - r.value_;
+    return res;
 }
 
-verireal operator- (const verireal&l, const verireal&r)
-{
-      verireal res;
-      res.value_ = l.value_ - r.value_;
-      return res;
+verireal operator*(const verireal& l, const verireal& r) {
+    verireal res;
+    res.value_ = l.value_ * r.value_;
+    return res;
 }
 
-verireal operator* (const verireal&l, const verireal&r)
-{
-      verireal res;
-      res.value_ = l.value_ * r.value_;
-      return res;
+verireal operator/(const verireal& l, const verireal& r) {
+    verireal res;
+    res.value_ = l.value_ / r.value_;
+    return res;
 }
 
-verireal operator/ (const verireal&l, const verireal&r)
-{
-      verireal res;
-      res.value_ = l.value_ / r.value_;
-      return res;
+verireal operator%(const verireal& l, const verireal& r) {
+    verireal res;
+    // Modulus of a real value is not supported by the standard,
+    // but we support it as an extension. Assert that we are in
+    // the correct state before doing the operation.
+    assert(gn_icarus_misc_flag);
+    res.value_ = fmod(l.value_, r.value_);
+    return res;
 }
 
-verireal operator% (const verireal&l, const verireal&r)
-{
-      verireal res;
-	// Modulus of a real value is not supported by the standard,
-	// but we support it as an extension. Assert that we are in
-	// the correct state before doing the operation.
-      assert(gn_icarus_misc_flag);
-      res.value_ = fmod(l.value_, r.value_);
-      return res;
+verireal operator-(const verireal& l) {
+    verireal res;
+    res.value_ = -l.value_;
+    return res;
 }
 
-verireal operator- (const verireal&l)
-{
-      verireal res;
-      res.value_ = - l.value_;
-      return res;
-}
-
-ostream& operator<< (ostream&out, const verireal&v)
-{
-      out << showpoint << v.value_;
-      return out;
+ostream& operator<<(ostream& out, const verireal& v) {
+    out << showpoint << v.value_;
+    return out;
 }

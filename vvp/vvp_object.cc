@@ -17,33 +17,28 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "vvp_object.h"
-# include  "vvp_net.h"
-# include  <iostream>
-# include  <typeinfo>
+#include "vvp_object.h"
+#include "vvp_net.h"
+#include <iostream>
+#include <typeinfo>
 
 using namespace std;
 
 int vvp_object::total_active_cnt_ = 0;
 
-void vvp_object::cleanup(void)
-{
+void vvp_object::cleanup(void) {}
+
+vvp_object::~vvp_object() {
+    total_active_cnt_ -= 1;
 }
 
-vvp_object::~vvp_object()
-{
-      total_active_cnt_ -= 1;
+void vvp_object::shallow_copy(const vvp_object*) {
+    cerr << "XXXX shallow_copy(vvp_object_t) not implemented for " << typeid(*this).name() << endl;
+    assert(0);
 }
 
-void vvp_object::shallow_copy(const vvp_object*)
-{
-      cerr << "XXXX shallow_copy(vvp_object_t) not implemented for " << typeid(*this).name() << endl;
-      assert(0);
-}
-
-vvp_object* vvp_object::duplicate(void) const
-{
-      cerr << "XXXX duplicate() not implemented for " << typeid(*this).name() << endl;
-      assert(0);
-      return 0;
+vvp_object* vvp_object::duplicate(void) const {
+    cerr << "XXXX duplicate() not implemented for " << typeid(*this).name() << endl;
+    assert(0);
+    return 0;
 }

@@ -19,12 +19,12 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <cstdio>
-# include  "StringHeap.h"
-# include  <string>
-# include  <ostream>
-# include  <map>
-# include  <set>
+#include <cstdio>
+#include "StringHeap.h"
+#include <string>
+#include <ostream>
+#include <map>
+#include <set>
 
 class Design;
 class Module;
@@ -40,14 +40,14 @@ struct enum_type_t;
  * Verilog source into pform for elaboration. The parser adds modules
  * to these maps as it compiles modules in the Verilog source.
  */
-extern std::map<perm_string,Module*> pform_modules;
-extern std::map<perm_string,PUdp*>   pform_primitives;
-extern std::vector<PPackage*>        pform_units;
-extern std::vector<PPackage*>        pform_packages;
+extern std::map<perm_string, Module*> pform_modules;
+extern std::map<perm_string, PUdp*> pform_primitives;
+extern std::vector<PPackage*> pform_units;
+extern std::vector<PPackage*> pform_packages;
 
-extern void pform_dump(std::ostream&out, const PClass*pac);
-extern void pform_dump(std::ostream&out, const PPackage*pac);
-extern void pform_dump(std::ostream&out, const PTaskFunc*tf);
+extern void pform_dump(std::ostream& out, const PClass* pac);
+extern void pform_dump(std::ostream& out, const PPackage* pac);
+extern void pform_dump(std::ostream& out, const PTaskFunc* tf);
 
 /*
  * This code actually invokes the parser to make modules. If the path
@@ -56,14 +56,13 @@ extern void pform_dump(std::ostream&out, const PTaskFunc*tf);
  * the ivlpp_string variable is not set to null, the file will be piped
  * through the command specified by ivlpp_string before being parsed.
  */
-extern int pform_parse(const char*path);
+extern int pform_parse(const char* path);
 
 extern void pform_finish();
 
 extern std::string vl_file;
 
-extern void pform_set_timescale(int units, int prec, const char*file,
-                                unsigned lineno);
+extern void pform_set_timescale(int units, int prec, const char* file, unsigned lineno);
 extern int def_ts_units;
 extern int def_ts_prec;
 

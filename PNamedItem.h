@@ -19,39 +19,55 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "LineInfo.h"
+#include "LineInfo.h"
 
 /*
  * The PNamedItem class is the base class for all items that can be added
  * to a scope's local symbol map.
  */
 class PNamedItem : virtual public LineInfo {
+  public:
+    enum SymbolType {
+        ANY,
+        PARAM,
+        NET,
+        VAR,
+        GENVAR,
+        EVENT,
+        TYPE,
+        ENUM,
+        CLASS,
+        FUNCTION,
+        TASK,
+        BLOCK,
+        GENBLOCK,
+        MODPORT,
+        PACKAGE,
+        MODULE,
+        PROGRAM,
+        INTERFACE,
+        PRIMITIVE,
+        INSTANCE
+    };
 
-    public:
-      enum SymbolType { ANY, PARAM, NET, VAR, GENVAR, EVENT, TYPE, ENUM,
-                        CLASS, FUNCTION, TASK, BLOCK, GENBLOCK, MODPORT,
-                        PACKAGE, MODULE, PROGRAM, INTERFACE, PRIMITIVE,
-                        INSTANCE };
+    explicit PNamedItem();
+    virtual ~PNamedItem() override;
 
-      explicit PNamedItem();
-      virtual ~PNamedItem() override;
-
-      virtual SymbolType symbol_type() const;
+    virtual SymbolType symbol_type() const;
 };
 
-extern std::ostream& operator << (std::ostream&, PNamedItem::SymbolType);
+extern std::ostream& operator<<(std::ostream&, PNamedItem::SymbolType);
 
 /*
  * The PGenvar class represents a genvar. This is only used to represent
  * genvar in a scope's local symbol map.
  */
 class PGenvar : public PNamedItem {
+  public:
+    explicit PGenvar();
+    virtual ~PGenvar() override;
 
-    public:
-      explicit PGenvar();
-      virtual ~PGenvar() override;
-
-      SymbolType symbol_type() const override;
+    SymbolType symbol_type() const override;
 };
 
 #endif /* IVL_PNamedItem_H */

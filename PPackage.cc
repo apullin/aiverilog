@@ -18,13 +18,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PPackage.h"
+#include "PPackage.h"
 
-PPackage::PPackage(perm_string name, LexicalScope*parent)
-: PScopeExtra(name, parent)
-{
-}
+PPackage::PPackage(perm_string name, LexicalScope* parent) : PScopeExtra(name, parent) {}
 
-PPackage::~PPackage()
-{
-}
+PPackage::~PPackage() {}

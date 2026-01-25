@@ -17,61 +17,54 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PGenerate.h"
-# include  "PWire.h"
-# include  "ivl_assert.h"
+#include "PGenerate.h"
+#include "PWire.h"
+#include "ivl_assert.h"
 
 using namespace std;
 
-PGenerate::PGenerate(LexicalScope*parent, unsigned id)
-: LexicalScope(parent), id_number(id)
-{
-      scheme_type = GS_NONE;
-      directly_nested = false;
-      local_index = false;
-      loop_init = 0;
-      loop_test = 0;
-      loop_step = 0;
+PGenerate::PGenerate(LexicalScope* parent, unsigned id) : LexicalScope(parent), id_number(id) {
+    scheme_type = GS_NONE;
+    directly_nested = false;
+    local_index = false;
+    loop_init = 0;
+    loop_test = 0;
+    loop_step = 0;
 }
 
-PGenerate::~PGenerate()
-{
+PGenerate::~PGenerate() {}
+
+void PGenerate::add_gate(PGate* gate) {
+    gates.push_back(gate);
 }
 
-void PGenerate::add_gate(PGate*gate)
-{
-      gates.push_back(gate);
+ostream& operator<<(ostream& out, PGenerate::scheme_t type) {
+    switch (type) {
+        case PGenerate::GS_NONE:
+            out << "GS_NONE";
+            break;
+        case PGenerate::GS_LOOP:
+            out << "GS_LOOP";
+            break;
+        case PGenerate::GS_CONDIT:
+            out << "GS_CONDIT";
+            break;
+        case PGenerate::GS_ELSE:
+            out << "GS_ELSE";
+            break;
+        case PGenerate::GS_CASE:
+            out << "GS_CASE";
+            break;
+        case PGenerate::GS_CASE_ITEM:
+            out << "GS_CASE_ITEM";
+            break;
+        case PGenerate::GS_NBLOCK:
+            out << "GS_NBLOCK";
+            break;
+    }
+    return out;
 }
 
-ostream& operator << (ostream&out, PGenerate::scheme_t type)
-{
-      switch (type) {
-	  case PGenerate::GS_NONE:
-	    out << "GS_NONE";
-	    break;
-	  case PGenerate::GS_LOOP:
-	    out << "GS_LOOP";
-	    break;
-	  case PGenerate::GS_CONDIT:
-	    out << "GS_CONDIT";
-	    break;
-	  case PGenerate::GS_ELSE:
-	    out << "GS_ELSE";
-	    break;
-	  case PGenerate::GS_CASE:
-	    out << "GS_CASE";
-	    break;
-	  case PGenerate::GS_CASE_ITEM:
-	    out << "GS_CASE_ITEM";
-	    break;
-	  case PGenerate::GS_NBLOCK:
-	    out << "GS_NBLOCK";
-	    break;
-      }
-      return out;
-}
-
-PNamedItem::SymbolType PGenerate::symbol_type() const
-{
-      return GENBLOCK;
+PNamedItem::SymbolType PGenerate::symbol_type() const {
+    return GENBLOCK;
 }

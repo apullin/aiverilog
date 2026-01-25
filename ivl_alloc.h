@@ -19,13 +19,13 @@
  */
 
 #ifdef __cplusplus
-#  include <cstdlib>
-#  include <cstdio>
-#  include <cstring>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
 #else
-#  include <stdlib.h>
-#  include <stdio.h>
-#  include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #endif
 
 #if !defined(_MSC_VER)
@@ -33,75 +33,71 @@
  * Define a safer version of strdup().
  */
 
-#define strdup(__ivl_str) \
-({ \
-      char *__ivl_rtn = strdup(__ivl_str); \
-	/* If we run out of memory then exit with a message. */ \
-      if (__ivl_rtn == NULL) { \
-	    fprintf(stderr, "%s:%d: Error: strdup() ran out of memory.\n", \
-	                    __FILE__, __LINE__); \
-	    exit(1); \
-      } \
-      __ivl_rtn; \
-})
+#define strdup(__ivl_str)                                                                       \
+    ({                                                                                          \
+        char* __ivl_rtn = strdup(__ivl_str);                                                    \
+        /* If we run out of memory then exit with a message. */                                 \
+        if (__ivl_rtn == NULL) {                                                                \
+            fprintf(stderr, "%s:%d: Error: strdup() ran out of memory.\n", __FILE__, __LINE__); \
+            exit(1);                                                                            \
+        }                                                                                       \
+        __ivl_rtn;                                                                              \
+    })
 
 /*
  * Define a safer version of malloc().
  */
 
-#define malloc(__ivl_size) \
-({ \
-	/* To be safe we only evaluate the argument once. */ \
-      size_t __ivl_lsize = __ivl_size; \
-      void *__ivl_rtn = malloc(__ivl_lsize); \
-	/* If we run out of memory then exit with a message. */ \
-      if ((__ivl_rtn == NULL) && (__ivl_lsize != 0)) { \
-	    fprintf(stderr, "%s:%d: Error: malloc() ran out of memory.\n", \
-	                    __FILE__, __LINE__); \
-	    exit(1); \
-      } \
-      __ivl_rtn; \
-})
+#define malloc(__ivl_size)                                                                      \
+    ({                                                                                          \
+        /* To be safe we only evaluate the argument once. */                                    \
+        size_t __ivl_lsize = __ivl_size;                                                        \
+        void* __ivl_rtn = malloc(__ivl_lsize);                                                  \
+        /* If we run out of memory then exit with a message. */                                 \
+        if ((__ivl_rtn == NULL) && (__ivl_lsize != 0)) {                                        \
+            fprintf(stderr, "%s:%d: Error: malloc() ran out of memory.\n", __FILE__, __LINE__); \
+            exit(1);                                                                            \
+        }                                                                                       \
+        __ivl_rtn;                                                                              \
+    })
 
 /*
  * Define a safer version of realloc().
  */
 
-#define realloc(__ivl_ptr, __ivl_size) \
-({ \
-	/* To be safe we only evaluate the arguments once. */ \
-      void *__ivl_lptr = __ivl_ptr; \
-      size_t __ivl_lsize = __ivl_size; \
-      void *__ivl_rtn = realloc(__ivl_lptr, __ivl_lsize); \
-	/* If we run out of memory then exit with a message. */ \
-      if ((__ivl_rtn == NULL) && (__ivl_lsize != 0)) { \
-	    fprintf(stderr, "%s:%d: Error: realloc() ran out of memory.\n", \
-	                    __FILE__, __LINE__); \
-	    free(__ivl_lptr); \
-	    exit(1); \
-      } \
-      __ivl_rtn; \
-})
+#define realloc(__ivl_ptr, __ivl_size)                                                           \
+    ({                                                                                           \
+        /* To be safe we only evaluate the arguments once. */                                    \
+        void* __ivl_lptr = __ivl_ptr;                                                            \
+        size_t __ivl_lsize = __ivl_size;                                                         \
+        void* __ivl_rtn = realloc(__ivl_lptr, __ivl_lsize);                                      \
+        /* If we run out of memory then exit with a message. */                                  \
+        if ((__ivl_rtn == NULL) && (__ivl_lsize != 0)) {                                         \
+            fprintf(stderr, "%s:%d: Error: realloc() ran out of memory.\n", __FILE__, __LINE__); \
+            free(__ivl_lptr);                                                                    \
+            exit(1);                                                                             \
+        }                                                                                        \
+        __ivl_rtn;                                                                               \
+    })
 
 /*
  * Define a safer version of calloc().
  */
 
-#define calloc(__ivl_count, __ivl_size) \
-({ \
-	/* To be safe we only evaluate the arguments once. */ \
-      size_t __ivl_lcount = __ivl_count; \
-      size_t __ivl_lsize = __ivl_size; \
-      void *__ivl_rtn = calloc(__ivl_lcount, __ivl_lsize); \
-	/* If we run out of memory then exit with a message. */ \
-      if ((__ivl_rtn == NULL) && (__ivl_lcount != 0) && (__ivl_lsize != 0)) { \
-	    fprintf(stderr, "%s:%d: Error: calloc() ran out of memory.\n", \
-	                    __FILE__, __LINE__); \
-	    exit(1); \
-      } \
-      __ivl_rtn; \
-})
+#define calloc(__ivl_count, __ivl_size)                                                         \
+    ({                                                                                          \
+        /* To be safe we only evaluate the arguments once. */                                   \
+        size_t __ivl_lcount = __ivl_count;                                                      \
+        size_t __ivl_lsize = __ivl_size;                                                        \
+        void* __ivl_rtn = calloc(__ivl_lcount, __ivl_lsize);                                    \
+        /* If we run out of memory then exit with a message. */                                 \
+        if ((__ivl_rtn == NULL) && (__ivl_lcount != 0) && (__ivl_lsize != 0)) {                 \
+            fprintf(stderr, "%s:%d: Error: calloc() ran out of memory.\n", __FILE__, __LINE__); \
+            exit(1);                                                                            \
+        }                                                                                       \
+        __ivl_rtn;                                                                              \
+    })
 
-#endif // !defined(_MSC_VER)
+#endif  // !defined(_MSC_VER)
 
 #endif /* IVL_ivl_alloc_H */

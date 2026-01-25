@@ -17,100 +17,89 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PNamedItem.h"
-# include  <ostream>
+#include "PNamedItem.h"
+#include <ostream>
 
-PNamedItem::PNamedItem()
-{
+PNamedItem::PNamedItem() {}
+
+PNamedItem::~PNamedItem() {}
+
+PNamedItem::SymbolType PNamedItem::symbol_type() const {
+    return ANY;
 }
 
-PNamedItem::~PNamedItem()
-{
-}
-
-PNamedItem::SymbolType PNamedItem::symbol_type() const
-{
-      return ANY;
-}
-
-std::ostream& operator << (std::ostream&o, PNamedItem::SymbolType st)
-{
-      switch (st) {
-          case PNamedItem::ANY:
+std::ostream& operator<<(std::ostream& o, PNamedItem::SymbolType st) {
+    switch (st) {
+        case PNamedItem::ANY:
             o << "a symbol";
             break;
-          case PNamedItem::PARAM:
+        case PNamedItem::PARAM:
             o << "a parameter";
             break;
-          case PNamedItem::NET:
+        case PNamedItem::NET:
             o << "a net";
             break;
-          case PNamedItem::VAR:
+        case PNamedItem::VAR:
             o << "a variable";
             break;
-          case PNamedItem::GENVAR:
+        case PNamedItem::GENVAR:
             o << "a genvar";
             break;
-          case PNamedItem::EVENT:
+        case PNamedItem::EVENT:
             o << "an event";
             break;
-          case PNamedItem::TYPE:
+        case PNamedItem::TYPE:
             o << "a type";
             break;
-          case PNamedItem::ENUM:
+        case PNamedItem::ENUM:
             o << "an enum type or value";
             break;
-          case PNamedItem::CLASS:
+        case PNamedItem::CLASS:
             o << "a class";
             break;
-          case PNamedItem::FUNCTION:
+        case PNamedItem::FUNCTION:
             o << "a function";
             break;
-          case PNamedItem::TASK:
+        case PNamedItem::TASK:
             o << "a task";
             break;
-          case PNamedItem::BLOCK:
+        case PNamedItem::BLOCK:
             o << "a named block";
             break;
-          case PNamedItem::GENBLOCK:
+        case PNamedItem::GENBLOCK:
             o << "a generate block";
             break;
-          case PNamedItem::MODPORT:
+        case PNamedItem::MODPORT:
             o << "a modport";
             break;
-          case PNamedItem::PACKAGE:
+        case PNamedItem::PACKAGE:
             o << "a package";
             break;
-          case PNamedItem::MODULE:
+        case PNamedItem::MODULE:
             o << "a module";
             break;
-          case PNamedItem::PROGRAM:
+        case PNamedItem::PROGRAM:
             o << "a program";
             break;
-          case PNamedItem::INTERFACE:
+        case PNamedItem::INTERFACE:
             o << "an interface";
             break;
-          case PNamedItem::PRIMITIVE:
+        case PNamedItem::PRIMITIVE:
             o << "a primitive";
             break;
-          case PNamedItem::INSTANCE:
+        case PNamedItem::INSTANCE:
             o << "an instance name";
             break;
-          default:
+        default:
             break;
-      }
-      return o;
+    }
+    return o;
 }
 
-PGenvar::PGenvar()
-{
-}
+PGenvar::PGenvar() {}
 
-PGenvar::~PGenvar()
-{
-}
+PGenvar::~PGenvar() {}
 
-PNamedItem::SymbolType PGenvar::symbol_type() const
-{
-      return GENVAR;
+PNamedItem::SymbolType PGenvar::symbol_type() const {
+    return GENVAR;
 }

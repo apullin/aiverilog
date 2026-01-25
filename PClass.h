@@ -19,10 +19,10 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PScope.h"
-# include  "PNamedItem.h"
-# include  "StringHeap.h"
-# include  <iostream>
+#include "PScope.h"
+#include "PNamedItem.h"
+#include "StringHeap.h"
+#include <iostream>
 
 class PChainConstructor;
 
@@ -33,17 +33,16 @@ class PChainConstructor;
  */
 
 class PClass : public PScopeExtra, public PNamedItem {
+  public:
+    explicit PClass(perm_string name, LexicalScope* parent);
+    ~PClass() override;
 
-    public:
-      explicit PClass (perm_string name, LexicalScope*parent);
-      ~PClass() override;
+    void dump(std::ostream& out, unsigned indent) const;
 
-      void dump(std::ostream&out, unsigned indent) const;
+    SymbolType symbol_type() const override;
 
-      SymbolType symbol_type() const override;
-
-    public:
-      class_type_t*type;
+  public:
+    class_type_t* type;
 };
 
 #endif /* IVL_PClass_H */

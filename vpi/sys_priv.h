@@ -22,35 +22,35 @@
 #include "vpi_config.h"
 #include "sv_vpi_user.h"
 
-#define IS_MCD(mcd)     !((mcd)>>31&1)
+#define IS_MCD(mcd) !((mcd) >> 31 & 1)
 
 /*
  * Context structure for PRNG in mt19937int.c
  */
 struct context_s {
-      int		mti;		/* the array for the state vector */
-      unsigned long	mt[1023];	/* mti==N+1 means mt[N] is not init */
+    int mti;                /* the array for the state vector */
+    unsigned long mt[1023]; /* mti==N+1 means mt[N] is not init */
 };
 
-extern void sgenrand(struct context_s *context, unsigned long seed);
-extern unsigned long genrand(struct context_s *context);
+extern void sgenrand(struct context_s* context, unsigned long seed);
+extern unsigned long genrand(struct context_s* context);
 
-extern PLI_UINT64 timerec_to_time64(const struct t_vpi_time*timerec);
+extern PLI_UINT64 timerec_to_time64(const struct t_vpi_time* timerec);
 
-extern char *as_escaped(const char *arg);
-extern char *get_filename(vpiHandle callh, const char *name, vpiHandle file);
-extern char *get_filename_with_suffix(vpiHandle callh, const char*name,
-				      vpiHandle file, const char*suff);
-extern char *attach_suffix_to_filename(char *path, const char*suff);
+extern char* as_escaped(const char* arg);
+extern char* get_filename(vpiHandle callh, const char* name, vpiHandle file);
+extern char*
+get_filename_with_suffix(vpiHandle callh, const char* name, vpiHandle file, const char* suff);
+extern char* attach_suffix_to_filename(char* path, const char* suff);
 
-extern void check_for_extra_args(vpiHandle argv, vpiHandle callh, const char *name,
-                                 const char *arg_str, unsigned opt);
+extern void check_for_extra_args(
+    vpiHandle argv, vpiHandle callh, const char* name, const char* arg_str, unsigned opt);
 
 struct timeformat_info_s {
-      int units;
-      unsigned prec;
-      char*suff;
-      unsigned width;
+    int units;
+    unsigned prec;
+    char* suff;
+    unsigned width;
 };
 
 extern struct timeformat_info_s timeformat_info;
@@ -62,8 +62,8 @@ extern unsigned is_int_var_or_mem(vpiHandle obj);
 extern unsigned is_variable(vpiHandle obj);
 
 extern unsigned is_valid_fd_mcd(PLI_UINT32 fd_mcd);
-extern unsigned get_fd_mcd_from_arg(PLI_UINT32 *fd_mcd, vpiHandle arg,
-                                    vpiHandle callh, const char *name);
+extern unsigned
+get_fd_mcd_from_arg(PLI_UINT32* fd_mcd, vpiHandle arg, vpiHandle callh, const char* name);
 
 extern vpiHandle sys_func_module(vpiHandle obj);
 
@@ -72,11 +72,11 @@ extern void sys_monitor_fclose(PLI_UINT32 fd_mcd);
 /*
  * The standard compiletf routines.
  */
-extern PLI_INT32 sys_no_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
-extern PLI_INT32 sys_one_numeric_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
-extern PLI_INT32 sys_one_opt_numeric_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
-extern PLI_INT32 sys_two_numeric_args_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
-extern PLI_INT32 sys_one_string_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8 *name);
+extern PLI_INT32 sys_no_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
+extern PLI_INT32 sys_one_numeric_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
+extern PLI_INT32 sys_one_opt_numeric_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
+extern PLI_INT32 sys_two_numeric_args_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
+extern PLI_INT32 sys_one_string_arg_compiletf(ICARUS_VPI_CONST PLI_BYTE8* name);
 
 /*
  * The standard put/return a value to the caller routines.

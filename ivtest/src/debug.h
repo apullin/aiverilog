@@ -14,11 +14,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-struct memchunk
-{
-struct memchunk *next;
-void *ptr;
-size_t size;
+struct memchunk {
+    struct memchunk* next;
+    void* ptr;
+    size_t size;
 };
 
 
@@ -28,33 +27,33 @@ size_t size;
  * types...
  */
 #ifdef G_HAVE_GINT64
-	typedef gint64          TimeType;
-	typedef guint64         UTimeType;
+typedef gint64 TimeType;
+typedef guint64 UTimeType;
 
-        #ifndef _MSC_VER
-                #define LLDescriptor(x) x##LL
-                #define ULLDescriptor(x) x##ULL
-                #define TTFormat "%lld"
-                #define UTTFormat "%llu"
-        #else
-                #define LLDescriptor(x) x##i64
-                #define ULLDescriptor(x) x##i64
-                #define TTFormat "%I64d"
-                #define UTTFormat "%I64u"
-        #endif
-
-	#define WAVE_MINZOOM (LLDescriptor(-4000000000))
+#ifndef _MSC_VER
+#define LLDescriptor(x) x##LL
+#define ULLDescriptor(x) x##ULL
+#define TTFormat "%lld"
+#define UTTFormat "%llu"
 #else
-	typedef long            TimeType;
-	typedef unsigned long   UTimeType;
+#define LLDescriptor(x) x##i64
+#define ULLDescriptor(x) x##i64
+#define TTFormat "%I64d"
+#define UTTFormat "%I64u"
+#endif
 
-	#define TTFormat "%d"
-	#define UTTFormat "%u"
+#define WAVE_MINZOOM (LLDescriptor(-4000000000))
+#else
+typedef long TimeType;
+typedef unsigned long UTimeType;
 
-	#define LLDescriptor(x) x
-	#define ULLDescriptor(x) x
+#define TTFormat "%d"
+#define UTTFormat "%u"
 
-	#define WAVE_MINZOOM (LLDescriptor(-20000000))
+#define LLDescriptor(x) x
+#define ULLDescriptor(x) x
+
+#define WAVE_MINZOOM (LLDescriptor(-20000000))
 #endif
 
 #ifdef DEBUG_PRINTF
@@ -71,21 +70,22 @@ size_t size;
 
 
 #ifdef DEBUG_MALLOC_LINES
-void free_2(void *ptr, char *filename, int lineno);
-#define free_2(x) free_2((x),__FILE__,__LINE__)
+void free_2(void* ptr, char* filename, int lineno);
+#define free_2(x) free_2((x), __FILE__, __LINE__)
 #else
-void free_2(void *ptr);
+void free_2(void* ptr);
 #endif
 
 
-void *malloc_2(size_t size);
-void *realloc_2(void *ptr, size_t size);
-void *calloc_2(size_t nmemb, size_t size);
+void* malloc_2(size_t size);
+void* realloc_2(void* ptr, size_t size);
+void* calloc_2(size_t nmemb, size_t size);
 
-TimeType atoi_64(char *str);
-extern char *atoi_cont_ptr;	/* for unformat_time()'s parse continue for the time unit */
+TimeType atoi_64(char* str);
+extern char* atoi_cont_ptr; /* for unformat_time()'s parse continue for the time unit */
 
-#undef WAVE_USE_SIGCMP_INFINITE_PRECISION  /* define this for slow sigcmp with infinite digit accuracy */
-#define WAVE_OPT_SKIP 1			   /* make larger for more accel on traces */
+#undef WAVE_USE_SIGCMP_INFINITE_PRECISION /* define this for slow sigcmp with infinite digit \
+                                             accuracy */
+#define WAVE_OPT_SKIP 1                   /* make larger for more accel on traces */
 
 #endif

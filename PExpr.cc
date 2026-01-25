@@ -18,560 +18,407 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include "config.h"
+#include "config.h"
 
-# include  <iostream>
+#include <iostream>
 
-# include  "compiler.h"
-# include  "PExpr.h"
-# include  "PWire.h"
-# include  "Module.h"
-# include  "ivl_assert.h"
-# include  "netmisc.h"
-# include  "util.h"
-# include  <typeinfo>
+#include "compiler.h"
+#include "PExpr.h"
+#include "PWire.h"
+#include "Module.h"
+#include "ivl_assert.h"
+#include "netmisc.h"
+#include "util.h"
+#include <typeinfo>
 
 using namespace std;
 
-PExpr::PExpr()
-: expr_type_(IVL_VT_NO_TYPE)
-{
-      expr_width_  = 0;
-      min_width_   = 0;
-      signed_flag_ = false;
+PExpr::PExpr() : expr_type_(IVL_VT_NO_TYPE) {
+    expr_width_ = 0;
+    min_width_ = 0;
+    signed_flag_ = false;
 }
 
-PExpr::~PExpr()
-{
+PExpr::~PExpr() {}
+
+void PExpr::declare_implicit_nets(LexicalScope*, NetNet::Type) {}
+
+bool PExpr::has_aa_term(Design*, NetScope*) const {
+    return false;
 }
 
-void PExpr::declare_implicit_nets(LexicalScope*, NetNet::Type)
-{
+NetNet* PExpr::elaborate_lnet(Design*, NetScope*, bool) const {
+    cerr << get_fileline() << ": error: "
+         << "expression not valid in assign l-value: " << *this << endl;
+    return 0;
 }
 
-bool PExpr::has_aa_term(Design*, NetScope*) const
-{
-      return false;
+NetNet* PExpr::elaborate_bi_net(Design*, NetScope*, bool) const {
+    cerr << get_fileline() << ": error: "
+         << "expression not valid as argument to inout port: " << *this << endl;
+    return 0;
 }
 
-NetNet* PExpr::elaborate_lnet(Design*, NetScope*, bool) const
-{
-      cerr << get_fileline() << ": error: "
-           << "expression not valid in assign l-value: "
-           << *this << endl;
-      return 0;
-}
-
-NetNet* PExpr::elaborate_bi_net(Design*, NetScope*, bool) const
-{
-      cerr << get_fileline() << ": error: "
-           << "expression not valid as argument to inout port: "
-           << *this << endl;
-      return 0;
-}
-
-bool PExpr::is_collapsible_net(Design*, NetScope*, NetNet::PortType) const
-{
-      return false;
+bool PExpr::is_collapsible_net(Design*, NetScope*, NetNet::PortType) const {
+    return false;
 }
 
 
-const char* PExpr::width_mode_name(width_mode_t mode)
-{
-      switch (mode) {
-          case PExpr::SIZED:
+const char* PExpr::width_mode_name(width_mode_t mode) {
+    switch (mode) {
+        case PExpr::SIZED:
             return "sized";
-          case PExpr::UNSIZED:
+        case PExpr::UNSIZED:
             return "unsized";
-          case PExpr::EXPAND:
+        case PExpr::EXPAND:
             return "expand";
-          case PExpr::LOSSLESS:
+        case PExpr::LOSSLESS:
             return "lossless";
-          case PExpr::UPSIZE:
+        case PExpr::UPSIZE:
             return "upsize";
-          default:
+        default:
             return "??";
-      }
+    }
 }
 
-PEAssignPattern::PEAssignPattern()
-{
+PEAssignPattern::PEAssignPattern() {}
+
+PEAssignPattern::PEAssignPattern(const list<PExpr*>& p) : parms_(p.begin(), p.end()) {}
+
+PEAssignPattern::~PEAssignPattern() {}
+
+PEBinary::PEBinary(char op, PExpr* l, PExpr* r) : op_(op), left_(l), right_(r) {}
+
+PEBinary::~PEBinary() {}
+
+void PEBinary::declare_implicit_nets(LexicalScope* scope, NetNet::Type type) {
+    if (left_)
+        left_->declare_implicit_nets(scope, type);
+    if (right_)
+        right_->declare_implicit_nets(scope, type);
 }
 
-PEAssignPattern::PEAssignPattern(const list<PExpr*>&p)
-: parms_(p.begin(), p.end())
-{
+bool PEBinary::has_aa_term(Design* des, NetScope* scope) const {
+    ivl_assert(*this, left_ && right_);
+    return left_->has_aa_term(des, scope) || right_->has_aa_term(des, scope);
 }
 
-PEAssignPattern::~PEAssignPattern()
-{
+PECastSize::PECastSize(PExpr* si, PExpr* b) : size_(si), base_(b) {}
+
+PECastSize::~PECastSize() {}
+
+bool PECastSize::has_aa_term(Design* des, NetScope* scope) const {
+    return base_->has_aa_term(des, scope);
 }
 
-PEBinary::PEBinary(char op, PExpr*l, PExpr*r)
-: op_(op), left_(l), right_(r)
-{
+PECastType::PECastType(data_type_t* t, PExpr* b) : target_(t), base_(b) {
+    target_type_ = nullptr;
 }
 
-PEBinary::~PEBinary()
-{
+PECastType::~PECastType() {}
+
+bool PECastType::has_aa_term(Design* des, NetScope* scope) const {
+    return base_->has_aa_term(des, scope);
 }
 
-void PEBinary::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
-{
-      if (left_) left_->declare_implicit_nets(scope, type);
-      if (right_) right_->declare_implicit_nets(scope, type);
-}
-
-bool PEBinary::has_aa_term(Design*des, NetScope*scope) const
-{
-      ivl_assert(*this, left_ && right_);
-      return left_->has_aa_term(des, scope) || right_->has_aa_term(des, scope);
-}
-
-PECastSize::PECastSize(PExpr*si, PExpr*b)
-: size_(si), base_(b)
-{
-}
-
-PECastSize::~PECastSize()
-{
-}
-
-bool PECastSize::has_aa_term(Design *des, NetScope *scope) const
-{
-	return base_->has_aa_term(des, scope);
-}
-
-PECastType::PECastType(data_type_t*t, PExpr*b)
-: target_(t), base_(b)
-{
-      target_type_ = nullptr;
-}
-
-PECastType::~PECastType()
-{
-}
-
-bool PECastType::has_aa_term(Design *des, NetScope *scope) const
-{
-	return base_->has_aa_term(des, scope);
-}
-
-PECastSign::PECastSign(bool signed_flag, PExpr *base)
-: base_(base)
-{
+PECastSign::PECastSign(bool signed_flag, PExpr* base) : base_(base) {
     signed_flag_ = signed_flag;
 }
 
-bool PECastSign::has_aa_term(Design *des, NetScope *scope) const
-{
-	return base_->has_aa_term(des, scope);
+bool PECastSign::has_aa_term(Design* des, NetScope* scope) const {
+    return base_->has_aa_term(des, scope);
 }
 
-PEBComp::PEBComp(char op, PExpr*l, PExpr*r)
-: PEBinary(op, l, r)
-{
-      l_width_ = 0;
-      r_width_ = 0;
+PEBComp::PEBComp(char op, PExpr* l, PExpr* r) : PEBinary(op, l, r) {
+    l_width_ = 0;
+    r_width_ = 0;
 }
 
-PEBComp::~PEBComp()
-{
+PEBComp::~PEBComp() {}
+
+PEBLogic::PEBLogic(char op, PExpr* l, PExpr* r) : PEBinary(op, l, r) {
+    ivl_assert(*this, op == 'a' || op == 'o' || op == 'q' || op == 'Q');
 }
 
-PEBLogic::PEBLogic(char op, PExpr*l, PExpr*r)
-: PEBinary(op, l, r)
-{
-      ivl_assert(*this, op == 'a' || op == 'o' || op == 'q' || op == 'Q');
+PEBLogic::~PEBLogic() {}
+
+PEBLeftWidth::PEBLeftWidth(char op, PExpr* l, PExpr* r) : PEBinary(op, l, r) {}
+
+PEBLeftWidth::~PEBLeftWidth() {}
+
+PEBPower::PEBPower(char op, PExpr* l, PExpr* r) : PEBLeftWidth(op, l, r) {}
+
+PEBPower::~PEBPower() {}
+
+PEBShift::PEBShift(char op, PExpr* l, PExpr* r) : PEBLeftWidth(op, l, r) {}
+
+PEBShift::~PEBShift() {}
+
+PECallFunction::PECallFunction(const pform_name_t& n, const vector<named_pexpr_t>& parms)
+    : path_(n), parms_(parms), is_overridden_(false) {}
+
+PECallFunction::PECallFunction(PPackage* pkg,
+                               const pform_name_t& n,
+                               const vector<named_pexpr_t>& parms)
+    : path_(pkg, n), parms_(parms), is_overridden_(false) {}
+
+static pform_name_t pn_from_ps(perm_string n) {
+    name_component_t tmp_name(n);
+    pform_name_t tmp;
+    tmp.push_back(tmp_name);
+    return tmp;
 }
 
-PEBLogic::~PEBLogic()
-{
-}
+PECallFunction::PECallFunction(PPackage* pkg,
+                               const pform_name_t& n,
+                               const list<named_pexpr_t>& parms)
+    : path_(pkg, n), parms_(parms.begin(), parms.end()), is_overridden_(false) {}
 
-PEBLeftWidth::PEBLeftWidth(char op, PExpr*l, PExpr*r)
-: PEBinary(op, l, r)
-{
-}
+PECallFunction::PECallFunction(perm_string n, const vector<named_pexpr_t>& parms)
+    : path_(pn_from_ps(n)), parms_(parms), is_overridden_(false) {}
 
-PEBLeftWidth::~PEBLeftWidth()
-{
-}
-
-PEBPower::PEBPower(char op, PExpr*l, PExpr*r)
-: PEBLeftWidth(op, l, r)
-{
-}
-
-PEBPower::~PEBPower()
-{
-}
-
-PEBShift::PEBShift(char op, PExpr*l, PExpr*r)
-: PEBLeftWidth(op, l, r)
-{
-}
-
-PEBShift::~PEBShift()
-{
-}
-
-PECallFunction::PECallFunction(const pform_name_t &n, const vector<named_pexpr_t> &parms)
-: path_(n), parms_(parms), is_overridden_(false)
-{
-}
-
-PECallFunction::PECallFunction(PPackage *pkg, const pform_name_t &n, const vector<named_pexpr_t> &parms)
-: path_(pkg, n), parms_(parms), is_overridden_(false)
-{
-}
-
-static pform_name_t pn_from_ps(perm_string n)
-{
-      name_component_t tmp_name (n);
-      pform_name_t tmp;
-      tmp.push_back(tmp_name);
-      return tmp;
-}
-
-PECallFunction::PECallFunction(PPackage *pkg, const pform_name_t &n, const list<named_pexpr_t> &parms)
-: path_(pkg, n), parms_(parms.begin(), parms.end()), is_overridden_(false)
-{
-}
-
-PECallFunction::PECallFunction(perm_string n, const vector<named_pexpr_t> &parms)
-: path_(pn_from_ps(n)), parms_(parms), is_overridden_(false)
-{
-}
-
-PECallFunction::PECallFunction(perm_string n)
-: path_(pn_from_ps(n)), is_overridden_(false)
-{
-}
+PECallFunction::PECallFunction(perm_string n) : path_(pn_from_ps(n)), is_overridden_(false) {}
 
 // NOTE: Anachronism. Try to work all use of svector out.
-PECallFunction::PECallFunction(const pform_name_t &n, const list<named_pexpr_t> &parms)
-: path_(n), parms_(parms.begin(), parms.end()), is_overridden_(false)
-{
+PECallFunction::PECallFunction(const pform_name_t& n, const list<named_pexpr_t>& parms)
+    : path_(n), parms_(parms.begin(), parms.end()), is_overridden_(false) {}
+
+PECallFunction::PECallFunction(perm_string n, const list<named_pexpr_t>& parms)
+    : path_(pn_from_ps(n)), parms_(parms.begin(), parms.end()), is_overridden_(false) {}
+
+PECallFunction::~PECallFunction() {}
+
+void PECallFunction::declare_implicit_nets(LexicalScope* scope, NetNet::Type type) {
+    for (const auto& parm : parms_) {
+        if (parm.parm)
+            parm.parm->declare_implicit_nets(scope, type);
+    }
 }
 
-PECallFunction::PECallFunction(perm_string n, const list<named_pexpr_t> &parms)
-: path_(pn_from_ps(n)), parms_(parms.begin(), parms.end()), is_overridden_(false)
-{
+bool PECallFunction::has_aa_term(Design* des, NetScope* scope) const {
+    bool flag = false;
+    for (const auto& parm : parms_) {
+        if (parm.parm)
+            flag |= parm.parm->has_aa_term(des, scope);
+    }
+    return flag;
 }
 
-PECallFunction::~PECallFunction()
-{
+PEConcat::PEConcat(const list<PExpr*>& p, PExpr* r)
+    : parms_(p.begin(), p.end()), width_modes_(SIZED, p.size()), repeat_(r) {
+    tested_scope_ = 0;
+    repeat_count_ = 1;
 }
 
-void PECallFunction::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
-{
-      for (const auto &parm : parms_) {
-	    if (parm.parm)
-		  parm.parm->declare_implicit_nets(scope, type);
-      }
+PEConcat::~PEConcat() {
+    delete repeat_;
 }
 
-bool PECallFunction::has_aa_term(Design*des, NetScope*scope) const
-{
-      bool flag = false;
-      for (const auto &parm : parms_) {
-	    if (parm.parm)
-		  flag |= parm.parm->has_aa_term(des, scope);
-      }
-      return flag;
+void PEConcat::declare_implicit_nets(LexicalScope* scope, NetNet::Type type) {
+    for (unsigned idx = 0; idx < parms_.size(); idx += 1) {
+        parms_[idx]->declare_implicit_nets(scope, type);
+    }
 }
 
-PEConcat::PEConcat(const list<PExpr*>&p, PExpr*r)
-: parms_(p.begin(), p.end()), width_modes_(SIZED, p.size()), repeat_(r)
-{
-      tested_scope_ = 0;
-      repeat_count_ = 1;
+bool PEConcat::has_aa_term(Design* des, NetScope* scope) const {
+    bool flag = false;
+    for (unsigned idx = 0; idx < parms_.size(); idx += 1) {
+        flag = parms_[idx]->has_aa_term(des, scope) || flag;
+    }
+    if (repeat_)
+        flag = repeat_->has_aa_term(des, scope) || flag;
+
+    return flag;
 }
 
-PEConcat::~PEConcat()
-{
-      delete repeat_;
+PEEvent::PEEvent(PEEvent::edge_t t, PExpr* e) : type_(t), expr_(e) {}
+
+PEEvent::~PEEvent() {}
+
+PEEvent::edge_t PEEvent::type() const {
+    return type_;
 }
 
-void PEConcat::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
-{
-      for (unsigned idx = 0 ; idx < parms_.size() ; idx += 1) {
-	    parms_[idx]->declare_implicit_nets(scope, type);
-      }
+bool PEEvent::has_aa_term(Design* des, NetScope* scope) const {
+    ivl_assert(*this, expr_);
+    return expr_->has_aa_term(des, scope);
 }
 
-bool PEConcat::has_aa_term(Design*des, NetScope*scope) const
-{
-      bool flag = false;
-      for (unsigned idx = 0 ; idx < parms_.size() ; idx += 1) {
-	    flag = parms_[idx]->has_aa_term(des, scope) || flag;
-      }
-      if (repeat_)
-            flag = repeat_->has_aa_term(des, scope) || flag;
-
-      return flag;
+PExpr* PEEvent::expr() const {
+    return expr_;
 }
 
-PEEvent::PEEvent(PEEvent::edge_t t, PExpr*e)
-: type_(t), expr_(e)
-{
+PENull::PENull(void) {}
+
+PENull::~PENull() {}
+
+PEFNumber::PEFNumber(verireal* v) : value_(v) {}
+
+PEFNumber::~PEFNumber() {
+    delete value_;
 }
 
-PEEvent::~PEEvent()
-{
+const verireal& PEFNumber::value() const {
+    return *value_;
 }
 
-PEEvent::edge_t PEEvent::type() const
-{
-      return type_;
-}
-
-bool PEEvent::has_aa_term(Design*des, NetScope*scope) const
-{
-      ivl_assert(*this, expr_);
-      return expr_->has_aa_term(des, scope);
-}
-
-PExpr* PEEvent::expr() const
-{
-      return expr_;
-}
-
-PENull::PENull(void)
-{
-}
-
-PENull::~PENull()
-{
-}
-
-PEFNumber::PEFNumber(verireal*v)
-: value_(v)
-{
-}
-
-PEFNumber::~PEFNumber()
-{
-      delete value_;
-}
-
-const verireal& PEFNumber::value() const
-{
-      return *value_;
-}
-
-PEIdent::PEIdent(const pform_name_t&that, unsigned lexical_pos)
-: path_(that), lexical_pos_(lexical_pos), no_implicit_sig_(false)
-{
-}
+PEIdent::PEIdent(const pform_name_t& that, unsigned lexical_pos)
+    : path_(that), lexical_pos_(lexical_pos), no_implicit_sig_(false) {}
 
 PEIdent::PEIdent(perm_string s, unsigned lexical_pos, bool no_implicit_sig)
-: lexical_pos_(lexical_pos), no_implicit_sig_(no_implicit_sig)
-{
-      path_.name.push_back(name_component_t(s));
+    : lexical_pos_(lexical_pos), no_implicit_sig_(no_implicit_sig) {
+    path_.name.push_back(name_component_t(s));
 }
 
-PEIdent::PEIdent(PPackage*pkg, const pform_name_t&that, unsigned lexical_pos)
-: path_(pkg, that), lexical_pos_(lexical_pos), no_implicit_sig_(true)
-{
+PEIdent::PEIdent(PPackage* pkg, const pform_name_t& that, unsigned lexical_pos)
+    : path_(pkg, that), lexical_pos_(lexical_pos), no_implicit_sig_(true) {}
+
+PEIdent::~PEIdent() {}
+
+static bool find_enum_constant(LexicalScope* scope, perm_string name) {
+    return std::any_of(
+        scope->enum_sets.cbegin(), scope->enum_sets.cend(), [name](const enum_type_t* cur) {
+            return std::any_of(
+                cur->names->cbegin(), cur->names->cend(), [name](const named_pexpr_t& idx) {
+                    return idx.name == name;
+                });
+        });
 }
 
-PEIdent::~PEIdent()
-{
+void PEIdent::declare_implicit_nets(LexicalScope* scope, NetNet::Type type) {
+    /* We create an implicit wire if:
+     - this is a simple identifier
+       - an identifier of that name has not already been declared in
+         any enclosing scope.
+     - this is not an implicit named port connection */
+    if (no_implicit_sig_)
+        return;
+    if (path_.package)
+        return;
+    if (path_.name.size() == 1 && path_.name.front().index.empty()) {
+        perm_string name = path_.name.front().name;
+        LexicalScope* ss = scope;
+        while (ss) {
+            if (ss->wires.find(name) != ss->wires.end())
+                return;
+            if (ss->parameters.find(name) != ss->parameters.end())
+                return;
+            if (ss->genvars.find(name) != ss->genvars.end())
+                return;
+            if (ss->events.find(name) != ss->events.end())
+                return;
+            if (find_enum_constant(ss, name))
+                return;
+            /* Strictly speaking, we should also check for name clashes
+               with tasks, functions, named blocks, module instances,
+               and generate blocks. However, this information is not
+               readily available. As these names would not be legal in
+               this context, we can declare implicit nets here and rely
+               on later checks for name clashes to report the error. */
+
+            ss = ss->parent_scope();
+        }
+        PWire* net = new PWire(name, lexical_pos_, type, NetNet::NOT_A_PORT);
+        net->set_file(get_file());
+        net->set_lineno(get_lineno());
+        scope->wires[name] = net;
+        if (warn_implicit) {
+            cerr << get_fileline()
+                 << ": warning: implicit "
+                    "definition of wire '"
+                 << name << "'." << endl;
+        }
+    }
 }
 
-static bool find_enum_constant(LexicalScope*scope, perm_string name)
-{
-      return std::any_of(scope->enum_sets.cbegin(), scope->enum_sets.cend(),
-                         [name](const enum_type_t *cur) {
-	    return std::any_of(cur->names->cbegin(), cur->names->cend(),
-	                       [name](const named_pexpr_t&idx){return idx.name == name;});
-      });
+bool PEIdent::has_aa_term(Design* des, NetScope* scope) const {
+    symbol_search_results sr;
+    if (!symbol_search(this, des, scope, path_, lexical_pos_, &sr))
+        return false;
+
+    // Class properties are not considered automatic since a non-blocking
+    // assignment to an object stored in an automatic variable is supposed to
+    // capture a reference to the object, not the variable.
+    if (!sr.path_tail.empty() && sr.net && sr.net->class_type())
+        return false;
+
+    return sr.scope->is_auto();
 }
 
-void PEIdent::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
-{
-        /* We create an implicit wire if:
-	   - this is a simple identifier
-           - an identifier of that name has not already been declared in
-             any enclosing scope.
-	   - this is not an implicit named port connection */
-     if (no_implicit_sig_)
-	    return;
-     if (path_.package)
-	    return;
-     if (path_.name.size() == 1 && path_.name.front().index.empty()) {
-            perm_string name = path_.name.front().name;
-            LexicalScope*ss = scope;
-            while (ss) {
-                  if (ss->wires.find(name) != ss->wires.end())
-                        return;
-                  if (ss->parameters.find(name) != ss->parameters.end())
-                        return;
-                  if (ss->genvars.find(name) != ss->genvars.end())
-                        return;
-                  if (ss->events.find(name) != ss->events.end())
-                        return;
-                  if (find_enum_constant(ss, name))
-                        return;
-                  /* Strictly speaking, we should also check for name clashes
-                     with tasks, functions, named blocks, module instances,
-                     and generate blocks. However, this information is not
-                     readily available. As these names would not be legal in
-                     this context, we can declare implicit nets here and rely
-                     on later checks for name clashes to report the error. */
+PENewArray::PENewArray(PExpr* size_expr, PExpr* init_expr) : size_(size_expr), init_(init_expr) {}
 
-                  ss = ss->parent_scope();
-            }
-            PWire*net = new PWire(name, lexical_pos_, type, NetNet::NOT_A_PORT);
-            net->set_file(get_file());
-            net->set_lineno(get_lineno());
-            scope->wires[name] = net;
-            if (warn_implicit) {
-                  cerr << get_fileline() << ": warning: implicit "
-                       "definition of wire '" << name << "'." << endl;
-            }
-      }
+PENewArray::~PENewArray() {
+    delete size_;
 }
 
-bool PEIdent::has_aa_term(Design*des, NetScope*scope) const
-{
-      symbol_search_results sr;
-      if (!symbol_search(this, des, scope, path_, lexical_pos_, &sr))
-	    return false;
+PENewClass::PENewClass(void) {}
 
-      // Class properties are not considered automatic since a non-blocking
-      // assignment to an object stored in an automatic variable is supposed to
-      // capture a reference to the object, not the variable.
-      if (!sr.path_tail.empty() && sr.net && sr.net->class_type())
-	    return false;
+PENewClass::PENewClass(const list<named_pexpr_t>& p, data_type_t* class_type)
+    : parms_(p.begin(), p.end()), class_type_(class_type) {}
 
-      return sr.scope->is_auto();
+PENewClass::~PENewClass() {}
+
+PENewCopy::PENewCopy(PExpr* src) : src_(src) {}
+
+PENewCopy::~PENewCopy() {}
+
+PENumber::PENumber(verinum* vp) : value_(vp) {
+    ivl_assert(*this, vp);
 }
 
-PENewArray::PENewArray(PExpr*size_expr, PExpr*init_expr)
-: size_(size_expr), init_(init_expr)
-{
+PENumber::~PENumber() {
+    delete value_;
 }
 
-PENewArray::~PENewArray()
-{
-      delete size_;
+const verinum& PENumber::value() const {
+    return *value_;
 }
 
-PENewClass::PENewClass(void)
-{
+PEString::PEString(char* s) : text_(s) {}
+
+PEString::~PEString() {
+    delete[] text_;
 }
 
-PENewClass::PENewClass(const list<named_pexpr_t> &p, data_type_t *class_type)
-: parms_(p.begin(), p.end()), class_type_(class_type)
-{
+string PEString::value() const {
+    return text_;
 }
 
-PENewClass::~PENewClass()
-{
+PETernary::PETernary(PExpr* e, PExpr* t, PExpr* f) : expr_(e), tru_(t), fal_(f) {}
+
+PETernary::~PETernary() {}
+
+void PETernary::declare_implicit_nets(LexicalScope* scope, NetNet::Type type) {
+    ivl_assert(*this, expr_ && tru_ && fal_);
+    expr_->declare_implicit_nets(scope, type);
+    tru_->declare_implicit_nets(scope, type);
+    fal_->declare_implicit_nets(scope, type);
 }
 
-PENewCopy::PENewCopy(PExpr*src)
-: src_(src)
-{
+bool PETernary::has_aa_term(Design* des, NetScope* scope) const {
+    ivl_assert(*this, expr_ && tru_ && fal_);
+    return expr_->has_aa_term(des, scope) || tru_->has_aa_term(des, scope) ||
+           fal_->has_aa_term(des, scope);
 }
 
-PENewCopy::~PENewCopy()
-{
+PETypename::PETypename(data_type_t* dt) : data_type_(dt) {}
+
+PETypename::~PETypename() {}
+
+PEUnary::PEUnary(char op, PExpr* ex) : op_(op), expr_(ex) {}
+
+PEUnary::~PEUnary() {}
+
+void PEUnary::declare_implicit_nets(LexicalScope* scope, NetNet::Type type) {
+    ivl_assert(*this, expr_);
+    expr_->declare_implicit_nets(scope, type);
 }
 
-PENumber::PENumber(verinum*vp)
-: value_(vp)
-{
-      ivl_assert(*this, vp);
+bool PEUnary::has_aa_term(Design* des, NetScope* scope) const {
+    ivl_assert(*this, expr_);
+    return expr_->has_aa_term(des, scope);
 }
 
-PENumber::~PENumber()
-{
-      delete value_;
-}
+PEVoid::PEVoid() {}
 
-const verinum& PENumber::value() const
-{
-      return *value_;
-}
-
-PEString::PEString(char*s)
-: text_(s)
-{
-}
-
-PEString::~PEString()
-{
-      delete[]text_;
-}
-
-string PEString::value() const
-{
-      return text_;
-}
-
-PETernary::PETernary(PExpr*e, PExpr*t, PExpr*f)
-: expr_(e), tru_(t), fal_(f)
-{
-}
-
-PETernary::~PETernary()
-{
-}
-
-void PETernary::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
-{
-      ivl_assert(*this, expr_ && tru_ && fal_);
-      expr_->declare_implicit_nets(scope, type);
-      tru_->declare_implicit_nets(scope, type);
-      fal_->declare_implicit_nets(scope, type);
-}
-
-bool PETernary::has_aa_term(Design*des, NetScope*scope) const
-{
-      ivl_assert(*this, expr_ && tru_ && fal_);
-      return expr_->has_aa_term(des, scope)
-           || tru_->has_aa_term(des, scope)
-           || fal_->has_aa_term(des, scope);
-}
-
-PETypename::PETypename(data_type_t*dt)
-: data_type_(dt)
-{
-}
-
-PETypename::~PETypename()
-{
-}
-
-PEUnary::PEUnary(char op, PExpr*ex)
-: op_(op), expr_(ex)
-{
-}
-
-PEUnary::~PEUnary()
-{
-}
-
-void PEUnary::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
-{
-      ivl_assert(*this, expr_);
-      expr_->declare_implicit_nets(scope, type);
-}
-
-bool PEUnary::has_aa_term(Design*des, NetScope*scope) const
-{
-      ivl_assert(*this, expr_);
-      return expr_->has_aa_term(des, scope);
-}
-
-PEVoid::PEVoid()
-{
-}
-
-PEVoid::~PEVoid()
-{
-}
+PEVoid::~PEVoid() {}

@@ -19,37 +19,36 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <string>
-# include  <stdint.h>
-# include  "vvp_object.h"
-# include  "class_type.h"
+#include <string>
+#include <stdint.h>
+#include "vvp_object.h"
+#include "class_type.h"
 
 class vvp_vector4_t;
 
 class vvp_cobject : public vvp_object {
+  public:
+    explicit vvp_cobject(const class_type* defn);
+    ~vvp_cobject() override;
 
-    public:
-      explicit vvp_cobject(const class_type*defn);
-      ~vvp_cobject() override;
+    void set_vec4(size_t pid, const vvp_vector4_t& val);
+    void get_vec4(size_t pid, vvp_vector4_t& val);
 
-      void set_vec4(size_t pid, const vvp_vector4_t&val);
-      void get_vec4(size_t pid, vvp_vector4_t&val);
+    void set_real(size_t pid, double val);
+    double get_real(size_t pid);
 
-      void set_real(size_t pid, double val);
-      double get_real(size_t pid);
+    void set_string(size_t pid, const std::string& val);
+    std::string get_string(size_t pid);
 
-      void set_string(size_t pid, const std::string&val);
-      std::string get_string(size_t pid);
+    void set_object(size_t pid, const vvp_object_t& val, size_t idx);
+    void get_object(size_t pid, vvp_object_t& val, size_t idx);
 
-      void set_object(size_t pid, const vvp_object_t&val, size_t idx);
-      void get_object(size_t pid, vvp_object_t&val, size_t idx);
+    void shallow_copy(const vvp_object* that) override;
 
-      void shallow_copy(const vvp_object*that) override;
-
-    private:
-      const class_type* defn_;
-	// For now, only support 32bit bool signed properties.
-      class_type::inst_t properties_;
+  private:
+    const class_type* defn_;
+    // For now, only support 32bit bool signed properties.
+    class_type::inst_t properties_;
 };
 
 #endif /* IVL_vvp_cobject_H */

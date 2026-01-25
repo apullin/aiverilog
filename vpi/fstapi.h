@@ -26,8 +26,7 @@
 #define FST_API_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include <stdio.h>
@@ -46,15 +45,13 @@ extern "C"
 typedef uint32_t fstHandle;
 typedef uint32_t fstEnumHandle;
 
-enum fstWriterPackType
-{
+enum fstWriterPackType {
     FST_WR_PT_ZLIB = 0,
     FST_WR_PT_FASTLZ = 1,
     FST_WR_PT_LZ4 = 2
 };
 
-enum fstFileType
-{
+enum fstFileType {
     FST_FT_MIN = 0,
 
     FST_FT_VERILOG = 0,
@@ -64,8 +61,7 @@ enum fstFileType
     FST_FT_MAX = 2
 };
 
-enum fstBlockType
-{
+enum fstBlockType {
     FST_BL_HDR = 0,
     FST_BL_VCDATA = 1,
     FST_BL_BLACKOUT = 2,
@@ -77,11 +73,10 @@ enum fstBlockType
     FST_BL_VCDATA_DYN_ALIAS2 = 8,
 
     FST_BL_ZWRAPPER = 254, /* indicates that whole trace is gz wrapped */
-    FST_BL_SKIP = 255 /* used while block is being written */
+    FST_BL_SKIP = 255      /* used while block is being written */
 };
 
-enum fstScopeType
-{
+enum fstScopeType {
     FST_ST_MIN = 0,
 
     FST_ST_VCD_MODULE = 0,
@@ -117,8 +112,7 @@ enum fstScopeType
     FST_ST_VCD_UPSCOPE = 255
 };
 
-enum fstVarType
-{
+enum fstVarType {
     FST_VT_MIN = 0, /* start of vartypes */
 
     FST_VT_VCD_EVENT = 0,
@@ -148,19 +142,18 @@ enum fstVarType
 
     FST_VT_SV_BIT = 22,
     FST_VT_SV_LOGIC = 23,
-    FST_VT_SV_INT = 24, /* declare as size = 32 */
-    FST_VT_SV_SHORTINT = 25, /* declare as size = 16 */
-    FST_VT_SV_LONGINT = 26, /* declare as size = 64 */
-    FST_VT_SV_BYTE = 27, /* declare as size = 8  */
-    FST_VT_SV_ENUM = 28, /* declare as appropriate type range */
+    FST_VT_SV_INT = 24,       /* declare as size = 32 */
+    FST_VT_SV_SHORTINT = 25,  /* declare as size = 16 */
+    FST_VT_SV_LONGINT = 26,   /* declare as size = 64 */
+    FST_VT_SV_BYTE = 27,      /* declare as size = 8  */
+    FST_VT_SV_ENUM = 28,      /* declare as appropriate type range */
     FST_VT_SV_SHORTREAL = 29, /* declare and emit same as FST_VT_VCD_REAL (needs to be emitted
                                     as double, not a float) */
 
     FST_VT_MAX = 29 /* end of vartypes */
 };
 
-enum fstVarDir
-{
+enum fstVarDir {
     FST_VD_MIN = 0,
 
     FST_VD_IMPLICIT = 0,
@@ -173,8 +166,7 @@ enum fstVarDir
     FST_VD_MAX = 5
 };
 
-enum fstHierType
-{
+enum fstHierType {
     FST_HT_MIN = 0,
 
     FST_HT_SCOPE = 0,
@@ -191,8 +183,7 @@ enum fstHierType
     FST_HT_MAX = 6
 };
 
-enum fstAttrType
-{
+enum fstAttrType {
     FST_AT_MIN = 0,
 
     FST_AT_MISC = 0, /* self-contained: does not need matching FST_HT_ATTREND */
@@ -203,15 +194,14 @@ enum fstAttrType
     FST_AT_MAX = 3
 };
 
-enum fstMiscType
-{
+enum fstMiscType {
     FST_MT_MIN = 0,
 
-    FST_MT_COMMENT = 0, /* use fstWriterSetComment() to emit */
-    FST_MT_ENVVAR = 1, /* use fstWriterSetEnvVar() to emit */
-    FST_MT_SUPVAR = 2, /* use fstWriterCreateVar2() to emit */
-    FST_MT_PATHNAME = 3, /* reserved for fstWriterSetSourceStem() string -> number management */
-    FST_MT_SOURCESTEM = 4, /* use fstWriterSetSourceStem() to emit */
+    FST_MT_COMMENT = 0,     /* use fstWriterSetComment() to emit */
+    FST_MT_ENVVAR = 1,      /* use fstWriterSetEnvVar() to emit */
+    FST_MT_SUPVAR = 2,      /* use fstWriterCreateVar2() to emit */
+    FST_MT_PATHNAME = 3,    /* reserved for fstWriterSetSourceStem() string -> number management */
+    FST_MT_SOURCESTEM = 4,  /* use fstWriterSetSourceStem() to emit */
     FST_MT_SOURCEISTEM = 5, /* use fstWriterSetSourceInstantiationStem() to emit */
     FST_MT_VALUELIST =
         6, /* use fstWriterSetValueList() to emit, followed by fstWriterCreateVar*() */
@@ -222,8 +212,7 @@ enum fstMiscType
     FST_MT_MAX = 8
 };
 
-enum fstArrayType
-{
+enum fstArrayType {
     FST_AR_MIN = 0,
 
     FST_AR_NONE = 0,
@@ -234,8 +223,7 @@ enum fstArrayType
     FST_AR_MAX = 3
 };
 
-enum fstEnumValueType
-{
+enum fstEnumValueType {
     FST_EV_SV_INTEGER = 0,
     FST_EV_SV_BIT = 1,
     FST_EV_SV_LOGIC = 2,
@@ -257,8 +245,7 @@ enum fstEnumValueType
     FST_EV_MAX = 15
 };
 
-enum fstPackType
-{
+enum fstPackType {
     FST_PT_NONE = 0,
     FST_PT_UNPACKED = 1,
     FST_PT_PACKED = 2,
@@ -267,8 +254,7 @@ enum fstPackType
     FST_PT_MAX = 3
 };
 
-enum fstSupplementalVarType
-{
+enum fstSupplementalVarType {
     FST_SVT_MIN = 0,
 
     FST_SVT_NONE = 0,
@@ -282,8 +268,7 @@ enum fstSupplementalVarType
     FST_SVT_MAX = 5
 };
 
-enum fstSupplementalDataType
-{
+enum fstSupplementalDataType {
     FST_SDT_MIN = 0,
 
     FST_SDT_NONE = 0,
@@ -312,31 +297,27 @@ enum fstSupplementalDataType
     FST_SDT_ABS_MAX = ((1 << (FST_SDT_SVT_SHIFT_COUNT)) - 1)
 };
 
-struct fstHier
-{
+struct fstHier {
     unsigned char htyp;
 
-    union
-    {
+    union {
         /* if htyp == FST_HT_SCOPE */
-        struct fstHierScope
-        {
+        struct fstHierScope {
             unsigned char typ; /* FST_ST_MIN ... FST_ST_MAX */
-            const char *name;
-            const char *component;
-            uint32_t name_length; /* strlen(u.scope.name) */
+            const char* name;
+            const char* component;
+            uint32_t name_length;      /* strlen(u.scope.name) */
             uint32_t component_length; /* strlen(u.scope.component) */
         } scope;
 
         /* if htyp == FST_HT_VAR */
-        struct fstHierVar
-        {
-            unsigned char typ; /* FST_VT_MIN ... FST_VT_MAX */
-            unsigned char direction; /* FST_VD_MIN ... FST_VD_MAX */
+        struct fstHierVar {
+            unsigned char typ;           /* FST_VT_MIN ... FST_VT_MAX */
+            unsigned char direction;     /* FST_VD_MIN ... FST_VD_MAX */
             unsigned char svt_workspace; /* zeroed out by FST reader, for client code use */
             unsigned char sdt_workspace; /* zeroed out by FST reader, for client code use */
-            unsigned int sxt_workspace; /* zeroed out by FST reader, for client code use */
-            const char *name;
+            unsigned int sxt_workspace;  /* zeroed out by FST reader, for client code use */
+            const char* name;
             uint32_t length;
             fstHandle handle;
             uint32_t name_length; /* strlen(u.var.name) */
@@ -344,27 +325,25 @@ struct fstHier
         } var;
 
         /* if htyp == FST_HT_ATTRBEGIN */
-        struct fstHierAttr
-        {
+        struct fstHierAttr {
             unsigned char typ; /* FST_AT_MIN ... FST_AT_MAX */
             unsigned char
                 subtype; /* from fstMiscType, fstArrayType, fstEnumValueType, fstPackType */
-            const char *name;
+            const char* name;
             uint64_t arg; /* number of array elements, struct members, or some other payload
                                 (possibly ignored) */
-            uint64_t arg_from_name; /* for when name is overloaded as a variable-length integer
-                                        (FST_AT_MISC + FST_MT_SOURCESTEM) */
-            uint32_t name_length; /* strlen(u.attr.name) */
+            uint64_t arg_from_name; /* for when name is overloaded as a variable-length
+                                       integer (FST_AT_MISC + FST_MT_SOURCESTEM) */
+            uint32_t name_length;   /* strlen(u.attr.name) */
         } attr;
     } u;
 };
 
-struct fstETab
-{
-    char *name;
+struct fstETab {
+    char* name;
     uint32_t elem_count;
-    char **literal_arr;
-    char **val_arr;
+    char** literal_arr;
+    char** val_arr;
 };
 
 /*
@@ -373,94 +352,93 @@ struct fstETab
 
 typedef struct fstWriterContext fstWriterContext;
 
-void fstWriterClose(fstWriterContext *ctx);
-fstWriterContext *fstWriterCreate(const char *nam, int use_compressed_hier);
-fstEnumHandle fstWriterCreateEnumTable(fstWriterContext *ctx,
-                                        const char *name,
-                                        uint32_t elem_count,
-                                        unsigned int min_valbits,
-                                        const char **literal_arr,
-                                        const char **val_arr);
+void fstWriterClose(fstWriterContext* ctx);
+fstWriterContext* fstWriterCreate(const char* nam, int use_compressed_hier);
+fstEnumHandle fstWriterCreateEnumTable(fstWriterContext* ctx,
+                                       const char* name,
+                                       uint32_t elem_count,
+                                       unsigned int min_valbits,
+                                       const char** literal_arr,
+                                       const char** val_arr);
 /* used for Verilog/SV */
-fstHandle fstWriterCreateVar(fstWriterContext *ctx,
-                                enum fstVarType vt,
-                                enum fstVarDir vd,
-                                uint32_t len,
-                                const char *nam,
-                                fstHandle aliasHandle);
+fstHandle fstWriterCreateVar(fstWriterContext* ctx,
+                             enum fstVarType vt,
+                             enum fstVarDir vd,
+                             uint32_t len,
+                             const char* nam,
+                             fstHandle aliasHandle);
 /* future expansion for VHDL and other languages.  The variable type, data type, etc map onto
     the current Verilog/SV one.  The "type" string is optional for a more verbose or custom
     description */
-fstHandle fstWriterCreateVar2(fstWriterContext *ctx,
-                                enum fstVarType vt,
-                                enum fstVarDir vd,
-                                uint32_t len,
-                                const char *nam,
-                                fstHandle aliasHandle,
-                                const char *type,
-                                enum fstSupplementalVarType svt,
-                                enum fstSupplementalDataType sdt);
-void fstWriterEmitDumpActive(fstWriterContext *ctx, int enable);
-void fstWriterEmitEnumTableRef(fstWriterContext *ctx, fstEnumHandle handle);
-void fstWriterEmitValueChange(fstWriterContext *ctx, fstHandle handle, const void *val);
-void fstWriterEmitValueChange32(fstWriterContext *ctx,
+fstHandle fstWriterCreateVar2(fstWriterContext* ctx,
+                              enum fstVarType vt,
+                              enum fstVarDir vd,
+                              uint32_t len,
+                              const char* nam,
+                              fstHandle aliasHandle,
+                              const char* type,
+                              enum fstSupplementalVarType svt,
+                              enum fstSupplementalDataType sdt);
+void fstWriterEmitDumpActive(fstWriterContext* ctx, int enable);
+void fstWriterEmitEnumTableRef(fstWriterContext* ctx, fstEnumHandle handle);
+void fstWriterEmitValueChange(fstWriterContext* ctx, fstHandle handle, const void* val);
+void fstWriterEmitValueChange32(fstWriterContext* ctx,
                                 fstHandle handle,
                                 uint32_t bits,
                                 uint32_t val);
-void fstWriterEmitValueChange64(fstWriterContext *ctx,
+void fstWriterEmitValueChange64(fstWriterContext* ctx,
                                 fstHandle handle,
                                 uint32_t bits,
                                 uint64_t val);
-void fstWriterEmitValueChangeVec32(fstWriterContext *ctx,
-                                    fstHandle handle,
-                                    uint32_t bits,
-                                    const uint32_t *val);
-void fstWriterEmitValueChangeVec64(fstWriterContext *ctx,
-                                    fstHandle handle,
-                                    uint32_t bits,
-                                    const uint64_t *val);
-void fstWriterEmitVariableLengthValueChange(fstWriterContext *ctx,
+void fstWriterEmitValueChangeVec32(fstWriterContext* ctx,
+                                   fstHandle handle,
+                                   uint32_t bits,
+                                   const uint32_t* val);
+void fstWriterEmitValueChangeVec64(fstWriterContext* ctx,
+                                   fstHandle handle,
+                                   uint32_t bits,
+                                   const uint64_t* val);
+void fstWriterEmitVariableLengthValueChange(fstWriterContext* ctx,
                                             fstHandle handle,
-                                            const void *val,
+                                            const void* val,
                                             uint32_t len);
-void fstWriterEmitTimeChange(fstWriterContext *ctx, uint64_t tim);
-void fstWriterFlushContext(fstWriterContext *ctx);
-int fstWriterGetDumpSizeLimitReached(fstWriterContext *ctx);
-int fstWriterGetFseekFailed(fstWriterContext *ctx);
-int fstWriterGetFlushContextPending(fstWriterContext *ctx);
-void fstWriterSetAttrBegin(fstWriterContext *ctx,
-                            enum fstAttrType attrtype,
-                            int subtype,
-                            const char *attrname,
-                            uint64_t arg);
-void fstWriterSetAttrEnd(fstWriterContext *ctx);
-void fstWriterSetComment(fstWriterContext *ctx, const char *comm);
-void fstWriterSetDate(fstWriterContext *ctx, const char *dat);
-void fstWriterSetDumpSizeLimit(fstWriterContext *ctx, uint64_t numbytes);
-void fstWriterSetEnvVar(fstWriterContext *ctx, const char *envvar);
-void fstWriterSetFileType(fstWriterContext *ctx, enum fstFileType filetype);
-void fstWriterSetPackType(fstWriterContext *ctx, enum fstWriterPackType typ);
-void fstWriterSetParallelMode(fstWriterContext *ctx, int enable);
-void fstWriterSetRepackOnClose(fstWriterContext *ctx,
-                                int enable); /* type = 0 (none), 1 (libz) */
-void fstWriterSetScope(fstWriterContext *ctx,
-                        enum fstScopeType scopetype,
-                        const char *scopename,
-                        const char *scopecomp);
-void fstWriterSetSourceInstantiationStem(fstWriterContext *ctx,
-                                            const char *path,
-                                            unsigned int line,
-                                            unsigned int use_realpath);
-void fstWriterSetSourceStem(fstWriterContext *ctx,
-                            const char *path,
+void fstWriterEmitTimeChange(fstWriterContext* ctx, uint64_t tim);
+void fstWriterFlushContext(fstWriterContext* ctx);
+int fstWriterGetDumpSizeLimitReached(fstWriterContext* ctx);
+int fstWriterGetFseekFailed(fstWriterContext* ctx);
+int fstWriterGetFlushContextPending(fstWriterContext* ctx);
+void fstWriterSetAttrBegin(fstWriterContext* ctx,
+                           enum fstAttrType attrtype,
+                           int subtype,
+                           const char* attrname,
+                           uint64_t arg);
+void fstWriterSetAttrEnd(fstWriterContext* ctx);
+void fstWriterSetComment(fstWriterContext* ctx, const char* comm);
+void fstWriterSetDate(fstWriterContext* ctx, const char* dat);
+void fstWriterSetDumpSizeLimit(fstWriterContext* ctx, uint64_t numbytes);
+void fstWriterSetEnvVar(fstWriterContext* ctx, const char* envvar);
+void fstWriterSetFileType(fstWriterContext* ctx, enum fstFileType filetype);
+void fstWriterSetPackType(fstWriterContext* ctx, enum fstWriterPackType typ);
+void fstWriterSetParallelMode(fstWriterContext* ctx, int enable);
+void fstWriterSetRepackOnClose(fstWriterContext* ctx, int enable); /* type = 0 (none), 1 (libz) */
+void fstWriterSetScope(fstWriterContext* ctx,
+                       enum fstScopeType scopetype,
+                       const char* scopename,
+                       const char* scopecomp);
+void fstWriterSetSourceInstantiationStem(fstWriterContext* ctx,
+                                         const char* path,
+                                         unsigned int line,
+                                         unsigned int use_realpath);
+void fstWriterSetSourceStem(fstWriterContext* ctx,
+                            const char* path,
                             unsigned int line,
                             unsigned int use_realpath);
-void fstWriterSetTimescale(fstWriterContext *ctx, int ts);
-void fstWriterSetTimescaleFromString(fstWriterContext *ctx, const char *s);
-void fstWriterSetTimezero(fstWriterContext *ctx, int64_t tim);
-void fstWriterSetUpscope(fstWriterContext *ctx);
-void fstWriterSetValueList(fstWriterContext *ctx, const char *vl);
-void fstWriterSetVersion(fstWriterContext *ctx, const char *vers);
+void fstWriterSetTimescale(fstWriterContext* ctx, int ts);
+void fstWriterSetTimescaleFromString(fstWriterContext* ctx, const char* s);
+void fstWriterSetTimezero(fstWriterContext* ctx, int64_t tim);
+void fstWriterSetUpscope(fstWriterContext* ctx);
+void fstWriterSetValueList(fstWriterContext* ctx, const char* vl);
+void fstWriterSetVersion(fstWriterContext* ctx, const char* vers);
 
 /*
  * reader functions
@@ -468,77 +446,78 @@ void fstWriterSetVersion(fstWriterContext *ctx, const char *vers);
 
 typedef struct fstReaderContext fstReaderContext;
 
-void fstReaderClose(fstReaderContext *ctx);
-void fstReaderClrFacProcessMask(fstReaderContext *ctx, fstHandle facidx);
-void fstReaderClrFacProcessMaskAll(fstReaderContext *ctx);
-uint64_t fstReaderGetAliasCount(fstReaderContext *ctx);
-const char *fstReaderGetCurrentFlatScope(fstReaderContext *ctx);
-void *fstReaderGetCurrentScopeUserInfo(fstReaderContext *ctx);
-int fstReaderGetCurrentScopeLen(fstReaderContext *ctx);
-const char *fstReaderGetDateString(fstReaderContext *ctx);
-int fstReaderGetDoubleEndianMatchState(fstReaderContext *ctx);
-uint64_t fstReaderGetDumpActivityChangeTime(fstReaderContext *ctx, uint32_t idx);
-unsigned char fstReaderGetDumpActivityChangeValue(fstReaderContext *ctx, uint32_t idx);
-uint64_t fstReaderGetEndTime(fstReaderContext *ctx);
-int fstReaderGetFacProcessMask(fstReaderContext *ctx, fstHandle facidx);
-int fstReaderGetFileType(fstReaderContext *ctx);
-int fstReaderGetFseekFailed(fstReaderContext *ctx);
-fstHandle fstReaderGetMaxHandle(fstReaderContext *ctx);
-uint64_t fstReaderGetMemoryUsedByWriter(fstReaderContext *ctx);
-uint32_t fstReaderGetNumberDumpActivityChanges(fstReaderContext *ctx);
-uint64_t fstReaderGetScopeCount(fstReaderContext *ctx);
-uint64_t fstReaderGetStartTime(fstReaderContext *ctx);
-signed char fstReaderGetTimescale(fstReaderContext *ctx);
-int64_t fstReaderGetTimezero(fstReaderContext *ctx);
-uint64_t fstReaderGetValueChangeSectionCount(fstReaderContext *ctx);
-char *fstReaderGetValueFromHandleAtTime(fstReaderContext *ctx,
+void fstReaderClose(fstReaderContext* ctx);
+void fstReaderClrFacProcessMask(fstReaderContext* ctx, fstHandle facidx);
+void fstReaderClrFacProcessMaskAll(fstReaderContext* ctx);
+uint64_t fstReaderGetAliasCount(fstReaderContext* ctx);
+const char* fstReaderGetCurrentFlatScope(fstReaderContext* ctx);
+void* fstReaderGetCurrentScopeUserInfo(fstReaderContext* ctx);
+int fstReaderGetCurrentScopeLen(fstReaderContext* ctx);
+const char* fstReaderGetDateString(fstReaderContext* ctx);
+int fstReaderGetDoubleEndianMatchState(fstReaderContext* ctx);
+uint64_t fstReaderGetDumpActivityChangeTime(fstReaderContext* ctx, uint32_t idx);
+unsigned char fstReaderGetDumpActivityChangeValue(fstReaderContext* ctx, uint32_t idx);
+uint64_t fstReaderGetEndTime(fstReaderContext* ctx);
+int fstReaderGetFacProcessMask(fstReaderContext* ctx, fstHandle facidx);
+int fstReaderGetFileType(fstReaderContext* ctx);
+int fstReaderGetFseekFailed(fstReaderContext* ctx);
+fstHandle fstReaderGetMaxHandle(fstReaderContext* ctx);
+uint64_t fstReaderGetMemoryUsedByWriter(fstReaderContext* ctx);
+uint32_t fstReaderGetNumberDumpActivityChanges(fstReaderContext* ctx);
+uint64_t fstReaderGetScopeCount(fstReaderContext* ctx);
+uint64_t fstReaderGetStartTime(fstReaderContext* ctx);
+signed char fstReaderGetTimescale(fstReaderContext* ctx);
+int64_t fstReaderGetTimezero(fstReaderContext* ctx);
+uint64_t fstReaderGetValueChangeSectionCount(fstReaderContext* ctx);
+char* fstReaderGetValueFromHandleAtTime(fstReaderContext* ctx,
                                         uint64_t tim,
                                         fstHandle facidx,
-                                        char *buf);
-uint64_t fstReaderGetVarCount(fstReaderContext *ctx);
-const char *fstReaderGetVersionString(fstReaderContext *ctx);
-struct fstHier *fstReaderIterateHier(fstReaderContext *ctx);
-int fstReaderIterateHierRewind(fstReaderContext *ctx);
-int fstReaderIterBlocks(fstReaderContext *ctx,
-                        void (*value_change_callback)(void *user_callback_data_pointer,
+                                        char* buf);
+uint64_t fstReaderGetVarCount(fstReaderContext* ctx);
+const char* fstReaderGetVersionString(fstReaderContext* ctx);
+struct fstHier* fstReaderIterateHier(fstReaderContext* ctx);
+int fstReaderIterateHierRewind(fstReaderContext* ctx);
+int fstReaderIterBlocks(fstReaderContext* ctx,
+                        void (*value_change_callback)(void* user_callback_data_pointer,
                                                       uint64_t time,
                                                       fstHandle facidx,
-                                                      const unsigned char *value),
-                        void *user_callback_data_pointer,
-                        FILE *vcdhandle);
-int fstReaderIterBlocks2(fstReaderContext *ctx,
-                         void (*value_change_callback)(void *user_callback_data_pointer,
+                                                      const unsigned char* value),
+                        void* user_callback_data_pointer,
+                        FILE* vcdhandle);
+int fstReaderIterBlocks2(fstReaderContext* ctx,
+                         void (*value_change_callback)(void* user_callback_data_pointer,
                                                        uint64_t time,
                                                        fstHandle facidx,
-                                                       const unsigned char *value),
-                         void (*value_change_callback_varlen)(void *user_callback_data_pointer,
+                                                       const unsigned char* value),
+                         void (*value_change_callback_varlen)(void* user_callback_data_pointer,
                                                               uint64_t time,
                                                               fstHandle facidx,
-                                                              const unsigned char *value,
+                                                              const unsigned char* value,
                                                               uint32_t len),
-                         void *user_callback_data_pointer,
-                         FILE *vcdhandle);
-void fstReaderIterBlocksSetNativeDoublesOnCallback(fstReaderContext *ctx, int enable);
-fstReaderContext *fstReaderOpen(const char *nam);
-fstReaderContext *fstReaderOpenForUtilitiesOnly(void);
-const char *fstReaderPopScope(fstReaderContext *ctx);
-int fstReaderProcessHier(fstReaderContext *ctx, FILE *vcdhandle);
-const char *fstReaderPushScope(fstReaderContext *ctx, const char *nam, void *user_info);
-void fstReaderResetScope(fstReaderContext *ctx);
-void fstReaderSetFacProcessMask(fstReaderContext *ctx, fstHandle facidx);
-void fstReaderSetFacProcessMaskAll(fstReaderContext *ctx);
-void fstReaderSetLimitTimeRange(fstReaderContext *ctx, uint64_t start_time, uint64_t end_time);
-void fstReaderSetUnlimitedTimeRange(fstReaderContext *ctx);
-void fstReaderSetVcdExtensions(fstReaderContext *ctx, int enable);
+                         void* user_callback_data_pointer,
+                         FILE* vcdhandle);
+void fstReaderIterBlocksSetNativeDoublesOnCallback(fstReaderContext* ctx, int enable);
+fstReaderContext* fstReaderOpen(const char* nam);
+fstReaderContext* fstReaderOpenForUtilitiesOnly(void);
+const char* fstReaderPopScope(fstReaderContext* ctx);
+int fstReaderProcessHier(fstReaderContext* ctx, FILE* vcdhandle);
+const char* fstReaderPushScope(fstReaderContext* ctx, const char* nam, void* user_info);
+void fstReaderResetScope(fstReaderContext* ctx);
+void fstReaderSetFacProcessMask(fstReaderContext* ctx, fstHandle facidx);
+void fstReaderSetFacProcessMaskAll(fstReaderContext* ctx);
+void fstReaderSetLimitTimeRange(fstReaderContext* ctx, uint64_t start_time, uint64_t end_time);
+void fstReaderSetUnlimitedTimeRange(fstReaderContext* ctx);
+void fstReaderSetVcdExtensions(fstReaderContext* ctx, int enable);
 
 /*
  * utility functions
  */
-int fstUtilityBinToEscConvertedLen(const unsigned char *s, int len); /* used for mallocs for fstUtilityBinToEsc() */
-int fstUtilityBinToEsc(unsigned char *d, const unsigned char *s, int len);
-int fstUtilityEscToBin(unsigned char *d, unsigned char *s, int len);
-struct fstETab *fstUtilityExtractEnumTableFromString(const char *s);
-void fstUtilityFreeEnumTable(struct fstETab *etab); /* must use to free fstETab properly */
+int fstUtilityBinToEscConvertedLen(const unsigned char* s,
+                                   int len); /* used for mallocs for fstUtilityBinToEsc() */
+int fstUtilityBinToEsc(unsigned char* d, const unsigned char* s, int len);
+int fstUtilityEscToBin(unsigned char* d, unsigned char* s, int len);
+struct fstETab* fstUtilityExtractEnumTableFromString(const char* s);
+void fstUtilityFreeEnumTable(struct fstETab* etab); /* must use to free fstETab properly */
 
 #ifdef __cplusplus
 }

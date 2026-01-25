@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <ivl_target.h>
-# include  <ipal.h>
+#include <ivl_target.h>
+#include <ipal.h>
 
 
 extern pal_t pal;
@@ -40,8 +40,8 @@ extern unsigned error_count;
  */
 
 typedef struct term_s {
-      int inv;
-      ivl_nexus_t nex;
+    int inv;
+    ivl_nexus_t nex;
 } term_t;
 
 /*
@@ -60,24 +60,24 @@ typedef struct term_s {
  * is accumulated.
  */
 struct pal_bind_s {
-	/* This is the netlist connection for the pin. */
-      ivl_nexus_t nexus;
-	/* If the pin is an output, this is is sop that drives it. */
-      pal_sop_t sop;
+    /* This is the netlist connection for the pin. */
+    ivl_nexus_t nexus;
+    /* If the pin is an output, this is is sop that drives it. */
+    pal_sop_t sop;
 
-	/* If the output has an enable, this is it, along with the
-	   single term that activates it. */
-      ivl_net_logic_t enable;
-      term_t **enable_ex;
+    /* If the output has an enable, this is it, along with the
+       single term that activates it. */
+    ivl_net_logic_t enable;
+    term_t** enable_ex;
 
-	/* If there is a register here, this is it. */
-      ivl_lpm_t reg;
-      unsigned reg_q;
+    /* If there is a register here, this is it. */
+    ivl_lpm_t reg;
+    unsigned reg_q;
 
-	/* The input to the cell is this expression. */
-      term_t **sop_ex;
-	/* These are the SOP flags that I believe I need. */
-      unsigned sop_inv  : 1;
+    /* The input to the cell is this expression. */
+    term_t** sop_ex;
+    /* These are the SOP flags that I believe I need. */
+    unsigned sop_inv : 1;
 };
 
 extern unsigned pins;
@@ -87,14 +87,14 @@ extern struct pal_bind_s* bind_pin;
 /*
  * These are various steps in the fitting process.
  */
-extern int get_pad_bindings(ivl_scope_t net, void*x);
+extern int get_pad_bindings(ivl_scope_t net, void* x);
 
 extern void absorb_pad_enables(void);
 
-extern int fit_registers(ivl_scope_t scope, void*x);
+extern int fit_registers(ivl_scope_t scope, void* x);
 
 extern int fit_logic(void);
 
-extern int emit_jedec(const char*path);
+extern int emit_jedec(const char* path);
 
 #endif /* IVL_priv_H */

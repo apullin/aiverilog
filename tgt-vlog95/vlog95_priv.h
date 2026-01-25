@@ -18,11 +18,11 @@
  *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-# include "config.h"
-# include "ivl_target.h"
-# include <inttypes.h>
-# include <stdio.h>
-# include <assert.h>
+#include "config.h"
+#include "ivl_target.h"
+#include <inttypes.h>
+#include <stdio.h>
+#include <assert.h>
 
 /*
  * The design we are emitting.
@@ -32,7 +32,7 @@ extern ivl_design_t design;
 /*
  * This is the file that the converted design is written to.
  */
-extern FILE*vlog_out;
+extern FILE* vlog_out;
 
 /*
  * Keep a count of the fatal errors that happen during code generation.
@@ -54,7 +54,7 @@ extern ivl_parameter_t emitting_param;
  * The statement code needs to know what name to use for a translated
  * function return statement (disable).
  */
-extern const char *func_rtn_name;
+extern const char* func_rtn_name;
 
 /*
  * Keep the current indent level.
@@ -78,8 +78,11 @@ extern unsigned allow_signed;
  * Emit various Verilog types.
  */
 extern void emit_event(ivl_scope_t scope, ivl_statement_t stmt);
-extern void emit_expr(ivl_scope_t scope, ivl_expr_t expr, unsigned width,
-                      unsigned is_lval_width, unsigned can_skip_unsigned,
+extern void emit_expr(ivl_scope_t scope,
+                      ivl_expr_t expr,
+                      unsigned width,
+                      unsigned is_lval_width,
+                      unsigned can_skip_unsigned,
                       unsigned is_full_prec);
 extern void emit_logic(ivl_scope_t scope, ivl_net_logic_t nlogic);
 extern void emit_lpm(ivl_scope_t scope, ivl_lpm_t lpm);
@@ -89,34 +92,30 @@ extern void emit_stmt(ivl_scope_t scope, ivl_statement_t stmt);
 extern void emit_tran(ivl_scope_t scope, ivl_switch_t tran);
 
 extern void emit_scaled_delay(ivl_scope_t scope, uint64_t delay);
-extern void emit_scaled_delayx(ivl_scope_t scope, ivl_expr_t expr,
-                               unsigned is_stmt);
-extern void emit_scaled_expr(ivl_scope_t scope, ivl_expr_t expr,
-                             int msb, int lsb);
-extern void emit_scaled_range(ivl_scope_t scope, ivl_expr_t expr,
-                              unsigned width, int msb, int lsb);
+extern void emit_scaled_delayx(ivl_scope_t scope, ivl_expr_t expr, unsigned is_stmt);
+extern void emit_scaled_expr(ivl_scope_t scope, ivl_expr_t expr, int msb, int lsb);
+extern void emit_scaled_range(ivl_scope_t scope, ivl_expr_t expr, unsigned width, int msb, int lsb);
 extern void emit_scope_path(ivl_scope_t scope, ivl_scope_t call_scope);
 extern void emit_scope_variables(ivl_scope_t scope);
 extern void emit_scope_call_path(ivl_scope_t scope, ivl_scope_t call_scope);
 extern void emit_scope_module_path(ivl_scope_t scope, ivl_scope_t call_scope);
-extern void emit_name_of_nexus(ivl_scope_t scope, ivl_nexus_t nex,
-                               unsigned allow_UD);
-extern void emit_nexus_as_ca(ivl_scope_t scope, ivl_nexus_t nex,
-                             unsigned allow_UD, unsigned sign_extend);
+extern void emit_name_of_nexus(ivl_scope_t scope, ivl_nexus_t nex, unsigned allow_UD);
+extern void
+emit_nexus_as_ca(ivl_scope_t scope, ivl_nexus_t nex, unsigned allow_UD, unsigned sign_extend);
 extern void emit_nexus_port_driver_as_ca(ivl_scope_t scope, ivl_nexus_t nex);
 extern void emit_const_nexus(ivl_scope_t scope, ivl_net_const_t const_net);
-extern void emit_signal_net_const_as_ca(ivl_scope_t scope, ivl_signal_t sig,
-                                        ivl_nexus_ptr_t nex_ptr);
+extern void
+emit_signal_net_const_as_ca(ivl_scope_t scope, ivl_signal_t sig, ivl_nexus_ptr_t nex_ptr);
 
 extern void add_udp_to_list(ivl_udp_t udp);
 extern void emit_udp_list(void);
 extern void emit_sig_file_line(ivl_signal_t sig);
 
-extern void emit_id(const char *id);
+extern void emit_id(const char* id);
 extern void emit_real_number(double value);
-extern void emit_number(const char *bits, unsigned nbits, unsigned is_signed,
-                        const char *file, unsigned lineno);
-extern void emit_string(const char *string);
+extern void emit_number(
+    const char* bits, unsigned nbits, unsigned is_signed, const char* file, unsigned lineno);
+extern void emit_string(const char* string);
 
 extern void emit_icarus_generated_udps(void);
 extern void emit_icarus_generated_top_module(void);
@@ -132,26 +131,26 @@ extern ivl_scope_t get_module_scope(ivl_scope_t scope);
  * positive it the value is too large. The positive value is the minimum
  * number of bits required to represent the value.
  */
-extern int32_t get_int32_from_number(ivl_expr_t expr, int *return_type);
-extern int64_t get_int64_from_number(ivl_expr_t expr, int *return_type);
-extern uint64_t get_uint64_from_number(ivl_expr_t expr, int *return_type);
+extern int32_t get_int32_from_number(ivl_expr_t expr, int* return_type);
+extern int64_t get_int64_from_number(ivl_expr_t expr, int* return_type);
+extern uint64_t get_uint64_from_number(ivl_expr_t expr, int* return_type);
 
 /*
  * A package is translated to a module with a special name. This routine
  * does that translation. To avoid a memory leak the calling routine must
  * use free() to cleanup the string returned.
  */
-extern char * get_package_name(ivl_scope_t scope);
+extern char* get_package_name(ivl_scope_t scope);
 
 /*
  * Get the appropriate MSB and LSB for a signal.
  */
-extern void get_sig_msb_lsb(ivl_signal_t sig, int *msb, int *lsb);
+extern void get_sig_msb_lsb(ivl_signal_t sig, int* msb, int* lsb);
 
 /*
  * Convert a timescale value to a string.
  */
-extern const char*get_time_const(int time_value);
+extern const char* get_time_const(int time_value);
 
 /*
  * Cleanup functions.
@@ -160,13 +159,11 @@ extern void free_emitted_scope_list(void);
 
 /*
  * Debug routine to dump the various pieces of nexus information.
-*/
+ */
 extern void dump_nexus_information(ivl_scope_t scope, ivl_nexus_t nex);
 
-static inline unsigned is_void_function(ivl_scope_t scope)
-{
-      return ivl_scope_type(scope) == IVL_SCT_FUNCTION
-          && ivl_scope_port(scope, 0) == 0;
+static inline unsigned is_void_function(ivl_scope_t scope) {
+    return ivl_scope_type(scope) == IVL_SCT_FUNCTION && ivl_scope_port(scope, 0) == 0;
 }
 
 #endif /* IVL_vlog95_priv_H */

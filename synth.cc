@@ -17,10 +17,10 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include "config.h"
+#include "config.h"
 
-# include  "functor.h"
-# include  "netlist.h"
+#include "functor.h"
+#include "netlist.h"
 
 /*
  * This functor scans the behavioral code, looking for expressions to
@@ -30,98 +30,91 @@
  * expressions have been reduced to a signal ident, which references
  * the NetNet of the now synthesized expression.
  */
-class do_expr  : public proc_match_t {
+class do_expr : public proc_match_t {
+  public:
+    do_expr(Design* d, NetScope* s) : des_(d), scope_(s) {}
 
-    public:
-      do_expr(Design*d, NetScope*s)
-      : des_(d), scope_(s) { }
+  private:
+    Design* des_;
+    NetScope* scope_;
 
-    private:
-
-      Design*des_;
-      NetScope*scope_;
-
-      virtual int assign(NetAssign*) override;
-      virtual int assign_nb(NetAssignNB*) override;
-      virtual int event_wait(NetEvWait*) override;
-      virtual int condit(NetCondit*) override;
+    virtual int assign(NetAssign*) override;
+    virtual int assign_nb(NetAssignNB*) override;
+    virtual int event_wait(NetEvWait*) override;
+    virtual int condit(NetCondit*) override;
 };
 
 
-int do_expr::assign(NetAssign*stmt)
-{
-      if (dynamic_cast<NetESignal*>(stmt->rval()))
-	    return 0;
+int do_expr::assign(NetAssign* stmt) {
+    if (dynamic_cast<NetESignal*>(stmt->rval()))
+        return 0;
 
-      NetNet*tmp = stmt->rval()->synthesize(des_, scope_, stmt->rval());
-      if (tmp == 0)
-	    return 0;
+    NetNet* tmp = stmt->rval()->synthesize(des_, scope_, stmt->rval());
+    if (tmp == 0)
+        return 0;
 
-      NetESignal*tmpe = new NetESignal(tmp);
-      stmt->set_rval(tmpe);
+    NetESignal* tmpe = new NetESignal(tmp);
+    stmt->set_rval(tmpe);
 
-      return 0;
+    return 0;
 }
 
-int do_expr::assign_nb(NetAssignNB*stmt)
-{
-      if (dynamic_cast<NetESignal*>(stmt->rval()))
-	    return 0;
+int do_expr::assign_nb(NetAssignNB* stmt) {
+    if (dynamic_cast<NetESignal*>(stmt->rval()))
+        return 0;
 
-      NetNet*tmp = stmt->rval()->synthesize(des_, scope_, stmt->rval());
-      if (tmp == 0)
-	    return 0;
+    NetNet* tmp = stmt->rval()->synthesize(des_, scope_, stmt->rval());
+    if (tmp == 0)
+        return 0;
 
-      NetESignal*tmpe = new NetESignal(tmp);
-      stmt->set_rval(tmpe);
+    NetESignal* tmpe = new NetESignal(tmp);
+    stmt->set_rval(tmpe);
 
-      return 0;
+    return 0;
 }
 
-int do_expr::condit(NetCondit*stmt)
-{
-	/* synthesize the condition expression, if necessary. */
-      if (! dynamic_cast<NetESignal*>(stmt->expr())) {
-	    NetNet*tmp = stmt->expr()->synthesize(des_, scope_, stmt->expr());
+int do_expr::condit(NetCondit* stmt) {
+    /* synthesize the condition expression, if necessary. */
+    if (!dynamic_cast<NetESignal*>(stmt->expr())) {
+        NetNet* tmp = stmt->expr()->synthesize(des_, scope_, stmt->expr());
 
-	    if (tmp) {
-		  NetESignal*tmpe = new NetESignal(tmp);
-		  stmt->set_expr(tmpe);
-	    }
+        if (tmp) {
+            NetESignal* tmpe = new NetESignal(tmp);
+            stmt->set_expr(tmpe);
+        }
+    }
 
-      }
+    /* Now recurse through the if and else clauses. */
+    if (NetProc* tmp = stmt->if_clause())
+        tmp->match_proc(this);
 
-	/* Now recurse through the if and else clauses. */
-      if (NetProc*tmp = stmt->if_clause())
-	    tmp->match_proc(this);
+    if (NetProc* tmp = stmt->else_clause())
+        tmp->match_proc(this);
 
-      if (NetProc*tmp = stmt->else_clause())
-	    tmp->match_proc(this);
-
-      return 0;
+    return 0;
 }
 
-int do_expr::event_wait(NetEvWait*stmt)
-{
-      NetProc*tmp = stmt->statement();
-      if (tmp)
-	    return tmp->match_proc(this);
-      else
-	    return 0;
+int do_expr::event_wait(NetEvWait* stmt) {
+    NetProc* tmp = stmt->statement();
+    if (tmp)
+        return tmp->match_proc(this);
+    else
+        return 0;
 }
 
-class synth_f  : public functor_t {
+class synth_f : public functor_t {
+  public:
+    synth_f() {
+        top_ = NULL;
+    }
+    void process(Design*, NetProcTop*) override;
 
-    public:
-      synth_f() { top_ = NULL; }
-      void process(Design*, NetProcTop*) override;
+  private:
+    void proc_always_(Design*);
+    void proc_initial_(Design*);
+    void proc_final_(Design*);
 
-    private:
-      void proc_always_(Design*);
-      void proc_initial_(Design*);
-      void proc_final_(Design*);
-
-      NetProcTop*top_;
+    NetProcTop* top_;
 };
 
 
@@ -129,45 +122,40 @@ class synth_f  : public functor_t {
  * Look at a process, and divide the problem into always and initial
  * threads.
  */
-void synth_f::process(Design*des, NetProcTop*top)
-{
-      top_ = top;
-      switch (top->type()) {
-	  case IVL_PR_ALWAYS:
-	  case IVL_PR_ALWAYS_COMB:
-	  case IVL_PR_ALWAYS_FF:
-	  case IVL_PR_ALWAYS_LATCH:
-	    proc_always_(des);
-	    break;
-	  case IVL_PR_INITIAL:
-	    proc_initial_(des);
-	    break;
-	  case IVL_PR_FINAL:
-	    proc_final_(des);
-	    break;
-      }
+void synth_f::process(Design* des, NetProcTop* top) {
+    top_ = top;
+    switch (top->type()) {
+        case IVL_PR_ALWAYS:
+        case IVL_PR_ALWAYS_COMB:
+        case IVL_PR_ALWAYS_FF:
+        case IVL_PR_ALWAYS_LATCH:
+            proc_always_(des);
+            break;
+        case IVL_PR_INITIAL:
+            proc_initial_(des);
+            break;
+        case IVL_PR_FINAL:
+            proc_final_(des);
+            break;
+    }
 }
 
-void synth_f::proc_always_(Design*des)
-{
-      do_expr expr_pat(des, top_->scope());
-      top_->statement()->match_proc(&expr_pat);
+void synth_f::proc_always_(Design* des) {
+    do_expr expr_pat(des, top_->scope());
+    top_->statement()->match_proc(&expr_pat);
 }
 
-void synth_f::proc_initial_(Design*des)
-{
-      do_expr expr_pat(des, top_->scope());
-      top_->statement()->match_proc(&expr_pat);
+void synth_f::proc_initial_(Design* des) {
+    do_expr expr_pat(des, top_->scope());
+    top_->statement()->match_proc(&expr_pat);
 }
 
-void synth_f::proc_final_(Design*des)
-{
-      do_expr expr_pat(des, top_->scope());
-      top_->statement()->match_proc(&expr_pat);
+void synth_f::proc_final_(Design* des) {
+    do_expr expr_pat(des, top_->scope());
+    top_->statement()->match_proc(&expr_pat);
 }
 
-void synth(Design*des)
-{
-      synth_f synth_obj;
-      des->functor(&synth_obj);
+void synth(Design* des) {
+    synth_f synth_obj;
+    des->functor(&synth_obj);
 }

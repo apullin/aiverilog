@@ -19,36 +19,37 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PNamedItem.h"
-# include  "PScope.h"
-# include  "StringHeap.h"
-# include  "netlist.h"
-# include  <vector>
+#include "PNamedItem.h"
+#include "PScope.h"
+#include "StringHeap.h"
+#include "netlist.h"
+#include <vector>
 
 /*
  * The PModport class represents a parsed SystemVerilog modport list.
  */
 class PModport : public PNamedItem {
+  public:
+    // The name is a perm-allocated string. It is the simple name
+    // of the modport, without any scope.
+    explicit PModport(perm_string name);
+    ~PModport() override;
 
-    public:
-	// The name is a perm-allocated string. It is the simple name
-	// of the modport, without any scope.
-      explicit PModport(perm_string name);
-      ~PModport() override;
+    perm_string name() const {
+        return name_;
+    }
 
-      perm_string name() const { return name_; }
+    typedef std::pair<NetNet::PortType, PExpr*> simple_port_t;
+    std::map<perm_string, simple_port_t> simple_ports;
 
-      typedef std::pair <NetNet::PortType,PExpr*> simple_port_t;
-      std::map<perm_string,simple_port_t> simple_ports;
+    SymbolType symbol_type() const override;
 
-      SymbolType symbol_type() const override;
+  private:
+    perm_string name_;
 
-    private:
-      perm_string name_;
-
-    private: // not implemented
-      PModport(const PModport&);
-      PModport& operator= (const PModport&);
+  private:  // not implemented
+    PModport(const PModport&);
+    PModport& operator=(const PModport&);
 };
 
 #endif /* IVL_PModport_H */

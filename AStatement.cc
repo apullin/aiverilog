@@ -17,21 +17,15 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include "config.h"
+#include "config.h"
 
-# include  "AStatement.h"
+#include "AStatement.h"
 
-AContrib::AContrib(PExpr*lv, PExpr*rv)
-: lval_(lv), rval_(rv)
-{
+AContrib::AContrib(PExpr* lv, PExpr* rv) : lval_(lv), rval_(rv) {}
+
+AContrib::~AContrib() {
+    delete lval_;
+    delete rval_;
 }
 
-AContrib::~AContrib()
-{
-      delete lval_;
-      delete rval_;
-}
-
-AProcess::~AProcess()
-{
-}
+AProcess::~AProcess() {}

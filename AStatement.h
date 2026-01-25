@@ -19,12 +19,12 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <map>
-# include  "ivl_target.h"
-# include  "StringHeap.h"
-# include  "LineInfo.h"
-# include  "Statement.h"
-# include  "PExpr.h"
+#include <map>
+#include "ivl_target.h"
+#include "StringHeap.h"
+#include "LineInfo.h"
+#include "Statement.h"
+#include "PExpr.h"
 
 class PExpr;
 class NetAnalog;
@@ -37,20 +37,19 @@ class Design;
  * expression.
  */
 class AContrib : public Statement {
+  public:
+    AContrib(PExpr* lval, PExpr* rval);
+    ~AContrib() override;
 
-    public:
-      AContrib(PExpr*lval, PExpr*rval);
-      ~AContrib() override;
+    AContrib(const AContrib&) = delete;
+    AContrib& operator=(const AContrib&) = delete;
 
-      AContrib(const AContrib&) = delete;
-      AContrib& operator=(const AContrib&) = delete;
+    virtual void dump(std::ostream& out, unsigned ind) const override;
+    virtual NetProc* elaborate(Design* des, NetScope* scope) const override;
 
-      virtual void dump(std::ostream&out, unsigned ind) const override;
-      virtual NetProc* elaborate(Design*des, NetScope*scope) const override;
-
-    private:
-      PExpr*lval_;
-      PExpr*rval_;
+  private:
+    PExpr* lval_;
+    PExpr* rval_;
 };
 
 /*
@@ -59,30 +58,32 @@ class AContrib : public Statement {
  * such as initial vs. always, attributes....
  */
 class AProcess : public LineInfo {
+  public:
+    AProcess(ivl_process_type_t t, Statement* st) : type_(t), statement_(st) {}
 
-    public:
-      AProcess(ivl_process_type_t t, Statement*st)
-      : type_(t), statement_(st) { }
+    ~AProcess() override;
 
-      ~AProcess() override;
+    bool elaborate(Design* des, NetScope* scope) const;
 
-      bool elaborate(Design*des, NetScope*scope) const;
+    ivl_process_type_t type() const {
+        return type_;
+    }
+    Statement* statement() {
+        return statement_;
+    }
 
-      ivl_process_type_t type() const { return type_; }
-      Statement*statement() { return statement_; }
+    std::map<perm_string, PExpr*> attributes;
 
-      std::map<perm_string,PExpr*> attributes;
+    // Dump the analog process
+    void dump(std::ostream& out, unsigned ind) const;
 
-	// Dump the analog process
-      void dump(std::ostream&out, unsigned ind) const;
+  private:
+    ivl_process_type_t type_;
+    Statement* statement_;
 
-    private:
-      ivl_process_type_t type_;
-      Statement*statement_;
-
-    private: // not implemented
-      AProcess(const AProcess&);
-      AProcess& operator= (const AProcess&);
+  private:  // not implemented
+    AProcess(const AProcess&);
+    AProcess& operator=(const AProcess&);
 };
 
 #endif /* IVL_AStatement_H */

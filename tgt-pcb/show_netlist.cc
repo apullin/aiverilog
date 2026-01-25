@@ -17,32 +17,28 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "pcb_priv.h"
-# include  <cassert>
-# include  <cstdio>
+#include "pcb_priv.h"
+#include <cassert>
+#include <cstdio>
 
 using namespace std;
 
-void show_netlist(const char*net_path)
-{
-      assert(net_path);
-      FILE*fnet = fopen(net_path, "w");
-      if (fnet == 0) {
-	    perror(net_path);
-	    return;
-      }
+void show_netlist(const char* net_path) {
+    assert(net_path);
+    FILE* fnet = fopen(net_path, "w");
+    if (fnet == 0) {
+        perror(net_path);
+        return;
+    }
 
-      for (list<nexus_data*>::iterator cur = nexus_list.begin()
-		 ; cur != nexus_list.end() ; ++ cur) {
+    for (list<nexus_data*>::iterator cur = nexus_list.begin(); cur != nexus_list.end(); ++cur) {
+        nexus_data* curp = *cur;
+        fprintf(fnet, "%s", curp->name.c_str());
+        for (set<string>::const_iterator cp = curp->pins.begin(); cp != curp->pins.end(); ++cp) {
+            fprintf(fnet, " %s", cp->c_str());
+        }
+        fprintf(fnet, "\n");
+    }
 
-	    nexus_data*curp = *cur;
-	    fprintf(fnet, "%s", curp->name.c_str());
-	    for (set<string>::const_iterator cp = curp->pins.begin()
-		       ; cp != curp->pins.end() ; ++ cp) {
-		  fprintf(fnet, " %s", cp->c_str());
-	    }
-	    fprintf(fnet, "\n");
-      }
-
-      fclose(fnet);
+    fclose(fnet);
 }

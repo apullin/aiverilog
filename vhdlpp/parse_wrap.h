@@ -25,17 +25,17 @@
  * are needed by the parse type, etc.
  */
 
-# include  <list>
-# include "vhdlint.h"
-# include "vhdlreal.h"
-# include  "architec.h"
-# include  "expression.h"
-# include  "sequential.h"
-# include  "subprogram.h"
-# include  "parse_types.h"
+#include <list>
+#include "vhdlint.h"
+#include "vhdlreal.h"
+#include "architec.h"
+#include "expression.h"
+#include "sequential.h"
+#include "subprogram.h"
+#include "parse_types.h"
 
 class VType;
 
-# include  "parse.h"
+#include "parse.h"
 
 #endif /* IVL_parse_wrap_H */

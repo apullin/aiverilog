@@ -21,13 +21,13 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <iostream>
-# include  <list>
-# include  <map>
-# include  <vector>
-# include  <climits>
-# include  <inttypes.h>
-# include  "StringHeap.h"
+#include <iostream>
+#include <list>
+#include <map>
+#include <vector>
+#include <climits>
+#include <inttypes.h>
+#include "StringHeap.h"
 
 class Architecture;
 class ScopeBase;
@@ -37,7 +37,11 @@ class ExpRange;
 class VTypeDef;
 class ScopeBase;
 
-typedef enum typedef_topo_e { NONE=0, PENDING, MARKED } typedef_topo_t;
+typedef enum typedef_topo_e {
+    NONE = 0,
+    PENDING,
+    MARKED
+} typedef_topo_t;
 typedef std::map<const VTypeDef*, typedef_topo_t> typedef_context_t;
 
 /*
@@ -46,97 +50,102 @@ typedef std::map<const VTypeDef*, typedef_topo_t> typedef_context_t;
  * are compound may in turn reference other types.
  */
 class VType {
+  public:
+    VType() {}
+    virtual ~VType() = 0;
 
-    public:
-      VType() { }
-      virtual ~VType() =0;
+    virtual VType* clone() const = 0;
 
-      virtual VType*clone() const =0;
+    // This is rarely used, but some types may have expressions
+    // that need to be elaborated.
+    virtual int elaborate(Entity* end, ScopeBase* scope) const;
 
-	// This is rarely used, but some types may have expressions
-	// that need to be elaborated.
-      virtual int elaborate(Entity*end, ScopeBase*scope) const;
+    // This virtual method returns true if that is equivalent to
+    // this type. This method is used for example to compare
+    // function prototypes.
+    virtual bool type_match(const VType* that) const;
 
-	// This virtual method returns true if that is equivalent to
-	// this type. This method is used for example to compare
-	// function prototypes.
-      virtual bool type_match(const VType*that) const;
+    // This virtual method writes a VHDL-accurate representation
+    // of this type to the designated stream. This is used for
+    // writing parsed types to library files.
+    virtual void write_to_stream(std::ostream& fd) const;
 
-	// This virtual method writes a VHDL-accurate representation
-	// of this type to the designated stream. This is used for
-	// writing parsed types to library files.
-      virtual void write_to_stream(std::ostream&fd) const;
+    // This is like the above, but is the root function called
+    // directly after the "type <name> is..." when writing type
+    // definitions. Most types accept the default definition of this.
+    virtual void write_type_to_stream(std::ostream& fd) const;
 
-	// This is like the above, but is the root function called
-	// directly after the "type <name> is..." when writing type
-	// definitions. Most types accept the default definition of this.
-      virtual void write_type_to_stream(std::ostream&fd) const;
+    // Emits a type definition. This is used to distinguish types and
+    // subtypes.
+    virtual void write_typedef_to_stream(std::ostream& fd, perm_string name) const;
 
-	// Emits a type definition. This is used to distinguish types and
-	// subtypes.
-      virtual void write_typedef_to_stream(std::ostream&fd, perm_string name) const;
+    // This virtual method writes a human-readable version of the
+    // type to a given file for debug purposes. (Question: is this
+    // really necessary given the write_to_stream method?)
+    virtual void show(std::ostream&) const;
 
-	// This virtual method writes a human-readable version of the
-	// type to a given file for debug purposes. (Question: is this
-	// really necessary given the write_to_stream method?)
-      virtual void show(std::ostream&) const;
+    // This virtual method emits a definition for the specific
+    // type. It is used to emit typedef's.
+    virtual int emit_def(std::ostream& out, perm_string name) const = 0;
 
-	// This virtual method emits a definition for the specific
-	// type. It is used to emit typedef's.
-      virtual int emit_def(std::ostream&out, perm_string name) const =0;
+    // This virtual method causes VTypeDef types to emit typedefs
+    // of themselves. The VTypeDef implementation of this method
+    // uses this method recursively to do a depth-first emit of
+    // all the types that it emits.
+    virtual int emit_typedef(std::ostream& out, typedef_context_t& ctx) const;
 
-	// This virtual method causes VTypeDef types to emit typedefs
-	// of themselves. The VTypeDef implementation of this method
-	// uses this method recursively to do a depth-first emit of
-	// all the types that it emits.
-      virtual int emit_typedef(std::ostream&out, typedef_context_t&ctx) const;
+    // Determines if a type can be used in Verilog packed array.
+    virtual bool can_be_packed() const {
+        return false;
+    }
 
-	// Determines if a type can be used in Verilog packed array.
-      virtual bool can_be_packed() const { return false; }
+    // Returns true if the type has an undefined dimension.
+    virtual bool is_unbounded() const {
+        return false;
+    }
 
-	// Returns true if the type has an undefined dimension.
-      virtual bool is_unbounded() const { return false; }
+    // Checks if the variable length is dependent on other expressions, that
+    // cannot be evaluated (e.g. 'length, 'left, 'right).
+    virtual bool is_variable_length(ScopeBase*) const {
+        return false;
+    }
 
-	// Checks if the variable length is dependent on other expressions, that
-	// cannot be evaluated (e.g. 'length, 'left, 'right).
-      virtual bool is_variable_length(ScopeBase*) const { return false; }
+    // Returns a perm_string that can be used in automatically created
+    // typedefs (i.e. not ones defined by the user).
+    perm_string get_generic_typename() const;
 
-	// Returns a perm_string that can be used in automatically created
-	// typedefs (i.e. not ones defined by the user).
-      perm_string get_generic_typename() const;
+    // Returns the type width in bits or negative number if it is impossible
+    // to evaluate.
+    virtual int get_width(ScopeBase*) const {
+        return -1;
+    }
 
-	// Returns the type width in bits or negative number if it is impossible
-	// to evaluate.
-      virtual int get_width(ScopeBase*) const { return -1; }
+    // This virtual method is called to emit the declaration. This
+    // is used by the decl_t object to emit variable/wire/port declarations.
+    virtual int emit_decl(std::ostream& out, perm_string name, bool reg_flag) const;
 
-	// This virtual method is called to emit the declaration. This
-	// is used by the decl_t object to emit variable/wire/port declarations.
-      virtual int emit_decl(std::ostream&out, perm_string name, bool reg_flag) const;
+  public:
+    // A couple places use the VType along with a few
+    // per-declaration details, so provide a common structure for
+    // holding that stuff together.
+    struct decl_t {
+        decl_t() : type(0), reg_flag(false) {}
+        int emit(std::ostream& out, perm_string name) const;
 
-    public:
-	// A couple places use the VType along with a few
-	// per-declaration details, so provide a common structure for
-	// holding that stuff together.
-      struct decl_t {
-	    decl_t() : type(0), reg_flag(false) { }
-	    int emit(std::ostream&out, perm_string name) const;
+        const VType* type;
+        bool reg_flag;
+    };
 
-	    const VType*type;
-	    bool reg_flag;
-      };
-
-    protected:
-      static inline void emit_name(std::ostream&out, perm_string name)
-      {
-        if(name != empty_perm_string)
+  protected:
+    static inline void emit_name(std::ostream& out, perm_string name) {
+        if (name != empty_perm_string)
             out << " \\" << name << " ";
-      }
+    }
 };
 
-inline std::ostream&operator << (std::ostream&out, const VType&item)
-{
-      item.show(out);
-      return out;
+inline std::ostream& operator<<(std::ostream& out, const VType& item) {
+    item.show(out);
+    return out;
 }
 
 extern void preload_global_types(void);
@@ -145,10 +154,12 @@ extern void preload_global_types(void);
  * This type is a placeholder for ERROR types.
  */
 class VTypeERROR : public VType {
-    VType*clone() const override { return NULL; }
+    VType* clone() const override {
+        return NULL;
+    }
 
-    public:
-      int emit_def(std::ostream&out, perm_string name) const override;
+  public:
+    int emit_def(std::ostream& out, perm_string name) const override;
 };
 
 /*
@@ -156,31 +167,43 @@ class VTypeERROR : public VType {
  * type subsystem.
  */
 class VTypePrimitive : public VType {
+  public:
+    enum type_t {
+        BIT,
+        INTEGER,
+        NATURAL,
+        REAL,
+        STDLOGIC,
+        TIME
+    };
 
-    public:
-      enum type_t { BIT, INTEGER, NATURAL, REAL, STDLOGIC, TIME };
+  public:
+    explicit VTypePrimitive(type_t tt, bool packed = false);
+    ~VTypePrimitive() override;
 
-    public:
-      explicit VTypePrimitive(type_t tt, bool packed = false);
-      ~VTypePrimitive() override;
+    VType* clone() const override {
+        return new VTypePrimitive(*this);
+    }
 
-      VType*clone() const override { return new VTypePrimitive(*this); }
+    bool type_match(const VType* that) const override;
+    void write_to_stream(std::ostream& fd) const override;
+    void show(std::ostream&) const override;
+    int get_width(ScopeBase* scope) const override;
 
-      bool type_match(const VType*that) const override;
-      void write_to_stream(std::ostream&fd) const override;
-      void show(std::ostream&) const override;
-      int get_width(ScopeBase*scope) const override;
+    type_t type() const {
+        return type_;
+    }
 
-      type_t type() const { return type_; }
+    int emit_primitive_type(std::ostream& fd) const;
+    int emit_def(std::ostream& out, perm_string name) const override;
 
-      int emit_primitive_type(std::ostream&fd) const;
-      int emit_def(std::ostream&out, perm_string name) const override;
+    bool can_be_packed() const override {
+        return packed_;
+    }
 
-      bool can_be_packed() const override { return packed_; }
-
-    private:
-      type_t type_;
-      bool packed_;
+  private:
+    type_t type_;
+    bool packed_;
 };
 
 /*
@@ -190,251 +213,297 @@ class VTypePrimitive : public VType {
  * ranges as "box" ranges, meaning present but not defined.
  */
 class VTypeArray : public VType {
+  public:
+    class range_t {
+      public:
+        explicit range_t(Expression* m = NULL, Expression* l = NULL, bool down_to = true)
+            : msb_(m), lsb_(l), direction_(down_to) {}
 
-    public:
-      class range_t {
-	  public:
-	    explicit range_t(Expression*m = NULL, Expression*l = NULL, bool down_to = true) :
-                msb_(m), lsb_(l), direction_(down_to) { }
+        range_t* clone() const;
 
-	    range_t*clone() const;
+        inline bool is_box() const {
+            return msb_ == 0 && lsb_ == 0;
+        }
+        inline bool is_downto() const {
+            return direction_;
+        }
 
-	    inline bool is_box() const { return msb_==0 && lsb_==0; }
-	    inline bool is_downto() const { return direction_; }
+        inline Expression* msb() const {
+            return msb_;
+        }
+        inline Expression* lsb() const {
+            return lsb_;
+        }
 
-	    inline Expression* msb() const { return msb_; }
-	    inline Expression* lsb() const { return lsb_; }
+      private:
+        Expression* msb_;
+        Expression* lsb_;
+        bool direction_;
+    };
 
-	  private:
-	    Expression* msb_;
-	    Expression* lsb_;
-	    bool direction_;
-      };
+  public:
+    VTypeArray(const VType* etype, const std::vector<range_t>& r, bool signed_vector = false);
+    VTypeArray(const VType* etype, std::list<ExpRange*>* r, bool signed_vector = false);
+    VTypeArray(const VType* etype, int msb, int lsb, bool signed_vector = false);
+    ~VTypeArray() override;
 
-    public:
-      VTypeArray(const VType*etype, const std::vector<range_t>&r, bool signed_vector = false);
-      VTypeArray(const VType*etype, std::list<ExpRange*>*r, bool signed_vector = false);
-      VTypeArray(const VType*etype, int msb, int lsb, bool signed_vector = false);
-      ~VTypeArray() override;
+    VType* clone() const override;
 
-      VType*clone() const override;
+    int elaborate(Entity* ent, ScopeBase* scope) const override;
+    bool type_match(const VType* that) const override;
+    void write_to_stream(std::ostream& fd) const override;
+    void write_type_to_stream(std::ostream& fd) const override;
+    void show(std::ostream&) const override;
+    int get_width(ScopeBase* scope) const override;
 
-      int elaborate(Entity*ent, ScopeBase*scope) const override;
-      bool type_match(const VType*that) const override;
-      void write_to_stream(std::ostream&fd) const override;
-      void write_type_to_stream(std::ostream&fd) const override;
-      void show(std::ostream&) const override;
-      int get_width(ScopeBase*scope) const override;
+    const std::vector<range_t>& dimensions() const {
+        return ranges_;
+    };
+    const range_t& dimension(size_t idx) const {
+        return ranges_[idx];
+    }
 
-      const std::vector<range_t>&dimensions() const { return ranges_; };
-      const range_t&dimension(size_t idx) const
-      { return ranges_[idx]; }
+    inline bool signed_vector() const {
+        return signed_flag_;
+    }
 
-      inline bool signed_vector() const { return signed_flag_; }
+    // returns the type of element held in the array
+    inline const VType* element_type() const {
+        return parent_ ? parent_->element_type() : etype_;
+    }
 
-	// returns the type of element held in the array
-      inline const VType* element_type() const { return parent_ ? parent_->element_type() : etype_; }
+    // returns the basic type of element held in the array
+    // (unfolds typedefs and multidimensional arrays)
+    // typedef_allowed decides if VTypeDef can be returned or should
+    // it be unfolded
+    const VType* basic_type(bool typedef_allowed = true) const;
 
-	// returns the basic type of element held in the array
-	// (unfolds typedefs and multidimensional arrays)
-	// typedef_allowed decides if VTypeDef can be returned or should
-	// it be unfolded
-      const VType* basic_type(bool typedef_allowed = true) const;
+    int emit_def(std::ostream& out, perm_string name) const override;
+    int emit_typedef(std::ostream& out, typedef_context_t& ctx) const override;
 
-      int emit_def(std::ostream&out, perm_string name) const override;
-      int emit_typedef(std::ostream&out, typedef_context_t&ctx) const override;
+    bool can_be_packed() const override {
+        return etype_->can_be_packed();
+    }
 
-      bool can_be_packed() const override { return etype_->can_be_packed(); }
+    bool is_unbounded() const override;
 
-      bool is_unbounded() const override;
+    bool is_variable_length(ScopeBase* scope) const override;
 
-      bool is_variable_length(ScopeBase*scope) const override;
+    // To handle subtypes
+    inline void set_parent_type(const VTypeArray* parent) {
+        parent_ = parent;
+    }
 
-	// To handle subtypes
-      inline void set_parent_type(const VTypeArray*parent) { parent_ = parent; }
+    const VTypeArray* get_parent_type() const {
+        return parent_;
+    }
 
-      const VTypeArray*get_parent_type() const { return parent_; }
+    // Wherever it is possible, replaces range lsb & msb expressions with
+    // constant integers.
+    void evaluate_ranges(ScopeBase* scope);
 
-	// Wherever it is possible, replaces range lsb & msb expressions with
-	// constant integers.
-      void evaluate_ranges(ScopeBase*scope);
+  private:
+    int emit_with_dims_(std::ostream& out, bool packed, perm_string name) const;
 
-    private:
-      int emit_with_dims_(std::ostream&out, bool packed, perm_string name) const;
+    // Handles a few special types of array (*_vector, string types).
+    bool write_special_case(std::ostream& out) const;
+    void write_range_to_stream_(std::ostream& fd) const;
 
-	// Handles a few special types of array (*_vector, string types).
-      bool write_special_case(std::ostream&out) const;
-      void write_range_to_stream_(std::ostream&fd) const;
-
-      const VType*etype_;
-      std::vector<range_t> ranges_;
-      bool signed_flag_;
-      const VTypeArray*parent_;
+    const VType* etype_;
+    std::vector<range_t> ranges_;
+    bool signed_flag_;
+    const VTypeArray* parent_;
 };
 
 class VTypeRange : public VType {
+  public:
+    VTypeRange(const VType* base);
+    virtual ~VTypeRange() override = 0;
 
-    public:
-      VTypeRange(const VType*base);
-      virtual ~VTypeRange() override = 0;
+    bool write_std_types(std::ostream& fd) const;
+    int emit_def(std::ostream& out, perm_string name) const override;
+    bool type_match(const VType* that) const override;
 
-      bool write_std_types(std::ostream&fd) const;
-      int emit_def(std::ostream&out, perm_string name) const override;
-      bool type_match(const VType*that) const override;
+    // Get the type that is limited by the range.
+    inline const VType* base_type() const {
+        return base_;
+    }
 
-	// Get the type that is limited by the range.
-      inline const VType*base_type() const { return base_; }
-
-    protected:
-      const VType*base_;
+  protected:
+    const VType* base_;
 };
 
 class VTypeRangeConst : public VTypeRange {
+  public:
+    VTypeRangeConst(const VType* base, int64_t end, int64_t start);
 
-    public:
-      VTypeRangeConst(const VType*base, int64_t end, int64_t start);
+    VType* clone() const override {
+        return new VTypeRangeConst(base_type()->clone(), start_, end_);
+    }
 
-      VType*clone() const override {
-          return new VTypeRangeConst(base_type()->clone(), start_, end_);
-      }
+    int64_t start() const {
+        return start_;
+    }
+    int64_t end() const {
+        return end_;
+    }
 
-      int64_t start() const { return start_; }
-      int64_t end() const { return end_; }
+    void write_to_stream(std::ostream& fd) const override;
 
-      void write_to_stream(std::ostream&fd) const override;
-
-    private:
-      const int64_t start_, end_;
+  private:
+    const int64_t start_, end_;
 };
 
 class VTypeRangeExpr : public VTypeRange {
+  public:
+    VTypeRangeExpr(const VType* base, Expression* end, Expression* start, bool downto);
+    ~VTypeRangeExpr() override;
 
-    public:
-      VTypeRangeExpr(const VType*base, Expression*end, Expression*start, bool downto);
-      ~VTypeRangeExpr() override;
+    VTypeRangeExpr(const VTypeRangeExpr&) = delete;
+    VTypeRangeExpr& operator=(const VTypeRangeExpr&) = delete;
 
-      VTypeRangeExpr(const VTypeRangeExpr&) = delete;
-      VTypeRangeExpr& operator=(const VTypeRangeExpr&) = delete;
+    VType* clone() const override;
+    int elaborate(Entity* end, ScopeBase* scope) const override;
 
-      VType*clone() const override;
-      int elaborate(Entity*end, ScopeBase*scope) const override;
+  public:  // Virtual methods
+    void write_to_stream(std::ostream& fd) const override;
 
-    public: // Virtual methods
-      void write_to_stream(std::ostream&fd) const override;
+  private:
+    // Boundaries
+    Expression *start_, *end_;
 
-    private:
-      // Boundaries
-      Expression*start_, *end_;
-
-      // Range direction (downto/to)
-      bool downto_;
+    // Range direction (downto/to)
+    bool downto_;
 };
 
 class VTypeEnum : public VType {
+  public:
+    explicit VTypeEnum(const std::list<perm_string>* names);
+    ~VTypeEnum() override;
 
-    public:
-      explicit VTypeEnum(const std::list<perm_string>*names);
-      ~VTypeEnum() override;
+    VType* clone() const override {
+        return new VTypeEnum(*this);
+    }
 
-      VType*clone() const override { return new VTypeEnum(*this); }
+    void write_to_stream(std::ostream& fd) const override;
+    void show(std::ostream&) const override;
+    int get_width(ScopeBase*) const override {
+        return 32;
+    }
 
-      void write_to_stream(std::ostream&fd) const override;
-      void show(std::ostream&) const override;
-      int get_width(ScopeBase*) const override { return 32; }
+    int emit_def(std::ostream& out, perm_string name) const override;
+    int emit_decl(std::ostream& out, perm_string name, bool reg_flag) const override;
 
-      int emit_def(std::ostream&out, perm_string name) const override;
-      int emit_decl(std::ostream&out, perm_string name, bool reg_flag) const override;
+    // Checks if the name is stored in the enum.
+    bool has_name(perm_string name) const;
 
-	// Checks if the name is stored in the enum.
-      bool has_name(perm_string name) const;
-
-    private:
-      std::vector<perm_string>names_;
+  private:
+    std::vector<perm_string> names_;
 };
 
 class VTypeRecord : public VType {
+  public:
+    class element_t {
+      public:
+        element_t(perm_string name, const VType* type);
 
-    public:
-      class element_t {
-	  public:
-	    element_t(perm_string name, const VType*type);
+        void write_to_stream(std::ostream&) const;
 
-	    void write_to_stream(std::ostream&) const;
+        inline perm_string peek_name() const {
+            return name_;
+        }
+        inline const VType* peek_type() const {
+            return type_;
+        }
 
-	    inline perm_string peek_name() const { return name_; }
-	    inline const VType* peek_type() const { return type_; }
+      private:
+        perm_string name_;
+        const VType* type_;
 
-	  private:
-	    perm_string name_;
-	    const VType*type_;
+      private:  // Not implement
+        element_t(const element_t&);
+        element_t& operator=(const element_t);
+    };
 
-	  private:// Not implement
-	    element_t(const element_t&);
-	    element_t& operator= (const element_t);
-      };
+  public:
+    explicit VTypeRecord(std::list<element_t*>* elements);
+    ~VTypeRecord() override;
 
-    public:
-      explicit VTypeRecord(std::list<element_t*>*elements);
-      ~VTypeRecord() override;
+    VType* clone() const override {
+        return new VTypeRecord(*this);
+    }
 
-      VType*clone() const override { return new VTypeRecord(*this); }
+    void write_to_stream(std::ostream& fd) const override;
+    void show(std::ostream&) const override;
+    int get_width(ScopeBase* scope) const override;
+    int emit_def(std::ostream& out, perm_string name) const override;
 
-      void write_to_stream(std::ostream&fd) const override;
-      void show(std::ostream&) const override;
-      int get_width(ScopeBase*scope) const override;
-      int emit_def(std::ostream&out, perm_string name) const override;
+    bool can_be_packed() const override {
+        return true;
+    }
+    const element_t* element_by_name(perm_string name, int* index = NULL) const;
+    inline const std::vector<element_t*>& get_elements() const {
+        return elements_;
+    }
 
-      bool can_be_packed() const override { return true; }
-      const element_t* element_by_name(perm_string name, int*index = NULL) const;
-      inline const std::vector<element_t*>&get_elements() const { return elements_; }
-
-    private:
-      std::vector<element_t*> elements_;
+  private:
+    std::vector<element_t*> elements_;
 };
 
 class VTypeDef : public VType {
+  public:
+    explicit VTypeDef(perm_string name);
+    explicit VTypeDef(perm_string name, const VType* is);
+    virtual ~VTypeDef() override;
 
-    public:
-      explicit VTypeDef(perm_string name);
-      explicit VTypeDef(perm_string name, const VType*is);
-      virtual ~VTypeDef() override;
+    VType* clone() const override {
+        return new VTypeDef(*this);
+    }
 
-      VType*clone() const override { return new VTypeDef(*this); }
+    bool type_match(const VType* that) const override;
 
-      bool type_match(const VType*that) const override;
+    inline perm_string peek_name() const {
+        return name_;
+    }
 
-      inline perm_string peek_name() const { return name_; }
+    // If the type is not given a definition in the constructor,
+    // then this must be used to set the definition later.
+    void set_definition(const VType* is);
 
-	// If the type is not given a definition in the constructor,
-	// then this must be used to set the definition later.
-      void set_definition(const VType*is);
+    // In some situations, we only need the definition of the
+    // type, and this method gets it for us.
+    inline const VType* peek_definition(void) const {
+        return type_;
+    }
 
-	// In some situations, we only need the definition of the
-	// type, and this method gets it for us.
-      inline const VType* peek_definition(void) const { return type_; }
+    virtual void write_to_stream(std::ostream& fd) const override;
+    void write_type_to_stream(std::ostream& fd) const override;
+    int get_width(ScopeBase* scope) const override {
+        return type_->get_width(scope);
+    }
+    int emit_typedef(std::ostream& out, typedef_context_t& ctx) const override;
 
-      virtual void write_to_stream(std::ostream&fd) const override;
-      void write_type_to_stream(std::ostream&fd) const override;
-      int get_width(ScopeBase*scope) const override { return type_->get_width(scope); }
-      int emit_typedef(std::ostream&out, typedef_context_t&ctx) const override;
+    int emit_def(std::ostream& out, perm_string name) const override;
+    int emit_decl(std::ostream& out, perm_string name, bool reg_flag) const override;
 
-      int emit_def(std::ostream&out, perm_string name) const override;
-      int emit_decl(std::ostream&out, perm_string name, bool reg_flag) const override;
+    bool can_be_packed() const override {
+        return type_->can_be_packed();
+    }
 
-      bool can_be_packed() const override { return type_->can_be_packed(); }
+    bool is_unbounded() const override {
+        return type_->is_unbounded();
+    }
 
-      bool is_unbounded() const override { return type_->is_unbounded(); }
-
-    protected:
-      perm_string name_;
-      const VType*type_;
+  protected:
+    perm_string name_;
+    const VType* type_;
 };
 
 class VSubTypeDef : public VTypeDef {
-    public:
-      explicit VSubTypeDef(perm_string name) : VTypeDef(name) {}
-      explicit VSubTypeDef(perm_string name, const VType*is) : VTypeDef(name, is) {}
-      void write_typedef_to_stream(std::ostream&fd, perm_string name) const override;
+  public:
+    explicit VSubTypeDef(perm_string name) : VTypeDef(name) {}
+    explicit VSubTypeDef(perm_string name, const VType* is) : VTypeDef(name, is) {}
+    void write_typedef_to_stream(std::ostream& fd, perm_string name) const override;
 };
 
 #endif /* IVL_vtype_H */

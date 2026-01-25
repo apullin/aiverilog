@@ -17,31 +17,31 @@
  *    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA
  */
 
-# include "version_base.h"
-# include "version_tag.h"
-# include "pcb_config.h"
-# include "pcb_priv.h"
-# include "fp_api.h"
-# include <iostream>
-# include <cassert>
+#include "version_base.h"
+#include "version_tag.h"
+#include "pcb_config.h"
+#include "pcb_priv.h"
+#include "fp_api.h"
+#include <iostream>
+#include <cassert>
 
 using namespace std;
 
-map<string,fp_element_t> footprints;
+map<string, fp_element_t> footprints;
 
-static int check_footprint(element_data_t*elem);
+static int check_footprint(element_data_t* elem);
 
 /*
-* Scan the element list and collect footprints needed.
-*/
-int load_footprints(void)
-{
-      for (map<string,element_data_t*>::const_iterator cur = element_list.begin()
-		 ; cur != element_list.end() ; ++ cur) {
-	    check_footprint(cur->second);
-      }
+ * Scan the element list and collect footprints needed.
+ */
+int load_footprints(void) {
+    for (map<string, element_data_t*>::const_iterator cur = element_list.begin();
+         cur != element_list.end();
+         ++cur) {
+        check_footprint(cur->second);
+    }
 
-      return 0;
+    return 0;
 }
 
 /*
@@ -52,39 +52,37 @@ int load_footprints(void)
  * store the Element into the footprints map.
  */
 static string cur_footprint = "";
-void callback_fp_element(const struct fp_element_t&cur_elem)
-{
-      assert(cur_footprint != "");
-      footprints[cur_footprint] = cur_elem;
-      cur_footprint = "";
+void callback_fp_element(const struct fp_element_t& cur_elem) {
+    assert(cur_footprint != "");
+    footprints[cur_footprint] = cur_elem;
+    cur_footprint = "";
 }
 
 
-static int check_footprint(element_data_t*elem)
-{
-      if (elem->footprint == "") {
-	    cerr << "No footprint defined for \"" << elem->description << "\"." << endl;
-	    return -1;
-      }
+static int check_footprint(element_data_t* elem) {
+    if (elem->footprint == "") {
+        cerr << "No footprint defined for \"" << elem->description << "\"." << endl;
+        return -1;
+    }
 
-      map<string,fp_element_t>::iterator match = footprints.find(elem->footprint);
-      if (match != footprints.end())
-	    return 0;
+    map<string, fp_element_t>::iterator match = footprints.find(elem->footprint);
+    if (match != footprints.end())
+        return 0;
 
-      string fpname = elem->footprint + ".fp";
+    string fpname = elem->footprint + ".fp";
 
-      cur_footprint = elem->footprint;
-      int rc = parse_fp_file(fpname);
-      if (rc != 0) {
-	    cerr << "parse_fp_file(" << fpname << ") returns rc=" << rc << endl;
-	    return rc;
-      }
+    cur_footprint = elem->footprint;
+    int rc = parse_fp_file(fpname);
+    if (rc != 0) {
+        cerr << "parse_fp_file(" << fpname << ") returns rc=" << rc << endl;
+        return rc;
+    }
 
-      match = footprints.find(elem->footprint);
-      if (match == footprints.end()) {
-	    cerr << "Unable to locate footprint " << elem->footprint << "." << endl;
-	    return -2;
-      }
+    match = footprints.find(elem->footprint);
+    if (match == footprints.end()) {
+        cerr << "Unable to locate footprint " << elem->footprint << "." << endl;
+        return -2;
+    }
 
-      return 0;
+    return 0;
 }

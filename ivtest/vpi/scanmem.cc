@@ -22,16 +22,16 @@
 #include <string.h>
 #include "vpi_user.h"
 
-extern "C" PLI_INT32 MemPeek(PLI_BYTE8 *)
-{
-    vpiHandle	mod_h, mem_h, iterate, handle;
-    s_vpi_value	value;
+extern "C" PLI_INT32 MemPeek(PLI_BYTE8*) {
+    vpiHandle mod_h, mem_h, iterate, handle;
+    s_vpi_value value;
 
     vpi_printf("MemPeek Callback\n");
 
     // get top module handle
     iterate = vpi_iterate(vpiModule, NULL);
-    if (iterate == NULL) return -1;
+    if (iterate == NULL)
+        return -1;
     mod_h = vpi_scan(iterate);
     vpi_free_object(iterate);
 
@@ -41,14 +41,14 @@ extern "C" PLI_INT32 MemPeek(PLI_BYTE8 *)
     if (iterate != NULL) {
         while ((handle = vpi_scan(iterate))) {
             if (!strcmp("m_peek", vpi_get_str(vpiName, handle))) {
-		vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
-		vpi_printf("  Found %s (%d deep x %d bits)\n",
-		    vpi_get_str(vpiName, handle),
-		    (int)vpi_get(vpiSize, handle),
-		    (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
-		vpi_free_object(memw_iter);
-		mem_h = handle;
-		vpi_free_object(iterate);
+                vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
+                vpi_printf("  Found %s (%d deep x %d bits)\n",
+                           vpi_get_str(vpiName, handle),
+                           (int)vpi_get(vpiSize, handle),
+                           (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
+                vpi_free_object(memw_iter);
+                mem_h = handle;
+                vpi_free_object(iterate);
                 break;
             }
         }
@@ -57,34 +57,33 @@ extern "C" PLI_INT32 MemPeek(PLI_BYTE8 *)
     // Invert read memory
     iterate = vpi_iterate(vpiMemoryWord, mem_h);
     while ((handle = vpi_scan(iterate))) {
-	// Get current value
-	value.format=vpiIntVal;
-	vpi_get_value(handle, &value);
+        // Get current value
+        value.format = vpiIntVal;
+        vpi_get_value(handle, &value);
 
-	// Store inverted
-	value.value.integer ^= 0xffffffff;
-	if (vpi_get(vpiSize, handle) < 32) {
-	    value.value.integer &= ~((1 << vpi_get(vpiSize, handle)) - 1);
-	}
-	vpi_put_value(handle, &value, NULL, vpiNoDelay);
+        // Store inverted
+        value.value.integer ^= 0xffffffff;
+        if (vpi_get(vpiSize, handle) < 32) {
+            value.value.integer &= ~((1 << vpi_get(vpiSize, handle)) - 1);
+        }
+        vpi_put_value(handle, &value, NULL, vpiNoDelay);
     }
 
     return 0;
 }
 
-#define REP4(x) \
-    (((x) & 0xff) << 24 | ((x) & 0xff) << 16 | ((x) & 0xff) << 8 | ((x) & 0xff))
+#define REP4(x) (((x) & 0xff) << 24 | ((x) & 0xff) << 16 | ((x) & 0xff) << 8 | ((x) & 0xff))
 
-extern "C" PLI_INT32 MemPoke(PLI_BYTE8 *)
-{
-    vpiHandle	mod_h, mem_h, iterate, handle;
-    s_vpi_value	value;
+extern "C" PLI_INT32 MemPoke(PLI_BYTE8*) {
+    vpiHandle mod_h, mem_h, iterate, handle;
+    s_vpi_value value;
 
     vpi_printf("MemPoke Callback\n");
 
     // get top module handle
     iterate = vpi_iterate(vpiModule, NULL);
-    if (iterate == NULL) return -1;
+    if (iterate == NULL)
+        return -1;
     mod_h = vpi_scan(iterate);
     vpi_free_object(iterate);
 
@@ -94,14 +93,14 @@ extern "C" PLI_INT32 MemPoke(PLI_BYTE8 *)
     if (iterate != NULL) {
         while ((handle = vpi_scan(iterate))) {
             if (!strcmp("m_poke", vpi_get_str(vpiName, handle))) {
-		vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
-		vpi_printf("  Found %s (%d deep x %d bits)\n",
-		    vpi_get_str(vpiName, handle),
-		    (int)vpi_get(vpiSize, handle),
-		    (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
-		vpi_free_object(memw_iter);
-		mem_h = handle;
-		vpi_free_object(iterate);
+                vpiHandle memw_iter = vpi_iterate(vpiMemoryWord, handle);
+                vpi_printf("  Found %s (%d deep x %d bits)\n",
+                           vpi_get_str(vpiName, handle),
+                           (int)vpi_get(vpiSize, handle),
+                           (int)vpi_get(vpiSize, vpi_scan(memw_iter)));
+                vpi_free_object(memw_iter);
+                mem_h = handle;
+                vpi_free_object(iterate);
                 break;
             }
         }
@@ -110,21 +109,19 @@ extern "C" PLI_INT32 MemPoke(PLI_BYTE8 *)
     // Poke memory using integers
     iterate = vpi_iterate(vpiMemoryWord, mem_h);
     while ((handle = vpi_scan(iterate))) {
-	value.format = vpiIntVal;
-	vpi_get_value(vpi_handle(vpiIndex, handle), &value);
-	value.value.integer = REP4(1 + value.value.integer);
-	if (vpi_get(vpiSize, handle) < 32) {
-	    value.value.integer &= ~((1 << vpi_get(vpiSize, handle)) - 1);
-	}
-	vpi_put_value(handle, &value, NULL, vpiNoDelay);
+        value.format = vpiIntVal;
+        vpi_get_value(vpi_handle(vpiIndex, handle), &value);
+        value.value.integer = REP4(1 + value.value.integer);
+        if (vpi_get(vpiSize, handle) < 32) {
+            value.value.integer &= ~((1 << vpi_get(vpiSize, handle)) - 1);
+        }
+        vpi_put_value(handle, &value, NULL, vpiNoDelay);
     }
 
     return 0;
 }
 
-extern "C" void
-RegisterCallbacks(void)
-{
+extern "C" void RegisterCallbacks(void) {
     s_vpi_systf_data tf_data;
 
     vpi_printf("Registering Callbacks\n");
@@ -144,7 +141,4 @@ RegisterCallbacks(void)
 #ifdef __SUNPRO_CC
 extern "C"
 #endif
-void (*vlog_startup_routines[]) () = {
-    RegisterCallbacks,
-    0
-};
+    void (*vlog_startup_routines[])() = {RegisterCallbacks, 0};

@@ -26,52 +26,48 @@
 #include "debug.h"
 #include "globals.h"
 
-#define VCD_BSIZ 32768	/* size of getch() emulation buffer--this val should be ok */
+#define VCD_BSIZ 32768 /* size of getch() emulation buffer--this val should be ok */
 #define VCD_FAIL 666
 
-TimeType vcd_main(struct globals *obj, char *fname);
-void append_vcd_slisthier(struct globals *obj, char *str);
+TimeType vcd_main(struct globals* obj, char* fname);
+void append_vcd_slisthier(struct globals* obj, char* str);
 
-struct sym_chain
-{
-struct sym_chain *next;
-struct symbol *val;
+struct sym_chain {
+    struct sym_chain* next;
+    struct symbol* val;
 };
 
-struct slist
-{
-struct slist *next;
-char *str;
-int len;
-};
-
-
-struct vcdsymbol
-{
-struct vcdsymbol *root, *chain;
-struct symbol *sym_chain;
-
-struct vcdsymbol *next;
-char *name;
-char *id;
-unsigned char vartype;
-int msi, lsi;
-int size;
-char *value;
-struct queuedevent *ev; /* only if vartype==V_EVENT */
-struct Node **narray;
+struct slist {
+    struct slist* next;
+    char* str;
+    int len;
 };
 
 
-struct queuedevent
-{
-struct queuedevent *next;
-struct vcdsymbol *sym;
-TimeType last_event_time;    /* make +1 == 0 if there's not an event there too */
+struct vcdsymbol {
+    struct vcdsymbol *root, *chain;
+    struct symbol* sym_chain;
+
+    struct vcdsymbol* next;
+    char* name;
+    char* id;
+    unsigned char vartype;
+    int msi, lsi;
+    int size;
+    char* value;
+    struct queuedevent* ev; /* only if vartype==V_EVENT */
+    struct Node** narray;
+};
+
+
+struct queuedevent {
+    struct queuedevent* next;
+    struct vcdsymbol* sym;
+    TimeType last_event_time; /* make +1 == 0 if there's not an event there too */
 };
 
 extern char autocoalesce;
-extern int vcd_explicit_zero_subscripts;  /* 0=yes, -1=no */
+extern int vcd_explicit_zero_subscripts; /* 0=yes, -1=no */
 extern char convert_to_reals;
 extern char atomic_vectors;
 extern char hier_delimeter;

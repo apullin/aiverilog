@@ -19,17 +19,17 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <stdio.h>
-# include  "vpi_user.h"
+#include <stdio.h>
+#include "vpi_user.h"
 
-# define MEM_ADDRESS 257
-# define MEM_WORD    258
-# define MEM_ERROR   259
+#define MEM_ADDRESS 257
+#define MEM_WORD 258
+#define MEM_ERROR 259
 
-extern char *readmem_error_token;
+extern char* readmem_error_token;
 
-extern void sys_readmem_start_file(vpiHandle callh, FILE*in, int bin_flag,
-				   unsigned width, struct t_vpi_vecval*val);
+extern void sys_readmem_start_file(
+    vpiHandle callh, FILE* in, int bin_flag, unsigned width, struct t_vpi_vecval* val);
 extern int readmemlex(void);
 
 extern void destroy_readmem_lexor(void);

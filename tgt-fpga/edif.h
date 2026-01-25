@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <stdio.h>
-# include  <ivl_target.h>
+#include <stdio.h>
+#include <ivl_target.h>
 
 /*
  * These types and functions support the task of generating and
@@ -106,8 +106,8 @@ typedef struct edif_joint_s* edif_joint_t;
    defines ports for it. A real celltable is terminated by an entry
    with a null pointer for the cell_name. */
 struct edif_xlib_celltable {
-      const char*cell_name;
-      edif_cell_t (*cell_func)(edif_xlibrary_t xlib);
+    const char* cell_name;
+    edif_cell_t (*cell_func)(edif_xlibrary_t xlib);
 };
 
 /* FUNCTIONS */
@@ -115,14 +115,13 @@ struct edif_xlib_celltable {
 
 /* Start a new EDIF design. The design_name will be used as the name
    of the top-mode module of the design. */
-extern edif_t edif_create(const char*design_name, unsigned nports);
+extern edif_t edif_create(const char* design_name, unsigned nports);
 
 /* macro ports to the design are handled by this library similar to
    cells. The user creates ports with this function. This function
    configures the sole "port" of the cell with the name and dir passed
    in. The direction, in this case, is the *interface* direction. */
-extern void edif_portconfig(edif_t edf, unsigned idx,
-			    const char*name, ivl_signal_port_t dir);
+extern void edif_portconfig(edif_t edf, unsigned idx, const char* name, ivl_signal_port_t dir);
 
 /* This is like edif_add_to_joint, but works with the edif port. */
 extern void edif_port_to_joint(edif_joint_t jnt, edif_t edf, unsigned port);
@@ -130,27 +129,25 @@ extern void edif_port_to_joint(edif_joint_t jnt, edif_t edf, unsigned port);
 /* The design may have properties attached to it. These properties
    will be attached to the instance declared in the footer of the EDIF
    file. */
-extern void edif_pstring(edif_t edf, const char*name, const char*value);
+extern void edif_pstring(edif_t edf, const char* name, const char* value);
 
 /* Create an external library and attach it to the edif design. This
    will lead to a (external ...) declaration of cells that can be used
    by the design. */
-extern edif_xlibrary_t edif_xlibrary_create(edif_t edf, const char*name);
+extern edif_xlibrary_t edif_xlibrary_create(edif_t edf, const char* name);
 
 extern void edif_xlibrary_set_celltable(edif_xlibrary_t lib,
-				       const struct edif_xlib_celltable*table);
+                                        const struct edif_xlib_celltable* table);
 
 
 /* External libraries can be searched for existing cells, given a
    string name. This function searches for the cell by name, and
    returns it. */
-extern edif_cell_t edif_xlibrary_findcell(edif_xlibrary_t lib,
-					  const char*cell_name);
+extern edif_cell_t edif_xlibrary_findcell(edif_xlibrary_t lib, const char* cell_name);
 
 /* Similar to the above, but it gets the information it needs from the
    ivl_scope_t object. */
-extern edif_cell_t edif_xlibrary_scope_cell(edif_xlibrary_t xlib,
-					    ivl_scope_t scope);
+extern edif_cell_t edif_xlibrary_scope_cell(edif_xlibrary_t xlib, ivl_scope_t scope);
 
 /* Create a new cell, attached to the external library. Specify the
    number of ports that the cell has. The edif_cell_portconfig
@@ -164,27 +161,24 @@ extern edif_cell_t edif_xlibrary_scope_cell(edif_xlibrary_t xlib,
    Cellrefs get their port characteristics from the cell that they are
    created from. So the pinouts of cellrefs match the pinout of the
    associated cell. */
-extern edif_cell_t edif_xcell_create(edif_xlibrary_t, const char*name,
-				     unsigned nports);
-extern void edif_cell_portconfig(edif_cell_t cell, unsigned idx,
-				 const char*name, ivl_signal_port_t dir);
+extern edif_cell_t edif_xcell_create(edif_xlibrary_t, const char* name, unsigned nports);
+extern void
+edif_cell_portconfig(edif_cell_t cell, unsigned idx, const char* name, ivl_signal_port_t dir);
 
 /* Attach a property to a cell port. */
-extern void edif_cell_port_pstring(edif_cell_t cell, unsigned idx,
-				   const char*name, const char*value);
+extern void
+edif_cell_port_pstring(edif_cell_t cell, unsigned idx, const char* name, const char* value);
 
 /* Cells may have properties attached to them. These properties are
    included in the library declaration for the cell, instead of the
    cell instances. */
-extern void edif_cell_pstring(edif_cell_t cell, const char*name,
-			      const char*value);
-extern void edif_cell_pinteger(edif_cell_t cell, const char*name,
-			       int value);
+extern void edif_cell_pstring(edif_cell_t cell, const char* name, const char* value);
+extern void edif_cell_pinteger(edif_cell_t cell, const char* name, int value);
 
 
 /* Ports of cells are normally referenced by their port number. If you
    forget what that number is, this function can look it up by name. */
-extern unsigned edif_cell_port_byname(edif_cell_t cell, const char*name);
+extern unsigned edif_cell_port_byname(edif_cell_t cell, const char* name);
 
 
 /* Create and instance from a cell. The instance refers to the cell,
@@ -198,10 +192,8 @@ extern edif_cellref_t edif_cellref_create(edif_t edf, edif_cell_t cell);
    Examples of string properties commonly attached to cellref devices
    include such things as the INIT=<value> to initialize LUT cells in
    FPGA devices. */
-extern void edif_cellref_pstring(edif_cellref_t ref, const char*name,
-				 const char*value);
-extern void edif_cellref_pinteger(edif_cellref_t ref, const char*name,
-				  int value);
+extern void edif_cellref_pstring(edif_cellref_t ref, const char* name, const char* value);
+extern void edif_cellref_pinteger(edif_cellref_t ref, const char* name, int value);
 
 /* This function gets the joint associated with a nexus. This will
    create a joint if necessary. */
@@ -213,17 +205,15 @@ extern edif_joint_t edif_joint_create(edif_t edf);
 
 /* Renaming a joint causes it to take on a name when external tools
    view the EDIF file. */
-extern void edif_joint_rename(edif_joint_t jnt, const char*name);
+extern void edif_joint_rename(edif_joint_t jnt, const char* name);
 
 /* Given a joint, this function adds the cell reference. */
-extern void edif_add_to_joint(edif_joint_t jnt,
-			      edif_cellref_t cell,
-			      unsigned port);
+extern void edif_add_to_joint(edif_joint_t jnt, edif_cellref_t cell, unsigned port);
 
 /*
  * Print the entire design. This should only be done after the design
  * is completely assembled.
  */
-extern void edif_print(FILE*fd, edif_t design);
+extern void edif_print(FILE* fd, edif_t design);
 
 #endif /* IVL_edif_H */

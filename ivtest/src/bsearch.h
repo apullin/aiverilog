@@ -14,7 +14,7 @@
 
 hptr bsearch_node(nptr n, TimeType key);
 vptr bsearch_vector(bvptr b, TimeType key);
-char *bsearch_trunc(char *ascii, int maxlen);
-struct symbol *bsearch_facs(struct globals *obj, char *ascii);
+char* bsearch_trunc(char* ascii, int maxlen);
+struct symbol* bsearch_facs(struct globals* obj, char* ascii);
 
 #endif

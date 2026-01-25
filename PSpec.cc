@@ -17,19 +17,20 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "PSpec.h"
+#include "PSpec.h"
 
-PSpecPath::PSpecPath(const std::list<perm_string> &src_list,
-		     const std::list<perm_string> &dst_list,
-		     char polarity, bool full_flag)
-: conditional(false), condition(0), edge(0),
-  src(src_list.begin(), src_list.end()), dst(dst_list.begin(), dst_list.end()),
-  data_source_expression(0)
-{
-      full_flag_ = full_flag;
-      polarity_ = polarity;
+PSpecPath::PSpecPath(const std::list<perm_string>& src_list,
+                     const std::list<perm_string>& dst_list,
+                     char polarity,
+                     bool full_flag)
+    : conditional(false),
+      condition(0),
+      edge(0),
+      src(src_list.begin(), src_list.end()),
+      dst(dst_list.begin(), dst_list.end()),
+      data_source_expression(0) {
+    full_flag_ = full_flag;
+    polarity_ = polarity;
 }
 
-PSpecPath::~PSpecPath()
-{
-}
+PSpecPath::~PSpecPath() {}

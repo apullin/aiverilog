@@ -19,81 +19,78 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  "vvp_net.h"
-# include  "schedule.h"
-# include  <cstddef>
+#include "vvp_net.h"
+#include "schedule.h"
+#include <cstddef>
 
 /*
  * vvp_fun_boolean_ is just a common hook for holding operands.
  */
 class vvp_fun_boolean_ : public vvp_net_fun_t, protected vvp_gen_event_s {
+  public:
+    explicit vvp_fun_boolean_(unsigned wid);
+    ~vvp_fun_boolean_() override;
 
-    public:
-      explicit vvp_fun_boolean_(unsigned wid);
-      ~vvp_fun_boolean_() override;
+    void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t& bit, vvp_context_t) override;
+    void recv_vec4_pv(vvp_net_ptr_t p,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
+    void recv_real(vvp_net_ptr_t p, double real, vvp_context_t) override;
 
-      void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
-      void recv_vec4_pv(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override;
-      void recv_real(vvp_net_ptr_t p, double real,
-                     vvp_context_t) override;
-
-    protected:
-      vvp_vector4_t input_[4];
-      vvp_net_t*net_;
+  protected:
+    vvp_vector4_t input_[4];
+    vvp_net_t* net_;
 };
 
-class vvp_fun_and  : public vvp_fun_boolean_ {
+class vvp_fun_and : public vvp_fun_boolean_ {
+  public:
+    explicit vvp_fun_and(unsigned wid, bool invert);
+    ~vvp_fun_and() override;
 
-    public:
-      explicit vvp_fun_and(unsigned wid, bool invert);
-      ~vvp_fun_and() override;
-
-    private:
-      void run_run() override;
-      bool invert_;
+  private:
+    void run_run() override;
+    bool invert_;
 };
 
 class vvp_fun_equiv : public vvp_fun_boolean_ {
+  public:
+    explicit vvp_fun_equiv();
+    ~vvp_fun_equiv() override;
 
-    public:
-      explicit vvp_fun_equiv();
-      ~vvp_fun_equiv() override;
-
-    private:
-      void run_run() override;
+  private:
+    void run_run() override;
 };
 
 class vvp_fun_impl : public vvp_fun_boolean_ {
+  public:
+    explicit vvp_fun_impl();
+    ~vvp_fun_impl() override;
 
-    public:
-      explicit vvp_fun_impl();
-      ~vvp_fun_impl() override;
-
-    private:
-      void run_run() override;
+  private:
+    void run_run() override;
 };
 
 /*
  * vvp_fun_buf_not_ is just a common hook for holding operands.
  */
 class vvp_fun_buf_not_ : public vvp_net_fun_t, protected vvp_gen_event_s {
+  public:
+    explicit vvp_fun_buf_not_(unsigned wid);
+    ~vvp_fun_buf_not_() override;
 
-    public:
-      explicit vvp_fun_buf_not_(unsigned wid);
-      ~vvp_fun_buf_not_() override;
+    void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t& bit, vvp_context_t) override;
+    void recv_vec4_pv(vvp_net_ptr_t p,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
+    void recv_real(vvp_net_ptr_t p, double real, vvp_context_t ctx) override;
 
-      void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
-      void recv_vec4_pv(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override;
-      void recv_real(vvp_net_ptr_t p, double real,
-                     vvp_context_t ctx) override;
-
-    protected:
-      vvp_vector4_t input_;
-      vvp_net_t*net_;
+  protected:
+    vvp_vector4_t input_;
+    vvp_net_t* net_;
 };
 
 /*
@@ -102,49 +99,52 @@ class vvp_fun_buf_not_ : public vvp_net_fun_t, protected vvp_gen_event_s {
  * The retransmitted vector has all Z values changed to X, just like
  * the buf(Q,D) gate in Verilog.
  */
-class vvp_fun_buf: public vvp_fun_buf_not_ {
+class vvp_fun_buf : public vvp_fun_buf_not_ {
+  public:
+    explicit vvp_fun_buf(unsigned wid);
+    virtual ~vvp_fun_buf() override;
 
-    public:
-      explicit vvp_fun_buf(unsigned wid);
-      virtual ~vvp_fun_buf() override;
-
-    private:
-      void run_run() override;
+  private:
+    void run_run() override;
 };
 
 /*
  * The vvp_fun_bufz is like the vvp_fun_buf, but it does not change
  * Z values to X -- it passes Z values unchanged.
  */
-class vvp_fun_bufz: public vvp_net_fun_t {
+class vvp_fun_bufz : public vvp_net_fun_t {
+  public:
+    explicit vvp_fun_bufz();
+    virtual ~vvp_fun_bufz() override;
 
-    public:
-      explicit vvp_fun_bufz();
-      virtual ~vvp_fun_bufz() override;
+    void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t& bit, vvp_context_t) override;
+    void recv_vec4_pv(vvp_net_ptr_t p,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
+    // void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit);
+    void recv_real(vvp_net_ptr_t p, double bit, vvp_context_t) override;
 
-      void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
-      void recv_vec4_pv(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override;
-	//void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit);
-      void recv_real(vvp_net_ptr_t p, double bit,
-                     vvp_context_t) override;
-
-    private:
+  private:
 };
 
 /*
  * The vp_fun_buft is like the vvp_fun_bufz, but is completely
  * transparent to strengths.
  */
-class vvp_fun_buft: public vvp_fun_bufz {
+class vvp_fun_buft : public vvp_fun_bufz {
+  public:
+    void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t& bit) override;
 
-    public:
-      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override;
-    private:
+  private:
 };
 
-enum sel_type {SEL_PORT0, SEL_PORT1, SEL_BOTH};
+enum sel_type {
+    SEL_PORT0,
+    SEL_PORT1,
+    SEL_BOTH
+};
 
 /*
  * The muxz functor is an A-B mux device, with the data inputs on
@@ -158,78 +158,73 @@ enum sel_type {SEL_PORT0, SEL_PORT1, SEL_BOTH};
  * padded with X values.
  */
 class vvp_fun_muxz : public vvp_net_fun_t, private vvp_gen_event_s {
+  public:
+    explicit vvp_fun_muxz(unsigned width);
+    virtual ~vvp_fun_muxz() override;
 
-    public:
-      explicit vvp_fun_muxz(unsigned width);
-      virtual ~vvp_fun_muxz() override;
+    void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t& bit, vvp_context_t) override;
+    void recv_vec4_pv(vvp_net_ptr_t p,
+                      const vvp_vector4_t& bit,
+                      unsigned base,
+                      unsigned vwid,
+                      vvp_context_t) override;
 
-      void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
-      void recv_vec4_pv(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-			unsigned base, unsigned vwid, vvp_context_t) override;
+  private:
+    void run_run() override;
 
-    private:
-      void run_run() override;
-
-    private:
-      vvp_vector4_t a_;
-      vvp_vector4_t b_;
-      vvp_net_t*net_;
-      sel_type select_;
-      bool has_run_;
+  private:
+    vvp_vector4_t a_;
+    vvp_vector4_t b_;
+    vvp_net_t* net_;
+    sel_type select_;
+    bool has_run_;
 };
 
 class vvp_fun_muxr : public vvp_net_fun_t, private vvp_gen_event_s {
+  public:
+    explicit vvp_fun_muxr();
+    virtual ~vvp_fun_muxr() override;
 
-    public:
-      explicit vvp_fun_muxr();
-      virtual ~vvp_fun_muxr() override;
+    void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t& bit, vvp_context_t) override;
+    void recv_real(vvp_net_ptr_t p, double bit, vvp_context_t) override;
 
-      void recv_vec4(vvp_net_ptr_t p, const vvp_vector4_t&bit,
-                     vvp_context_t) override;
-      void recv_real(vvp_net_ptr_t p, double bit,
-                     vvp_context_t) override;
+  private:
+    void run_run() override;
 
-    private:
-      void run_run() override;
-
-    private:
-      double a_;
-      double b_;
-      vvp_net_t*net_;
-      sel_type select_;
+  private:
+    double a_;
+    double b_;
+    vvp_net_t* net_;
+    sel_type select_;
 };
 
-class vvp_fun_not: public vvp_fun_buf_not_ {
+class vvp_fun_not : public vvp_fun_buf_not_ {
+  public:
+    explicit vvp_fun_not(unsigned wid);
+    virtual ~vvp_fun_not() override;
 
-    public:
-      explicit vvp_fun_not(unsigned wid);
-      virtual ~vvp_fun_not() override;
-
-    private:
-      void run_run() override;
+  private:
+    void run_run() override;
 };
 
-class vvp_fun_or  : public vvp_fun_boolean_ {
+class vvp_fun_or : public vvp_fun_boolean_ {
+  public:
+    explicit vvp_fun_or(unsigned wid, bool invert);
+    ~vvp_fun_or() override;
 
-    public:
-      explicit vvp_fun_or(unsigned wid, bool invert);
-      ~vvp_fun_or() override;
-
-    private:
-      void run_run() override;
-      bool invert_;
+  private:
+    void run_run() override;
+    bool invert_;
 };
 
-class vvp_fun_xor  : public vvp_fun_boolean_ {
+class vvp_fun_xor : public vvp_fun_boolean_ {
+  public:
+    explicit vvp_fun_xor(unsigned wid, bool invert);
+    ~vvp_fun_xor() override;
 
-    public:
-      explicit vvp_fun_xor(unsigned wid, bool invert);
-      ~vvp_fun_xor() override;
-
-    private:
-      void run_run() override;
-      bool invert_;
+  private:
+    void run_run() override;
+    bool invert_;
 };
 
 #endif /* IVL_logic_H */

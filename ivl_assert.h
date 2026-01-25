@@ -19,16 +19,15 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <cstdlib>
+#include <cstdlib>
 
-#define ivl_assert(tok, expression)  \
-      do { \
-	    if (! (expression)) { \
-		  std::cerr << (tok).get_fileline() << ": assert: " \
-			    << __FILE__ << ":" << __LINE__ \
-			    << ": failed assertion " << #expression << std::endl; \
-		  abort(); \
-	    } \
-      } while (0)
+#define ivl_assert(tok, expression)                                                          \
+    do {                                                                                     \
+        if (!(expression)) {                                                                 \
+            std::cerr << (tok).get_fileline() << ": assert: " << __FILE__ << ":" << __LINE__ \
+                      << ": failed assertion " << #expression << std::endl;                  \
+            abort();                                                                         \
+        }                                                                                    \
+    } while (0)
 
 #endif /* IVL_ivl_assert_H */

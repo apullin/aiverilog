@@ -19,15 +19,15 @@
  */
 
 #ifdef _MSC_VER
-	#define alloca _alloca
+#define alloca _alloca
 #endif
 
 #ifndef __sun__
-	#ifndef alloca
-	#define alloca __alloca
-	#endif
+#ifndef alloca
+#define alloca __alloca
+#endif
 #else
-	#include <alloca.h>
+#include <alloca.h>
 #endif
 
 #define wave_alloca alloca

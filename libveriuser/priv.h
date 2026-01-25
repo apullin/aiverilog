@@ -19,8 +19,8 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-# include  <stdio.h>
-# include  "vpi_user.h"
+#include <stdio.h>
+#include "vpi_user.h"
 
 /*
  * The VPI handle for the current task/function instance. This is the
@@ -34,7 +34,7 @@ extern vpiHandle cur_instance;
  * input string to the buffer, and returning a pointer to the first
  * character of the new string.
  */
-extern char* __acc_newstring(const char*txt);
+extern char* __acc_newstring(const char* txt);
 
 /*
  * Trace file for logging ACC and TF calls.
