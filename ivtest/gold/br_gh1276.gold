@@ -1,0 +1,2 @@
+./ivltests/br_gh1276.v:17: vvp.tgt sorry: procedural 'assign' with a concatenation as the l-value and a non-constant r-value is not supported.
+error: Code generation had 1 error(s).

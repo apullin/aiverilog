@@ -988,7 +988,21 @@ static void force_link_rval(ivl_statement_t net, ivl_expr_t rval)
       }
 
       rsig = ivl_expr_signal(rval);
-      assert(ivl_stmt_lvals(net) == 1);
+	/* A procedural continuous assignment with a non-constant RHS
+	   and a concatenation on the LHS reaches this point with more
+	   than one l-value, but the current code generator can only
+	   handle one. Print a proper error instead of asserting
+	   (GitHub #1276). */
+      if (ivl_stmt_lvals(net) != 1) {
+	    fprintf(stderr, "%s:%u: vvp.tgt sorry: procedural %s with a "
+	            "concatenation as the l-value and a non-constant "
+	            "r-value is not supported.\n",
+	            ivl_stmt_file(net), ivl_stmt_lineno(net),
+	            ivl_statement_type(net) == IVL_ST_CASSIGN ?
+	            "'assign'" : "'force'");
+	    vvp_errors += 1;
+	    return;
+      }
       lval = ivl_stmt_lval(net, 0);
       lsig = ivl_lval_sig(lval);
 
