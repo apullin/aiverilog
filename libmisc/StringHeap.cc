@@ -68,15 +68,18 @@ const char* StringHeap::add(const char*text)
 	// the current string, then set it aside and get another cell
 	// to put the string into.
       if (rem < (len+1)) {
-	      // release any unused memory. This assumes that a
-	      // realloc shrink of the memory region will return the
-	      // same pointer.
-	    if (rem > 0) {
-		  const char*old = cell_base_;
-		  cell_base_ = static_cast<char*>(realloc(cell_base_, cell_ptr_));
-		  assert(cell_base_ != 0);
-		  assert(cell_base_ == old);
-	    }
+	      // GitHub #1236: previous code shrank the current cell
+	      // with realloc(cell_base_, cell_ptr_) and asserted that
+	      // the returned pointer matched the original. POSIX allows
+	      // realloc to relocate on shrink, and some glibc versions
+	      // do exactly that for large allocations. When that happens
+	      // every perm_string already handed out for this cell
+	      // becomes a dangling pointer, and even ignoring the
+	      // pointers the assert aborts iverilog. The cell is full
+	      // by definition at this point (we are about to allocate
+	      // a new one), so the remaining bytes are tail padding
+	      // bounded by DEFAULT_CELL_SIZE. Just leave them in place
+	      // and start a new cell.
 	      // start new cell
 	    cell_base_ = static_cast<char*>(malloc(DEFAULT_CELL_SIZE));
 	    cell_ptr_  = 0;
