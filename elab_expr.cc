@@ -6949,7 +6949,19 @@ unsigned PETernary::test_width(Design*des, NetScope*scope, width_mode_t&mode)
       ivl_variable_type_t tru_type = tru_->expr_type();
       ivl_variable_type_t fal_type = fal_->expr_type();
 
-      if (tru_type == IVL_VT_REAL || fal_type == IVL_VT_REAL) {
+	// PEString::test_width reports IVL_VT_BOOL for any string literal.
+	// In a ternary where the other branch is a string, treat the literal
+	// as string-compatible so the ternary yields a string value
+	// (GitHub #1298).
+      bool tru_string_compat = (tru_type == IVL_VT_STRING) ||
+				dynamic_cast<const PEString*>(tru_) != nullptr;
+      bool fal_string_compat = (fal_type == IVL_VT_STRING) ||
+				dynamic_cast<const PEString*>(fal_) != nullptr;
+
+      if ((tru_type == IVL_VT_STRING || fal_type == IVL_VT_STRING) &&
+	  tru_string_compat && fal_string_compat) {
+	    expr_type_ = IVL_VT_STRING;
+      } else if (tru_type == IVL_VT_REAL || fal_type == IVL_VT_REAL) {
 	    expr_type_ = IVL_VT_REAL;
       } else if (tru_type == IVL_VT_LOGIC || fal_type == IVL_VT_LOGIC) {
 	    expr_type_ = IVL_VT_LOGIC;
@@ -7118,6 +7130,22 @@ NetExpr* PETernary::elab_and_eval_alternative_(Design*des, NetScope*scope,
       } else {
             expr->cast_signed(signed_flag_);
       }
+
+	// If the overall ternary is a string and this alternative is a string
+	// literal (which would otherwise elaborate as a vec4 constant), use the
+	// type-based elaboration path so we get a NetECString of type
+	// IVL_VT_STRING (GitHub #1298).
+      if (expr_type_ == IVL_VT_STRING) {
+	    if (PEString*str_lit = dynamic_cast<PEString*>(expr)) {
+		  NetExpr*tmp = str_lit->elaborate_expr(des, scope,
+						        static_cast<ivl_type_t>(nullptr),
+						        flags);
+		  if (tmp == 0) return 0;
+		  eval_expr(tmp, -1);
+		  return tmp;
+	    }
+      }
+
       NetExpr*tmp = expr->elaborate_expr(des, scope, expr_wid, flags);
       if (tmp == 0) return 0;
 
