@@ -299,6 +299,7 @@ br_gh99t		normal			ivltests
 br_gh99u		normal			ivltests
 br_gh103		normal			ivltests
 br_gh1119		normal			ivltests
+br_gh1291		CE			ivltests gold=br_gh1291.gold
 br_gh127a		normal			ivltests gold=br_gh127a.gold
 br_gh127b		normal			ivltests gold=br_gh127b.gold
 br_gh127c		normal			ivltests gold=br_gh127c.gold

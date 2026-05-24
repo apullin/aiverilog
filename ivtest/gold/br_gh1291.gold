@@ -1,0 +1,2 @@
+./ivltests/br_gh1291.v:10: vvp.tgt sorry: event '_ivl_0' (in scope ROM.p1361) has uninitialized sensitivity pins. This usually means the front end created an orphan event for a process that is shared across module instances; please simplify or restructure the offending always block (GitHub #1291).
+error: Code generation had 1 error(s).

@@ -1142,6 +1142,30 @@ static void draw_logic_in_scope(ivl_net_logic_t lptr)
       if (need_delay_flag) draw_logic_delay(lptr);
 }
 
+/* GitHub #1291: in some pathological inputs (e.g. two instances of a
+ * module whose always block shares an event through aliased ports)
+ * the front end leaves one of the per-instance ivl_event_s objects'
+ * pin array uninitialized. Drawing it then dereferences a null
+ * ivl_nexus_t and the vvp code generator aborts in
+ * ivl_nexus_ptrs(). Detect the case here and emit a "sorry" error
+ * with a useful pointer at the user's source instead. */
+static int event_pins_are_complete(ivl_event_t obj)
+{
+      unsigned npins = ivl_event_nany(obj) + ivl_event_nneg(obj)
+                     + ivl_event_npos(obj) + ivl_event_nedg(obj);
+      unsigned idx;
+      if (npins == 0) return 1;
+      for (idx = 0 ; idx < ivl_event_nany(obj) ; idx += 1)
+	    if (ivl_event_any(obj, idx) == 0) return 0;
+      for (idx = 0 ; idx < ivl_event_nneg(obj) ; idx += 1)
+	    if (ivl_event_neg(obj, idx) == 0) return 0;
+      for (idx = 0 ; idx < ivl_event_npos(obj) ; idx += 1)
+	    if (ivl_event_pos(obj, idx) == 0) return 0;
+      for (idx = 0 ; idx < ivl_event_nedg(obj) ; idx += 1)
+	    if (ivl_event_edg(obj, idx) == 0) return 0;
+      return 1;
+}
+
 static void draw_event_in_scope(ivl_event_t obj)
 {
       char tmp[4][32];
@@ -1152,6 +1176,20 @@ static void draw_event_in_scope(ivl_event_t obj)
       unsigned nneg = ivl_event_nneg(obj);
       unsigned npos = ivl_event_npos(obj);
       unsigned nedg = ivl_event_nedg(obj);
+
+      if (!event_pins_are_complete(obj)) {
+	    fprintf(stderr, "%s:%u: vvp.tgt sorry: event '%s' (in scope %s) "
+	            "has uninitialized sensitivity pins. This usually means "
+	            "the front end created an orphan event for a process "
+	            "that is shared across module instances; please simplify "
+	            "or restructure the offending always block (GitHub "
+	            "#1291).\n",
+	            ivl_event_file(obj), ivl_event_lineno(obj),
+	            ivl_event_basename(obj),
+	            ivl_scope_name(ivl_event_scope(obj)));
+	    vvp_errors += 1;
+	    return;
+      }
 
       unsigned cnt = 0;
 
