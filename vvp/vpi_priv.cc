@@ -1467,6 +1467,24 @@ static char * find_next(char *name)
       return next;
 }
 
+// Find a package by name by iterating the root-level package list.
+// Returns the matching package handle or 0 (GitHub #1038).
+static vpiHandle find_root_package(const char *name)
+{
+      vpiHandle iter = vpi_iterate(vpiPackage, NULL);
+      if (! iter) return 0;
+      vpiHandle hand, rtn = 0;
+      while ((hand = vpi_scan(iter))) {
+	    const char *nm = vpi_get_str(vpiName, hand);
+	    if (nm && strcmp(nm, name) == 0) {
+		  rtn = hand;
+		  vpi_free_object(iter);
+		  return rtn;
+	    }
+      }
+      return 0;
+}
+
 vpiHandle vpi_handle_by_name(const char *name, vpiHandle scope)
 {
       vpiHandle hand;
@@ -1474,6 +1492,35 @@ vpiHandle vpi_handle_by_name(const char *name, vpiHandle scope)
       if (vpi_trace) {
 	    fprintf(vpi_trace, "vpi_handle_by_name(%s, %p) -->\n",
 		    name, scope);
+      }
+
+	// Handle package-qualified names, e.g. "pkg::var" or "pkg::"
+	// (GitHub #1038). Only applies when no enclosing scope was
+	// passed in - "::" resolution is unambiguously rooted.
+      if (scope == 0) {
+	    const char *sep = strstr(name, "::");
+	    if (sep) {
+		  std::string pkg_name(name, sep - name);
+		  const char *rest = sep + 2;
+		  vpiHandle pkg = find_root_package(pkg_name.c_str());
+		  if (pkg == 0) {
+			if (vpi_trace) {
+			      fprintf(vpi_trace,
+				      "vpi_handle_by_name: package %s not found.\n",
+				      pkg_name.c_str());
+			}
+			return 0;
+		  }
+		  if (*rest == 0) {
+			if (vpi_trace) {
+			      fprintf(vpi_trace,
+				      "vpi_handle_by_name: returning package %s.\n",
+				      pkg_name.c_str());
+			}
+			return pkg;
+		  }
+		  return vpi_handle_by_name(rest, pkg);
+	    }
       }
 
 	// Chop the name into path and base. For example, if the name
@@ -1520,6 +1567,10 @@ vpiHandle vpi_handle_by_name(const char *name, vpiHandle scope)
 	          hand = vpi_handle(vpiModule, scope);
 	          break;
 		case vpiModule:
+	          hand = scope;
+	          break;
+		case vpiPackage:
+		    /* Look up inside a package scope (GitHub #1038). */
 	          hand = scope;
 	          break;
 		default:
