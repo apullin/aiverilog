@@ -1415,6 +1415,23 @@ static int show_stmt_fork(ivl_statement_t net, ivl_scope_t sscope)
 	    assert(0);
       }
 
+	/* The vvp runtime's %join/detach implementation asserts that
+	   the detaching parent is not in the same automatic context as
+	   the child threads it would detach (see of_JOIN_DETACH in
+	   vthread.cc). That assertion fires for fork-join_any /
+	   fork-join_none inside an automatic task or function. Report
+	   a proper "sorry: not supported" diagnostic here rather than
+	   letting vvp abort at runtime (GitHub #1103). */
+      if (join_detach_count > 0 && sscope && ivl_scope_is_auto(sscope)) {
+	    fprintf(stderr, "%s:%u: vvp.tgt sorry: fork-%s inside an "
+	            "automatic task or function is not supported.\n",
+	            ivl_stmt_file(net), ivl_stmt_lineno(net),
+	            ivl_statement_type(net) == IVL_ST_FORK_JOIN_ANY ?
+	            "join_any" : "join_none");
+	    vvp_errors += 1;
+	    return 1;
+      }
+
       if (scope==0)
 	    scope = sscope;
 

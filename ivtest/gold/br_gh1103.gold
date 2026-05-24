@@ -1,0 +1,2 @@
+./ivltests/br_gh1103.v:8: vvp.tgt sorry: fork-join_none inside an automatic task or function is not supported.
+error: Code generation had 1 error(s).
