@@ -99,6 +99,9 @@ class PWire : public PNamedItem {
       bool is_port() const { return port_set_; };
       void set_net(NetNet::Type t);
       void set_port(NetNet::PortType pt);
+      void disallow_implicit_port_net() { implicit_port_net_disallowed_ = true; }
+      bool implicit_port_net_disallowed() const
+	    { return implicit_port_net_disallowed_; }
 
     private:
       perm_string name_;
@@ -109,6 +112,8 @@ class PWire : public PNamedItem {
 
         // Whether the wire is variable declared with the const keyword.
       bool is_const_ = false;
+
+      bool implicit_port_net_disallowed_ = false;
 
       bool is_elaborating_ = false;
 

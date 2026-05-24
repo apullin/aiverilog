@@ -1,0 +1,1 @@
+./ivltests/br_gh455.v:9: error: Implicit net declaration for port 'clk' is not allowed under `default_nettype none.

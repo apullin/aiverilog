@@ -1519,6 +1519,21 @@ void pform_endmodule(const char*name, bool inside_celldefine,
       cur_module->is_cell = inside_celldefine;
       cur_module->uc_drive = uc_drive_def;
 
+	// A non-ANSI port declaration may be followed by a separate,
+	// explicit net declaration. Defer the `default_nettype none` check
+	// until the complete module has been parsed so that legal forms such
+	// as "input clk; wire clk;" are accepted.
+      for (const auto&item : cur_module->wires) {
+	    PWire*wire = item.second;
+	    if (!wire->implicit_port_net_disallowed() || wire->is_net())
+		  continue;
+	    cerr << wire->get_fileline()
+		 << ": error: Implicit net declaration for port '"
+		 << wire->basename() << "' is not allowed under "
+		    "`default_nettype none." << endl;
+	    error_count += 1;
+      }
+
 	// If this is a root module, then there is no parent module
 	// and we try to put this newly defined module into the global
 	// root list of modules. Otherwise, this is a nested module
@@ -2732,6 +2747,19 @@ void pform_module_define_port(const struct vlltype&li,
 {
       pform_check_net_data_type(li, type, vtype);
 
+	/* IEEE 1364-2005 §3.5 and IEEE 1800-2017 §6.10: under
+	   `default_nettype none' an implicit-net port declaration is
+	   illegal. NetNet::IMPLICIT means the user did not specify an
+	   explicit net type at the port (no `wire'/`uwire'/`tri'/...).
+	   The corresponding non-ANSI form is handled in
+	   pform_set_port_type (GitHub #455). */
+      if (type == NetNet::IMPLICIT && pform_default_nettype == NetNet::NONE) {
+	    cerr << li << ": error: Implicit net declaration for port '"
+		 << name.first << "' is not allowed under "
+		    "`default_nettype none." << endl;
+	    error_count += 1;
+      }
+
       PWire *cur = pform_get_or_make_wire(li, name, type, port_kind, SR_BOTH);
 
       pform_set_net_range(cur, dynamic_cast<vector_type_t*> (vtype), SR_BOTH);
@@ -3344,6 +3372,8 @@ void pform_set_port_type(const struct vlltype&li,
 
 	    PWire *wire = pform_get_or_make_wire(li, cur->name,
 						 NetNet::IMPLICIT, pt, SR_PORT);
+	    if (pform_default_nettype == NetNet::NONE)
+		  wire->disallow_implicit_port_net();
 	    pform_set_net_range(wire, vt, SR_PORT, attr);
 
 	    if (cur->udims) {
