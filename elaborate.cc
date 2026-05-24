@@ -6998,6 +6998,45 @@ bool Module::elaborate(Design*des, NetScope*scope) const
 {
       bool result_flag = true;
 
+	// GitHub #1202: a top-level (root) module instance has no
+	// parent to supply connections, so its input ports stay at z
+	// even when the declaration provided a SystemVerilog default
+	// value. Drive each such input with the default via a
+	// synthesized continuous assignment - mirrors what
+	// PGModule::elaborate_mod_ does for unconnected ports of a
+	// child instance.
+      if (scope->parent() == 0) {
+	    for (unsigned idx = 0 ; idx < ports.size() ; idx += 1) {
+		  const port_t*port = ports[idx];
+		  if (port == 0) continue;
+		  if (port->default_value == 0) continue;
+		  if (port->is_interface_port()) continue;
+
+		    // Only single-identifier ports are supported here;
+		    // split-name ports (.foo({a,b})) are rare with default
+		    // values and would need a per-bit fan-out.
+		  if (port->expr.size() != 1) continue;
+		  PEIdent*lval = port->expr[0];
+		  if (lval == 0) continue;
+
+		  std::list<PExpr*>*assign_pins = new std::list<PExpr*>;
+		    // Port references are created before their ANSI declarations,
+		    // so reusing the parser's PEIdent can trigger declaration-order
+		    // checks for explicitly typed ports. This synthesized reference
+		    // is evaluated after the complete module has been declared.
+		  PEIdent*top_lval = new PEIdent(lval->path().name, ~0U);
+		  top_lval->set_line(*lval);
+		  assign_pins->push_back(top_lval);
+		  assign_pins->push_back(port->default_value);
+		  PGAssign*pa = new PGAssign(assign_pins);
+		  pa->set_line(*this);
+		  pa->elaborate(des, scope);
+		    // pa aliases default_value; do not delete it. The parser's
+		    // gate objects have compilation lifetime, so retain this
+		    // synthesized wrapper and its l-value for the same lifetime.
+	    }
+      }
+
 	// Elaborate the elaboration tasks.
       for (const auto et : elab_tasks) {
 	    result_flag &= et->elaborate_elab(des, scope);

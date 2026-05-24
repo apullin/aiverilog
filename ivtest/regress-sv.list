@@ -996,6 +996,7 @@ br_gh1134		normal,-g2012		ivltests
 br_gh1267		normal,-g2012		ivltests
 br_gh1268		normal,-g2012		ivltests
 br_gh1103		CE,-g2012		ivltests gold=br_gh1103.gold
+br_gh1202		normal,-g2012		ivltests
 br_gh455		CE,-g2005		ivltests gold=br_gh455.gold
 br_gh455_ok		normal,-g2012		ivltests
 br_gh1276		CE,-g2012		ivltests gold=br_gh1276.gold
