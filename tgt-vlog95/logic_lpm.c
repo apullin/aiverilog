@@ -461,7 +461,15 @@ static void emit_nexus_port_signal(ivl_scope_t scope, ivl_nexus_t nex)
 	        (ivl_nexus_ptr_drive0(nex_ptr) != IVL_DR_HiZ)) assert(0);
 	    if (t_sig) {
 		  if (scope != ivl_signal_scope(t_sig)) continue;
-		  assert(! sig);
+		  if (sig) {
+			fprintf(stderr, "%s:%u: vlog95 sorry: cannot translate "
+			        "a shared nexus with multiple port names in "
+			        "scope %s (GitHub #1119).\n",
+			        ivl_scope_file(scope), ivl_scope_lineno(scope),
+			        ivl_scope_name(scope));
+			vlog_errors += 1;
+			continue;
+		  }
 		  sig = t_sig;
 	    }
       }
@@ -483,7 +491,15 @@ static ivl_signal_t find_local_signal(const ivl_scope_t scope, ivl_nexus_t nex,
 	    if (ivl_signal_local(t_sig) &&
 	        (ivl_signal_port(t_sig) != IVL_SIP_INPUT)) continue;
 	    if (ivl_signal_scope(t_sig) != scope) continue;
-	    assert(! sig);
+	    if (sig) {
+		  fprintf(stderr, "%s:%u: vlog95 sorry: cannot translate "
+		          "a shared nexus with multiple port names in "
+		          "scope %s (GitHub #1120).\n",
+		          ivl_scope_file(scope), ivl_scope_lineno(scope),
+		          ivl_scope_name(scope));
+		  vlog_errors += 1;
+		  continue;
+	    }
 	    sig = t_sig;
 	    *word = ivl_nexus_ptr_pin(nex_ptr);
       }
