@@ -996,3 +996,5 @@ br_gh1134		normal,-g2012		ivltests
 br_gh1267		normal,-g2012		ivltests
 br_gh1268		normal,-g2012		ivltests
 br_gh1298		normal,-g2012		ivltests
+br_gh1321		normal,-g2012		ivltests
+br_gh1321_bad		CE,-g2012		ivltests

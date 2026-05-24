@@ -7264,6 +7264,55 @@ statement_item /* This is roughly statement_item in the LRM */
 	$$ = tmp;
       }
 
+	/* SystemVerilog statement labels written as a prefix:
+	     my_blk : begin ... end
+	     my_blk : (* attr *) begin ... end
+	   is equivalent to `begin : my_blk ... end` (IEEE 1800-2017
+	   9.3.5 and Annex A.6.4). A suffix label after K_begin is
+	   forbidden when a prefix label is present, matching
+	   check_end_label semantics, by simply not accepting one in
+	   this rule. */
+  | IDENTIFIER ':' attribute_list_opt K_begin
+      { PBlock*tmp = pform_push_block_scope(@1, $1, PBlock::BL_SEQ);
+	current_block_stack.push(tmp);
+      }
+    block_item_decls_opt
+      { /* Prefix-labeled block always has scope. */ }
+    statement_or_null_list_opt K_end label_opt
+      { PBlock*tmp;
+	pform_pop_scope();
+	assert(! current_block_stack.empty());
+	tmp = current_block_stack.top();
+	current_block_stack.pop();
+	if ($8) tmp->set_statement(*$8);
+	delete $8;
+	pform_bind_attributes(tmp->attributes, $3);
+	check_end_label(@10, "block", $1, $10);
+	delete[]$1;
+	$$ = tmp;
+      }
+
+  | IDENTIFIER ':' attribute_list_opt K_fork
+      { PBlock*tmp = pform_push_block_scope(@1, $1, PBlock::BL_PAR);
+	current_block_stack.push(tmp);
+      }
+    block_item_decls_opt
+      { /* Prefix-labeled fork always has scope. */ }
+    statement_or_null_list_opt join_keyword label_opt
+      { PBlock*tmp;
+	pform_pop_scope();
+	assert(! current_block_stack.empty());
+	tmp = current_block_stack.top();
+	current_block_stack.pop();
+	tmp->set_join_type($9);
+	if ($8) tmp->set_statement(*$8);
+	delete $8;
+	pform_bind_attributes(tmp->attributes, $3);
+	check_end_label(@10, "fork", $1, $10);
+	delete[]$1;
+	$$ = tmp;
+      }
+
   | K_disable hierarchy_identifier ';'
       { PDisable*tmp = new PDisable(*$2);
 	FILE_NAME(tmp, @1);
