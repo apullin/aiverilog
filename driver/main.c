@@ -336,14 +336,14 @@ static int t_version_only(void)
       free(source_path);
 
       fflush(0);
-      snprintf(tmp, sizeof tmp, "%s%civlpp -V", ivlpp_dir, sep);
+      snprintf(tmp, sizeof tmp, "\"%s%civlpp\" -V", ivlpp_dir, sep);
       rc = system(tmp);
       if (rc != 0) {
 	    fprintf(stderr, "Unable to get version from \"%s\"\n", tmp);
       }
 
       fflush(0);
-      snprintf(tmp, sizeof tmp, "%s%civl -V -C\"%s\" -C\"%s\"", ivl_dir, sep,
+      snprintf(tmp, sizeof tmp, "\"%s%civl\" -V -C\"%s\" -C\"%s\"", ivl_dir, sep,
 	       iconfig_path, iconfig_common_path);
       rc = system(tmp);
       if (rc != 0) {
@@ -364,7 +364,7 @@ static int t_version_only(void)
 
 static void build_preprocess_command(int e_flag)
 {
-      snprintf(tmp, sizeof tmp, "%s%civlpp%s%s%s -F\"%s\" -f\"%s\" -p\"%s\"%s",
+      snprintf(tmp, sizeof tmp, "\"%s%civlpp\"%s%s%s -F\"%s\" -f\"%s\" -p\"%s\"%s",
 	       ivlpp_dir, sep,
                verbose_flag ? " -v" : "",
 	       e_flag ? "" : " -L",
@@ -450,7 +450,7 @@ static int t_compile(void)
 #endif
 
 	/* Build the ivl command. */
-      snprintf(tmp, sizeof tmp, "%s%civl", ivl_dir, sep);
+      snprintf(tmp, sizeof tmp, "\"%s%civl\"", ivl_dir, sep);
       rc = strlen(tmp);
       cmd = realloc(cmd, ncmd+rc+1);
       strcpy(cmd+ncmd, tmp);
@@ -1555,7 +1555,7 @@ int main(int argc, char **argv)
 	/* Write the preprocessor command needed to preprocess a
 	   single file. This may be used to preprocess library
 	   files. */
-      fprintf(iconfig_file, "ivlpp:%s%civlpp %s -L -F\"%s\" -P\"%s\"\n",
+      fprintf(iconfig_file, "ivlpp:\"%s%civlpp\" %s -L -F\"%s\" -P\"%s\"\n",
 	      ivlpp_dir, sep,
               strchr(warning_flags, 'r') ? "-Wredef-all" :
               strchr(warning_flags, 'R') ? "-Wredef-chg" : "",

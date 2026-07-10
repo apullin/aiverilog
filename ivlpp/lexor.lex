@@ -2114,7 +2114,7 @@ static void open_input_file(struct include_stack_t*isp)
 
       size_t cmdlen = strlen(vhdlpp_path);
       cmdlen += strlen(isp->path);
-      cmdlen += 8+strlen(vhdlpp_work);
+      cmdlen += 10+strlen(vhdlpp_work);
 
       size_t liblen = 1;
       char*libs = strdup("");
@@ -2128,7 +2128,7 @@ static void open_input_file(struct include_stack_t*isp)
       cmdlen += liblen;
 
       char*cmd = malloc(cmdlen);
-      snprintf(cmd, cmdlen, "%s -w\"%s\"%s %s", vhdlpp_path, vhdlpp_work, libs, isp->path);
+      snprintf(cmd, cmdlen, "\"%s\" -w\"%s\"%s %s", vhdlpp_path, vhdlpp_work, libs, isp->path);
 
       if (verbose_flag) fprintf(stderr, "Invoke vhdlpp: %s\n", cmd);
 
