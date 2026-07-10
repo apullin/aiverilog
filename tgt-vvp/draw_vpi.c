@@ -319,15 +319,22 @@ static void draw_vpi_taskfunc_args(const char*call_string,
 			unsigned bit, wid = ivl_expr_width(expr);
 			const char*bits = ivl_expr_bits(expr);
 			char*dp;
+			int prefix_len;
+			size_t needed_len;
 
-			snprintf(buffer, sizeof buffer, "%u'%sb",
-			         wid, ivl_expr_signed(expr)? "s" : "");
-			dp = buffer + strlen(buffer);
+			prefix_len = snprintf(buffer, sizeof buffer, "%u'%sb",
+			                      wid, ivl_expr_signed(expr)? "s" : "");
+			assert(prefix_len > 0 && (unsigned)prefix_len < sizeof buffer);
+			needed_len = (size_t)prefix_len + wid + 1;
+			assert(needed_len > wid);
+			args[idx].text = malloc(needed_len);
+			assert(args[idx].text);
+			memcpy(args[idx].text, buffer, prefix_len);
+			dp = args[idx].text + prefix_len;
 			for (bit = wid ;  bit > 0 ;  bit -= 1)
 			      *dp++ = bits[bit-1];
-			*dp++ = 0;
-			assert(dp >= buffer);
-			assert((unsigned)(dp - buffer) <= sizeof buffer);
+			*dp = 0;
+			continue;
 		  }
 		  args[idx].text = strdup(buffer);
 		  continue;
