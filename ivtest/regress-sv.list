@@ -1003,3 +1003,4 @@ br_gh1276		CE,-g2012		ivltests gold=br_gh1276.gold
 br_gh1298		normal,-g2012		ivltests
 br_gh1321		normal,-g2012		ivltests
 br_gh1321_bad		CE,-g2012		ivltests
+br_gh1411		normal,-g2012		ivltests
