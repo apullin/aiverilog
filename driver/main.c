@@ -38,7 +38,8 @@ const char NOTICE[] =
 ;
 
 const char HELP[] =
-"Usage: iverilog [-EiRSuvV] [-B[IMPVt] base] [-c cmdfile|-f cmdfile]\n"
+"Usage: iverilog [-EiRSuvV] [--help] [--version] [-B[IMPVt] base]\n"
+"                [-c cmdfile|-f cmdfile]\n"
 "                [-g1995|-g2001|-g2005|-g2005-sv|-g2009|-g2012|-g2017|-g2023] [-g<feature>]\n"
 "                [-D macro[=defn]] [-I includedir] [-L moduledir]\n"
 "                [-M [mode=]depfile] [-m module]\n"
@@ -1153,6 +1154,13 @@ int main(int argc, char **argv)
       int e_flag = 0;
       int version_flag = 0;
       int opt;
+
+      if (argc > 1) {
+	    if (strcmp(argv[1], "--help") == 0)
+		  argv[1] = "-h";
+	    else if (strcmp(argv[1], "--version") == 0)
+		  argv[1] = "-V";
+      }
 
       find_ivl_root();
       base = ivl_root;

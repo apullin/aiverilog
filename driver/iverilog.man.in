@@ -5,6 +5,7 @@ iverilog - Icarus Verilog compiler
 .SH SYNOPSIS
 .B iverilog
 [\-EiRSuVv] [\-B[IMPVt]path] [\-ccmdfile|\-fcmdfile] [\-Dmacro[=defn]]
+[\-\-help] [\-\-version]
 [\-Pparameter=value] [\-pflag=value] [\-dname]
 [\-g1995\:|\-g2001\:|\-g2005\:|\-g2005-sv\:|\-g2009\:|\-g2012\:|\-g2017\:|\-g2023\:|\-g<feature>]
 [\-Iincludedir] [\-Lmoduledir] [\-mmodule] [\-M[mode=]file] [\-Nfile]
@@ -20,6 +21,9 @@ further processing. The main target is \fIvvp\fP for simulation.
 
 .SH OPTIONS
 \fIiverilog\fP accepts the following options:
+.TP 8
+.BR \-h ", " \-\-help
+Print a command usage summary, and exit.
 .TP 8
 .BI \-B path
 The \fIiverilog\fP program uses external programs and configuration
@@ -317,7 +321,7 @@ the compiler output file will turn on verbose messages in \fIvvp\fP.
 This extra verbosity can be avoided by using the \fIvvp\fP command to
 indirectly execute the compiler output file.
 .TP 8
-.B -V
+.BR \-V ", " \-\-version
 Print the version of the compiler, and exit.
 .TP 8
 .B -R

@@ -64,6 +64,15 @@ O = main.o substit.o cflexor.o cfparse.o
 all: dep iverilog@EXEEXT@ iverilog.man
 
 check: all
+	@echo "driver/iverilog: check long help and version options."
+	@$(builddir)/iverilog@EXEEXT@ --help 2>&1 | grep '^Usage:'
+	@$(builddir)/iverilog@EXEEXT@ --version \
+	    -B$(top_builddir)$(PATH_SEP)tgt-vvp \
+	    -BI$(top_builddir) \
+	    -BM$(top_builddir)$(PATH_SEP)vpi \
+	    -BP$(top_builddir)$(PATH_SEP)ivlpp \
+	    -Bt$(top_builddir)$(PATH_SEP)tgt-vvp 2>&1 | \
+	    grep 'Icarus Verilog version'
 	@echo "driver/iverilog: create a vvp file and then run it."
 	@rm -f top.vvp
 	@$(builddir)/iverilog@EXEEXT@ \
