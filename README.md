@@ -1,3 +1,9 @@
+# Aiverilog
+
+This is a fork of iverilog, accepting AI patches for correctness and performance.
+
+---
+
 # The ICARUS Verilog Compilation System
 
 Copyright 2000-2026 Stephen Williams
