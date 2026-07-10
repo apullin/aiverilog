@@ -375,6 +375,7 @@ br_gh1225a		CE			ivltests gold=br_gh1225a.gold
 br_gh1225b		CE			ivltests gold=br_gh1225b.gold
 br_gh1225c		CE			ivltests gold=br_gh1225c.gold
 br_gh1237		normal			ivltests
+br_gh1288		normal,-fivltests/br_gh1288.cf	ivltests
 br_gh1407		CO			ivltests
 br_ml20150315		normal			ivltests gold=br_ml_20150315.gold
 br_ml20150321		CE			ivltests

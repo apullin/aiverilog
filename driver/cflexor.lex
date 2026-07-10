@@ -31,6 +31,19 @@ char *current_file = NULL;
 
 static int comment_enter;
 static char* trim_trailing_white(char*txt, int trim);
+static char* file_name_at_eof;
+
+static void remember_file_name(const char*text)
+{
+      free(file_name_at_eof);
+      file_name_at_eof = strdup(text);
+}
+
+static void forget_file_name(void)
+{
+      free(file_name_at_eof);
+      file_name_at_eof = 0;
+}
 
 /*
  * Mostly copied from the flex manual. Do not make this arbitrary
@@ -172,32 +185,36 @@ int cmdfile_stack_ptr = 0;
       cflval.text = trim_trailing_white(yytext, 0);
       return TOK_STRING; }
 "/"[^\*\/] { /* A file name that starts with "/". */
+      remember_file_name(yytext);
       yymore();
       BEGIN(FILE_NAME); }
 [^/\n \t\b\r+-][^/\n\r]* { /* A file name that starts with other than "/" */
+      remember_file_name(yytext);
       yymore();
       BEGIN(FILE_NAME); }
 
 <FILE_NAME>"//" {
 	/* Found a trailing comment. Returning the terminated name. */
       cflval.text = trim_trailing_white(yytext, 2);
+      forget_file_name();
       BEGIN(LCOMMENT);
       return TOK_STRING; }
 <FILE_NAME>"/"?[^/\n\r]* {
+      remember_file_name(yytext);
       yymore();
       /* not a comment... continuing */; }
 <FILE_NAME>[\n\r] {
 	/* No trailing comment. Return the file name. */
       cflval.text = trim_trailing_white(yytext, 0);
+      forget_file_name();
       BEGIN(0);
       return TOK_STRING; }
 <FILE_NAME><<EOF>> {
-      cflval.text = trim_trailing_white(yytext, 0);
+      cflval.text = trim_trailing_white(file_name_at_eof, 0);
+      forget_file_name();
       BEGIN(0);
-      fprintf(stderr, "%s:%u: ERROR: File name not terminated.\n",
-	      current_file, cflloc.first_line);
-      command_file_errors += 1;
-      PROCESS_EOF }
+      yyrestart(yyin);
+      return TOK_STRING; }
 
   /* Fallback match. */
 . { return yytext[0]; }
@@ -272,6 +289,7 @@ void switch_to_command_file(const char *file)
 void cfreset(FILE*fd, const char*path)
 {
       command_file_errors = 0;
+      forget_file_name();
       yyin = fd;
       yyrestart(fd);
       current_file = strdup(path);
