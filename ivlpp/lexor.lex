@@ -30,6 +30,12 @@
 # include  "globals.h"
 # include  "ivl_alloc.h"
 
+#ifdef __MINGW32__
+# define CMD_EXE_QUOTE ""
+#else
+# define CMD_EXE_QUOTE "\""
+#endif
+
 static void output_init(void);
 #define YY_USER_INIT output_init()
 
@@ -2114,7 +2120,7 @@ static void open_input_file(struct include_stack_t*isp)
 
       size_t cmdlen = strlen(vhdlpp_path);
       cmdlen += strlen(isp->path);
-      cmdlen += 10+strlen(vhdlpp_work);
+      cmdlen += 8 + 2*strlen(CMD_EXE_QUOTE) + strlen(vhdlpp_work);
 
       size_t liblen = 1;
       char*libs = strdup("");
@@ -2128,7 +2134,8 @@ static void open_input_file(struct include_stack_t*isp)
       cmdlen += liblen;
 
       char*cmd = malloc(cmdlen);
-      snprintf(cmd, cmdlen, "\"%s\" -w\"%s\"%s %s", vhdlpp_path, vhdlpp_work, libs, isp->path);
+      snprintf(cmd, cmdlen, CMD_EXE_QUOTE "%s" CMD_EXE_QUOTE
+	       " -w\"%s\"%s %s", vhdlpp_path, vhdlpp_work, libs, isp->path);
 
       if (verbose_flag) fprintf(stderr, "Invoke vhdlpp: %s\n", cmd);
 
