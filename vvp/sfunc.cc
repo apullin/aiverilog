@@ -26,6 +26,7 @@
 # include  <cstdlib>
 # include  <cstring>
 # include  <iostream>
+# include  <string>
 # include  <cassert>
 
 
@@ -126,7 +127,8 @@ static int make_vpi_argv(unsigned argc, vpiHandle*vpi_argv,
 		      cp += 1;
 		      unsigned wid = strtoul(cp, 0, 10);
 		      cp += strspn(cp, "0123456789");
-		      vpi_argv[idx] = vpip_make_binary_const(wid, "x");
+		      std::string bits(wid, 'x');
+		      vpi_argv[idx] = vpip_make_binary_const(wid, bits.c_str());
 		      break;
 		}
 
