@@ -921,7 +921,7 @@ static unsigned int get_format(char **rtn, char *fmt,
         unsigned long value;
         errno = 0;
         value = strtoul(cp, &cp, 10);
-        if (errno == ERANGE || value > INT_MAX) {
+        if (errno == ERANGE || value >= INT_MAX) {
           vpi_printf("WARNING: %s:%d: %s format width exceeds the "
                      "implementation limit; using zero.\n",
                      info->filename, info->lineno, info->name);
@@ -935,7 +935,7 @@ static unsigned int get_format(char **rtn, char *fmt,
         cp += 1;
         errno = 0;
         value = strtoul(cp, &cp, 10);
-        if (errno == ERANGE || value > INT_MAX) {
+        if (errno == ERANGE || value >= INT_MAX) {
           vpi_printf("WARNING: %s:%d: %s format precision exceeds the "
                      "implementation limit; using zero.\n",
                      info->filename, info->lineno, info->name);
