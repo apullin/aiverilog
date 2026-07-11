@@ -676,18 +676,20 @@ static unsigned int get_format_char(char **rtn, int ljust, int plus,
           unsigned swidth, free_flag = 0;
           unsigned suff_len = strlen(timeformat_info.suff);
           char *cp;
+          size_t tbuf_size;
 
-          /* The 512 (513-1 for EOL) is more than enough for any double
-           * value (309 digits plus a decimal point maximum). Because of
-           * scaling this could be larger. For decimal values you can
-           * have an arbitrary value so you can overflow the buffer, but
-           * for now we will assume the user will use this as intended
-           * (pass a time variable or the result of a time function). */
-          tbuf = malloc((513+suff_len)*sizeof(char));
           if (prec == -1) prec = timeformat_info.prec;
           if (value.format == vpiRealVal) {
+            /* A finite double needs at most 309 integer digits. */
+            tbuf_size = 320 + suff_len + (prec > 0 ? (unsigned)prec : 0);
+            tbuf = malloc(tbuf_size*sizeof(char));
             get_time_real(tbuf, value.value.real, prec, time_units);
           } else {
+            tbuf_size = strlen(value.value.str) + suff_len + 2;
+            if (prec > 0) tbuf_size += (unsigned)prec;
+            if (time_units > timeformat_info.units)
+              tbuf_size += (unsigned)(time_units - timeformat_info.units);
+            tbuf = malloc(tbuf_size*sizeof(char));
             get_time(tbuf, value.value.str, prec, time_units);
           }
           cp = tbuf;
