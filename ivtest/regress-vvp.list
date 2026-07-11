@@ -449,6 +449,7 @@ scanf_float_mantissa		vvp_tests/scanf_float_mantissa.json
 scanf_high_format_byte		vvp_tests/scanf_high_format_byte.json
 scanf_high_byte			vvp_tests/scanf_high_byte.json
 scanf_percent_width_fail	vvp_tests/scanf_percent_width_fail.json
+scanf_raw_wide_dest		vvp_tests/scanf_raw_wide_dest.json
 scanf_string_format		vvp_tests/scanf_string_format.json
 scanf_trailing_percent_fail	vvp_tests/scanf_trailing_percent_fail.json
 scanf_width_overflow		vvp_tests/scanf_width_overflow.json
