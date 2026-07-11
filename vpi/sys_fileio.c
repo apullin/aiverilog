@@ -583,12 +583,12 @@ static unsigned fread_word(FILE *fp, vpiHandle word,
 	    if (byte == EOF) break;
 	      /* Clear the current byte and load the new value. */
 	    bnum = bidx % 4;
-	    clr_mask = ~(0xff << bnum*8);
+	    clr_mask = ~(0xffU << bnum*8);
 	    cur->aval &= clr_mask;
 	    cur->bval &= clr_mask;
-	    cur->aval |= byte << bnum*8;
+	    cur->aval |= (PLI_UINT32)byte << bnum*8;
 	    rtn += 1;
-	    if (bnum == 0) cur -= 1;
+	    if (bnum == 0 && bidx > 0) cur -= 1;
       }
 
 	/* Put the updated bits into the register. */

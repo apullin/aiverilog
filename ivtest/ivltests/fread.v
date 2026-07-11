@@ -6,6 +6,7 @@ module top;
   reg passed;
   integer fd, res;
   reg [8:0] rg;
+  reg [31:0] raw_rg;
   reg [7:0] mem [31:0];
 
   initial begin
@@ -167,6 +168,17 @@ module top;
     end
 
     $fclose(fd);
+
+    fd = $fopen("work/fread_high_byte.bin", "wb");
+    $fwrite(fd, "%c%c%c%c", 8'hff, "A", "B", "C");
+    $fclose(fd);
+    fd = $fopen("work/fread_high_byte.bin", "rb");
+    res = $fread(raw_rg, fd);
+    $fclose(fd);
+    if (res != 4 || raw_rg !== 32'hff414243) begin
+      $display("$fread (high byte) expected ff414243, got %08h", raw_rg);
+      passed = 1'b0;
+    end
 
     if (passed) $display("PASSED");
     else $display("FAILED");
