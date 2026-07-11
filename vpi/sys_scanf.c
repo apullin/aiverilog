@@ -753,7 +753,7 @@ static int scan_format_two_state(vpiHandle callh, vpiHandle argv,
       if (suppress_flag) {
 	      /* If no width was given then just remove one word pair. */
 	    if (width == UINT_MAX) words = 1;
-	    else words = (width+31)/32;
+	    else words = width/32 + (width%32 != 0);
 	    for (word = 0; word < words; word += 1) {
 		  unsigned byte;
 		    /* For a suppression we do not care about the endian order
@@ -792,7 +792,7 @@ static int scan_format_two_state(vpiHandle callh, vpiHandle argv,
       assert(varlen > 0);
       val_ptr = (p_vpi_vecval) malloc(varlen*sizeof(s_vpi_vecval));
       if (width == UINT_MAX) words = (unsigned)varlen;
-      else words = (width+31)/32;
+      else words = width/32 + (width%32 != 0);
       for (word = 0; word < words; word += 1) {
 	    int byte;
 	    PLI_INT32 bits = 0;
@@ -893,7 +893,7 @@ static int scan_format_four_state(vpiHandle callh, vpiHandle argv,
       if (suppress_flag) {
 	      /* If no width was given then just remove one word pair. */
 	    if (width == UINT_MAX) words = 1;
-	    else words = (width+31)/32;
+	    else words = width/32 + (width%32 != 0);
 	    for (word = 0; word < words; word += 1) {
 		  unsigned byte;
 		    /* For a suppression we do not care about the endian order
@@ -932,7 +932,7 @@ static int scan_format_four_state(vpiHandle callh, vpiHandle argv,
       assert(varlen > 0);
       val_ptr = (p_vpi_vecval) malloc(varlen*sizeof(s_vpi_vecval));
       if (width == UINT_MAX) words = (unsigned)varlen;
-      else words = (width+31)/32;
+      else words = width/32 + (width%32 != 0);
       for (word = 0; word < words; word += 1) {
 	    unsigned elem;
 	    for (elem = 0; elem < 2; elem += 1) {
@@ -1106,11 +1106,20 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 		  }
 		    /* Look for the maximum match width. */
 		  if (isdigit((int)*fmtp)) {
-			max_width = 0;
-			while (isdigit((int)*fmtp)) {
-			      max_width *= 10;
-			      max_width += *fmtp - '0';
-			      fmtp += 1;
+			char *end;
+			unsigned long value;
+			errno = 0;
+			value = strtoul(fmtp, &end, 10);
+			fmtp = end;
+			if (errno == ERANGE || value >= UINT_MAX) {
+			      vpi_printf("WARNING: %s:%d: %s field width "
+			                 "exceeds the implementation limit; "
+			                 "using unlimited width.\n",
+			                 vpi_get_str(vpiFile, callh),
+			                 (int)vpi_get(vpiLineNo, callh), name);
+			      max_width = UINT_MAX;
+			} else {
+			      max_width = value;
 			}
 		  }
 
