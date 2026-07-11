@@ -74,21 +74,23 @@ check: all
 	    -Bt$(top_builddir)$(PATH_SEP)tgt-vvp 2>&1 | \
 	    grep 'Icarus Verilog version'
 	@echo "driver/iverilog: create a vvp file and then run it."
-	@rm -f top.vvp
+	@rm -f top.vvp top.d
 	@$(builddir)/iverilog@EXEEXT@ \
 	    -B$(top_builddir)$(PATH_SEP)tgt-vvp \
 	    -BI$(top_builddir) \
 	    -BM$(top_builddir)$(PATH_SEP)vpi \
 	    -BP$(top_builddir)$(PATH_SEP)ivlpp \
 	    -Bt$(top_builddir)$(PATH_SEP)tgt-vvp \
-	    $(verbose) -o top.vvp -s top $(srcdir)/hello_world.v && \
+	    $(verbose) -Mmake=top.d -o top.vvp -s top $(srcdir)/hello_world.v && \
 	$(ENV_VVP) $(top_builddir)/vvp/vvp$(suffix)@EXEEXT@ top.vvp
+	@grep '^top\.vvp:' top.d
+	@grep 'hello_world\.v' top.d
 
 clean:
 	rm -f *.o cflexor.c cfparse.c cfparse.h cfparse.output
 	rm -f iverilog@EXEEXT@ iverilog.man iverilog.pdf iverilog.ps
 	rm -rf dep
-	rm -f top.vvp
+	rm -f top.vvp top.d
 
 distclean: clean
 	rm -f Makefile config.log
