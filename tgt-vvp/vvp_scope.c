@@ -659,6 +659,7 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			assert(word_count == 1);
 			fprintf(vvp_out, "; Elide local net with no drivers, v%p_%u name=%s\n",
 				sig, iword, ivl_signal_basename(sig));
+			continue;
 
 		  } else {
 			/* If this is an isolated word, it uses its
