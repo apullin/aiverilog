@@ -797,7 +797,7 @@ static int scan_format_two_state(vpiHandle callh, vpiHandle argv,
       else words = width/32 + (width%32 != 0);
       for (word = 0; word < words; word += 1) {
 	    int byte;
-	    PLI_INT32 bits = 0;
+	    PLI_UINT32 bits = 0;
 #ifdef WORDS_BIGENDIAN
 	    for (byte = 3; byte >= 0; byte -= 1) {
 #else
@@ -830,12 +830,12 @@ static int scan_format_two_state(vpiHandle callh, vpiHandle argv,
 			free(val_ptr);
 			return 0;
 		  }
-		  bits |= (ch & 0xff) << byte*8;
+		  bits |= (PLI_UINT32)(ch & 0xff) << byte*8;
 	    }
 	      /* Only save the words that are in range. */
 	    assert(varlen>=0);
 	    if (word < (unsigned)varlen) {
-		  val_ptr[word].aval = bits;
+		  val_ptr[word].aval = (PLI_INT32)bits;
 		  val_ptr[word].bval = 0;
 	    }
       }
@@ -939,7 +939,7 @@ static int scan_format_four_state(vpiHandle callh, vpiHandle argv,
 	    unsigned elem;
 	    for (elem = 0; elem < 2; elem += 1) {
 		  int byte;
-		  PLI_INT32 bits = 0;
+		  PLI_UINT32 bits = 0;
 #ifdef WORDS_BIGENDIAN
 		  for (byte = 3; byte >= 0; byte -= 1) {
 #else
@@ -974,11 +974,14 @@ static int scan_format_four_state(vpiHandle callh, vpiHandle argv,
 			      free(val_ptr);
 			      return 0;
 			}
-			bits |= (ch & 0xff) << byte*8;
+			bits |= (PLI_UINT32)(ch & 0xff) << byte*8;
 		  }
 		    /* Only save the words that are in range. */
 		  if (word < (unsigned)varlen) {
-			*(&val_ptr[word].aval+elem) = bits;
+			if (elem == 0)
+			      val_ptr[word].aval = (PLI_INT32)bits;
+			else
+			      val_ptr[word].bval = (PLI_INT32)bits;
 		  }
 	    }
       }
