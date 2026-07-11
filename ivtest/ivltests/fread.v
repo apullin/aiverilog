@@ -47,6 +47,17 @@ module top;
       passed = 1'b0;
     end
 
+    res = $fread(mem, fd, 0, -1); // Try an invalid count
+    if (res != 0) begin
+      $display("$fread (mem. count) is wrong, expected 0, got %0d", res);
+      passed = 1'b0;
+    end
+    if (mem[0] !== 8'bx) begin
+      $display("$fread (mem. count[0]) value is wrong, expected 8'bx, got %b",
+               mem[0]);
+      passed = 1'b0;
+    end
+
     // Check $fread with a register value.
     res = $fread(rg, fd); // Load with the lower nine bits of "ab".
     if (res != 2) begin

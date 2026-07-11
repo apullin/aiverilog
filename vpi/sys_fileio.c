@@ -678,6 +678,16 @@ static PLI_INT32 sys_fread_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 			val.format = vpiIntVal;
 			vpi_get_value(arg, &val);
 			count = val.value.integer;
+			if (count < 0) {
+			      vpi_printf("WARNING: %s:%d: ",
+			                 vpi_get_str(vpiFile, callh),
+			                 (int)vpi_get(vpiLineNo, callh));
+			      vpi_printf("%s's count argument (%d) must not be "
+			                 "negative.\n", name, (int)count);
+			      return_zero(callh);
+			      vpi_free_object(argv);
+			      return 0;
+			}
 			if (count > max-start+1) {
 			      vpi_printf("WARNING: %s:%d: ",
 			                 vpi_get_str(vpiFile, callh),
