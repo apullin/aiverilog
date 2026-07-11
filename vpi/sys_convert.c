@@ -62,23 +62,23 @@ static void double2bits(double real, PLI_UINT32 bits[2])
       conv.rval = real;
 
 #ifdef WORDS_BIGENDIAN
-      bits[0] = (conv.bval[7] <<  0)
-              | (conv.bval[6] <<  8)
-              | (conv.bval[5] << 16)
-              | (conv.bval[4] << 24);
-      bits[1] = (conv.bval[3] <<  0)
-              | (conv.bval[2] <<  8)
-              | (conv.bval[1] << 16)
-              | (conv.bval[0] << 24);
+      bits[0] = ((PLI_UINT32)conv.bval[7] <<  0)
+              | ((PLI_UINT32)conv.bval[6] <<  8)
+              | ((PLI_UINT32)conv.bval[5] << 16)
+              | ((PLI_UINT32)conv.bval[4] << 24);
+      bits[1] = ((PLI_UINT32)conv.bval[3] <<  0)
+              | ((PLI_UINT32)conv.bval[2] <<  8)
+              | ((PLI_UINT32)conv.bval[1] << 16)
+              | ((PLI_UINT32)conv.bval[0] << 24);
 #else
-      bits[0] = (conv.bval[0] <<  0)
-              | (conv.bval[1] <<  8)
-              | (conv.bval[2] << 16)
-              | (conv.bval[3] << 24);
-      bits[1] = (conv.bval[4] <<  0)
-              | (conv.bval[5] <<  8)
-              | (conv.bval[6] << 16)
-              | (conv.bval[7] << 24);
+      bits[0] = ((PLI_UINT32)conv.bval[0] <<  0)
+              | ((PLI_UINT32)conv.bval[1] <<  8)
+              | ((PLI_UINT32)conv.bval[2] << 16)
+              | ((PLI_UINT32)conv.bval[3] << 24);
+      bits[1] = ((PLI_UINT32)conv.bval[4] <<  0)
+              | ((PLI_UINT32)conv.bval[5] <<  8)
+              | ((PLI_UINT32)conv.bval[6] << 16)
+              | ((PLI_UINT32)conv.bval[7] << 24);
 #endif
 }
 
@@ -114,15 +114,15 @@ static void float2bits(float real, PLI_UINT32*bits)
       conv.rval = real;
 
 #ifdef WORDS_BIGENDIAN
-      *bits = (conv.bval[3] <<  0)
-            | (conv.bval[2] <<  8)
-            | (conv.bval[1] << 16)
-            | (conv.bval[0] << 24);
+      *bits = ((PLI_UINT32)conv.bval[3] <<  0)
+            | ((PLI_UINT32)conv.bval[2] <<  8)
+            | ((PLI_UINT32)conv.bval[1] << 16)
+            | ((PLI_UINT32)conv.bval[0] << 24);
 #else
-      *bits = (conv.bval[0] <<  0)
-            | (conv.bval[1] <<  8)
-            | (conv.bval[2] << 16)
-            | (conv.bval[3] << 24);
+      *bits = ((PLI_UINT32)conv.bval[0] <<  0)
+            | ((PLI_UINT32)conv.bval[1] <<  8)
+            | ((PLI_UINT32)conv.bval[2] << 16)
+            | ((PLI_UINT32)conv.bval[3] << 24);
 #endif
 }
 
