@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "timeformat_invalid_range.v",
+    "iverilog-args" : [ "-g2012" ]
+}

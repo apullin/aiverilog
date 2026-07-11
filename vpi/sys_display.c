@@ -2035,8 +2035,6 @@ static PLI_INT32 sys_timeformat_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       vpiHandle sys   = vpi_handle(vpiSysTfCall, 0);
       vpiHandle argv  = vpi_iterate(vpiArgument, sys);
 
-      (void)name; /* Parameter is not used. */
-
       if (argv) {
             vpiHandle units = vpi_scan(argv);
             vpiHandle prec  = vpi_scan(argv);
@@ -2047,11 +2045,25 @@ static PLI_INT32 sys_timeformat_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 
             value.format = vpiIntVal;
             vpi_get_value(units, &value);
-            timeformat_info.units = value.value.integer;
+            if (value.value.integer < -15 || value.value.integer > 0) {
+                  vpi_printf("WARNING: %s:%d: %s units must be between "
+                             "-15 and 0; keeping the previous value.\n",
+                             vpi_get_str(vpiFile, sys),
+                             (int)vpi_get(vpiLineNo, sys), name);
+            } else {
+                  timeformat_info.units = value.value.integer;
+            }
 
             value.format = vpiIntVal;
             vpi_get_value(prec, &value);
-            timeformat_info.prec = value.value.integer;
+            if (value.value.integer < 0 || value.value.integer >= INT_MAX) {
+                  vpi_printf("WARNING: %s:%d: %s precision is out of range; "
+                             "using zero.\n", vpi_get_str(vpiFile, sys),
+                             (int)vpi_get(vpiLineNo, sys), name);
+                  timeformat_info.prec = 0;
+            } else {
+                  timeformat_info.prec = value.value.integer;
+            }
 
             value.format = vpiStringVal;
             vpi_get_value(suff, &value);
@@ -2060,7 +2072,14 @@ static PLI_INT32 sys_timeformat_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 
             value.format = vpiIntVal;
             vpi_get_value(wid, &value);
-            timeformat_info.width = value.value.integer;
+            if (value.value.integer < 0 || value.value.integer >= INT_MAX) {
+                  vpi_printf("WARNING: %s:%d: %s minimum width is out of "
+                             "range; using zero.\n", vpi_get_str(vpiFile, sys),
+                             (int)vpi_get(vpiLineNo, sys), name);
+                  timeformat_info.width = 0;
+            } else {
+                  timeformat_info.width = value.value.integer;
+            }
       } else {
             /* If no arguments are given then use the default values. */
             sys_end_of_compile(NULL);
