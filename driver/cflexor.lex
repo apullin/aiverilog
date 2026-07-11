@@ -63,6 +63,7 @@ int cmdfile_stack_ptr = 0;
     free(current_file);				\
     yyterminate();				\
   } else {					\
+    fclose(yyin);				\
     yy_delete_buffer(YY_CURRENT_BUFFER);	\
     yy_switch_to_buffer(cmdfile_stack[cmdfile_stack_ptr].buffer); \
     free(current_file);                         \

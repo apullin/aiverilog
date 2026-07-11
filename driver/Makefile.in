@@ -90,6 +90,14 @@ check: all
 	    > long-command.conf; \
 	    $(builddir)/iverilog@EXEEXT@ -f long-command.conf >/dev/null 2>&1; \
 	    status=$$?; rm -f long-command.conf; test $$status -eq 1
+	@: > nested-empty.conf; \
+	    awk 'BEGIN { for (i=0; i<3000; i++) print "-f nested-empty.conf" }' \
+	        > many-commands.conf; \
+	    $(builddir)/iverilog@EXEEXT@ -f many-commands.conf \
+	        > many-commands.log 2>&1; status=$$?; \
+	    grep -q 'no source files' many-commands.log; result=$$?; \
+	    rm -f nested-empty.conf many-commands.conf many-commands.log; \
+	    test $$status -eq 1 && test $$result -eq 0
 	@grep '^top\.vvp:' top.d
 	@grep 'hello_world\.v' top.d
 
@@ -98,6 +106,7 @@ clean:
 	rm -f iverilog@EXEEXT@ iverilog.man iverilog.pdf iverilog.ps
 	rm -rf dep
 	rm -f top.vvp top.d long-command.conf
+	rm -f nested-empty.conf many-commands.conf many-commands.log
 
 distclean: clean
 	rm -f Makefile config.log
