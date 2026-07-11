@@ -83,6 +83,9 @@ check: all
 	    -Bt$(top_builddir)$(PATH_SEP)tgt-vvp \
 	    $(verbose) -Mmake=top.d -o top.vvp -s top $(srcdir)/hello_world.v && \
 	$(ENV_VVP) $(top_builddir)/vvp/vvp$(suffix)@EXEEXT@ top.vvp
+	@$(builddir)/iverilog@EXEEXT@ \
+	    -f $(srcdir)/tests/unterminated-substitution.conf >/dev/null 2>&1; \
+	    test $$? -eq 1
 	@grep '^top\.vvp:' top.d
 	@grep 'hello_world\.v' top.d
 

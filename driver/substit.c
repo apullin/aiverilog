@@ -31,14 +31,23 @@ char* substitutions(const char*str)
       char*cp = buf;
 
       while (*str) {
+	    const char*ep = 0;
 
 	    if ((str[0] == '$') && ((str[1] == '(') || str[1] == '{')) {
+		  ep = strchr(str, (str[1]=='(') ? ')' : '}');
+		  if (ep == 0) {
+			fprintf(stderr, "Error: unterminated environment variable "
+			        "reference in command file.\n");
+			command_file_errors += 1;
+		  }
+	    }
+
+	    if (ep != 0) {
 		    /* If I find a $(x) or ${x} string in the source, replace
 		       it in the destination with the contents of the
 		       environment variable x. */
 		  char*name;
 		  const char*value;
-		  const char*ep = strchr(str, (str[1]=='(') ? ')' : '}');
 		  str += 2;
 
 		  name = malloc(ep-str+1);
