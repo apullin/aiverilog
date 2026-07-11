@@ -1069,11 +1069,11 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 
       while ( fmtp && *fmtp != 0 && match) {
 
-	    if (isspace((int)*fmtp)) {
+	    if (isspace((unsigned char)*fmtp)) {
 		    /* White space matches a string of white space in the
 		     * input. The number of spaces is not relevant, and
 		     * the match may be 0 or more spaces. */
-		  while (*fmtp && isspace((int)*fmtp)) fmtp += 1;
+		  while (*fmtp && isspace((unsigned char)*fmtp)) fmtp += 1;
 
 		  ch = byte_getc(src);
 		  while (isspace(ch)) ch = byte_getc(src);
@@ -1083,7 +1083,7 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 	    } else if (*fmtp != '%') {
 		    /* Characters other than % match themselves. */
 		  ch = byte_getc(src);
-		  if (ch != *fmtp) {
+		  if (ch != (unsigned char)*fmtp) {
 			byte_ungetc(src, ch);
 			break;
 		  }
@@ -1107,7 +1107,7 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 			fmtp += 1;
 		  }
 		    /* Look for the maximum match width. */
-		  if (isdigit((int)*fmtp)) {
+		  if (isdigit((unsigned char)*fmtp)) {
 			char *end;
 			unsigned long value;
 			errno = 0;
