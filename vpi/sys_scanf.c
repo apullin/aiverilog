@@ -1033,7 +1033,7 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 	/* Look for an undefined bit (X/Z) in the format string. If one is
 	 * found just return EOF. */
       len = vpi_get(vpiSize, item);
-      if (len > 0) {
+      if (len > 0 && vpi_get(vpiType, item) != vpiStringVar) {
 	    words = ((len + 31) / 32) - 1;
 	    val.format = vpiVectorVal;
 	    vpi_get_value(item, &val);
