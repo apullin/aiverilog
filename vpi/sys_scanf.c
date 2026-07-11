@@ -1140,8 +1140,18 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 
 			  /* Read a '%' character from the input. */
 		      case '%':
-			assert(max_width == -1U);
-			assert(suppress_flag == 0);
+			if (max_width != UINT_MAX || suppress_flag) {
+			      vpi_printf("ERROR: %s:%d: ",
+			                 vpi_get_str(vpiFile, callh),
+			                 (int)vpi_get(vpiLineNo, callh));
+			      vpi_printf("%s() format code %%%% cannot have a "
+			                 "field width or assignment suppression.\n",
+			                 name);
+			      vpip_set_return_value(1);
+			      vpi_control(vpiFinish, 1);
+			      match = 0;
+			      break;
+			}
 			ch = byte_getc(src);
 			if (ch != '%') {
 			      byte_ungetc(src, ch);

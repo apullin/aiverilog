@@ -1,0 +1,5 @@
+{
+    "type"          : "EF",
+    "source"        : "scanf_percent_width_fail.v",
+    "iverilog-args" : [ "-g2012" ]
+}
