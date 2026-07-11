@@ -33,6 +33,7 @@
 # include  <climits>
 # include  <cmath>
 # include  <cassert>
+# include  <type_traits>
 #ifdef CHECK_WITH_VALGRIND
 # include  <valgrind/memcheck.h>
 # include  <map>
@@ -2132,8 +2133,9 @@ ostream& operator<< (ostream&out, const vvp_vector4_t&that)
 template <class INT>bool vector4_to_value(const vvp_vector4_t&vec, INT&val,
 					  bool is_signed, bool is_arithmetic)
 {
-      INT res = 0;
-      INT msk = 1;
+      typedef typename std::make_unsigned<INT>::type UINT;
+      UINT res = 0;
+      UINT msk = 1;
       bool rc_flag = true;
 
       unsigned size = vec.size();
@@ -2157,10 +2159,10 @@ template <class INT>bool vector4_to_value(const vvp_vector4_t&vec, INT&val,
 
       if (is_signed && vec.value(vec.size()-1) == BIT4_1) {
 	    if (vec.size() < 8*sizeof(val))
-		  res |= static_cast<INT>(-1ULL << vec.size());
+		  res |= static_cast<UINT>(-1ULL << vec.size());
       }
 
-      val = res;
+      val = static_cast<INT>(res);
       return rc_flag;
 }
 
