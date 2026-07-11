@@ -56,13 +56,20 @@ static void translate_file_name(char*text)
 
 %union {
       char*text;
+      struct {
+	    char*text;
+	    char*file;
+	    unsigned line;
+      } word;
 };
 
+%locations
 %token TOK_Da TOK_Dc TOK_Dv TOK_Dy
 %token TOK_DEFINE TOK_INCDIR TOK_INTEGER_WIDTH TOK_LIBDIR TOK_LIBDIR_NOCASE
 %token TOK_LIBEXT TOK_PARAMETER TOK_TIMESCALE TOK_VHDL_WORK TOK_VHDL_LIBDIR
 %token TOK_WIDTH_CAP
-%token <text> TOK_PLUSARG TOK_PLUSWORD TOK_STRING
+%token <text> TOK_PLUSARG TOK_STRING
+%token <word> TOK_PLUSWORD
 
 %%
 
@@ -205,19 +212,21 @@ item
 
 	| TOK_PLUSWORD skip_args
 		{ fprintf(stderr, "%s:%u: Ignoring %s\n",
-			  @1.text, @1.first_line, $1);
-		  free($1);
+			  $1.file, $1.line, $1.text);
+		  free($1.file);
+		  free($1.text);
 		}
 	| TOK_PLUSWORD
-		{ if (strcmp($1, "+toupper-filenames") == 0) {
+		{ if (strcmp($1.text, "+toupper-filenames") == 0) {
 		        setcase_filename_flag = 1;
-		  } else if (strcmp($1, "+tolower-filenames") == 0) {
+		  } else if (strcmp($1.text, "+tolower-filenames") == 0) {
 			setcase_filename_flag = 2;
 		  } else {
 			fprintf(stderr, "%s:%u: Ignoring %s\n",
-				@1.text, @1.first_line, $1);
+				$1.file, $1.line, $1.text);
 		  }
-		  free($1);
+		  free($1.file);
+		  free($1.text);
 		}
 
 	| error

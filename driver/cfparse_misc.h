@@ -30,7 +30,6 @@ struct cfltype {
       unsigned first_column;
       unsigned last_line;
       unsigned last_column;
-      const char*text;
 };
 # define YYLTYPE struct cfltype
 

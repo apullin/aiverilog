@@ -139,7 +139,9 @@ int cmdfile_stack_ptr = 0;
 
   /* If it is not any known plus-flag, return the generic form. */
 "+"[^\n \t\b\f\r+]* {
-      cflval.text = strdup(yytext);
+      cflval.word.text = strdup(yytext);
+      cflval.word.file = strdup(current_file);
+      cflval.word.line = cflloc.first_line;
       BEGIN(PLUS_ARGS);
       return TOK_PLUSWORD; }
 

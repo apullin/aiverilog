@@ -100,7 +100,8 @@ check: all
 	    test $$status -eq 1 && test $$result -eq 0
 	@$(builddir)/iverilog@EXEEXT@ -f $(srcdir)/tests/nested-lines.conf \
 	    > nested-lines.log 2>&1; status=$$?; \
-	    grep -q ':2: Ignoring +audit-unknown' nested-lines.log; result=$$?; \
+	    grep -q 'nested-lines.conf:2: Ignoring +audit-unknown' \
+	        nested-lines.log; result=$$?; \
 	    rm -f nested-lines.log; \
 	    test $$status -eq 1 && test $$result -eq 0
 	@grep '^top\.vvp:' top.d
