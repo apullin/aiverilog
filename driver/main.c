@@ -130,6 +130,7 @@ const char**vhdlpp_libdir = 0;
 unsigned vhdlpp_libdir_cnt = 0;
 
 char depmode = 'a';
+static int make_depfile = 0;
 
 const char*generation = "2005";
 const char*gen_specify = "no-specify";
@@ -902,6 +903,7 @@ static int process_generation(const char*name)
 static int process_depfile(const char*name)
 {
       const char*cp = strchr(name, '=');
+      make_depfile = 0;
       if (cp) {
             int match_length = (int)(cp - name) + 1;
             if (strncmp(name, "all=", match_length) == 0) {
@@ -912,6 +914,9 @@ static int process_depfile(const char*name)
                   depmode = 'm';
             } else if (strncmp(name, "prefix=", match_length) == 0) {
                   depmode = 'p';
+            } else if (strncmp(name, "make=", match_length) == 0) {
+                  depmode = 'a';
+                  make_depfile = 1;
             } else {
                   fprintf(stderr, "Unknown dependency file mode '%.*s'\n\n",
                           match_length - 1, name);
@@ -920,6 +925,7 @@ static int process_depfile(const char*name)
                   fprintf(stderr, "    include\n");
                   fprintf(stderr, "    module\n");
                   fprintf(stderr, "    prefix\n");
+                  fprintf(stderr, "    make\n");
                   return -1;
 	    }
             depfile = cp + 1;
@@ -927,6 +933,101 @@ static int process_depfile(const char*name)
             depmode = 'a';
             depfile = name;
       }
+      return 0;
+}
+
+static void write_make_name(FILE*fd, const char*name)
+{
+      for (const char*cp = name ; *cp ; cp += 1) {
+	    if (*cp == '$') {
+		  fputs("$$", fd);
+	    } else {
+		  if (strchr(" \t#:\\|;", *cp))
+			fputc('\\', fd);
+		  fputc(*cp, fd);
+	    }
+      }
+}
+
+static int format_make_depfile(void)
+{
+      FILE*fd = fopen(depfile, "rb");
+      long file_size;
+      char*data;
+      char**paths = 0;
+      size_t path_count = 0;
+
+      if (!fd) {
+	    perror(depfile);
+	    return -1;
+      }
+      if (fseek(fd, 0, SEEK_END) || (file_size = ftell(fd)) < 0 ||
+	  fseek(fd, 0, SEEK_SET)) {
+	    perror(depfile);
+	    fclose(fd);
+	    return -1;
+      }
+
+      data = malloc((size_t)file_size + 1);
+      if (!data) {
+	    fclose(fd);
+	    return -1;
+      }
+      if (fread(data, 1, (size_t)file_size, fd) != (size_t)file_size) {
+	    perror(depfile);
+	    free(data);
+	    fclose(fd);
+	    return -1;
+      }
+      fclose(fd);
+      data[file_size] = 0;
+
+      for (char*dep_line = data ; dep_line < data + file_size ;) {
+	    char*next = strchr(dep_line, '\n');
+	    if (next)
+		  *next++ = 0;
+	    else
+		  next = data + file_size;
+	    size_t length = strlen(dep_line);
+	    if (length && dep_line[length-1] == '\r')
+		  dep_line[--length] = 0;
+	    if (length) {
+		  char**new_paths = realloc(paths,
+		                             (path_count + 1) * sizeof(*paths));
+		  if (!new_paths) {
+			free(paths);
+			free(data);
+			return -1;
+		  }
+		  paths = new_paths;
+		  paths[path_count++] = dep_line;
+	    }
+	    dep_line = next;
+      }
+
+      fd = fopen(depfile, "w");
+      if (!fd) {
+	    perror(depfile);
+	    free(paths);
+	    free(data);
+	    return -1;
+      }
+
+      write_make_name(fd, opath);
+      if (path_count == 0) {
+	    fputs(":\n", fd);
+      } else {
+	    fputs(": \\\n", fd);
+	    for (size_t idx = 0 ; idx < path_count ; idx += 1) {
+		  fputs("  ", fd);
+		  write_make_name(fd, paths[idx]);
+		  fputs(idx+1 < path_count? " \\\n" : "\n", fd);
+	    }
+      }
+
+      fclose(fd);
+      free(paths);
+      free(data);
       return 0;
 }
 
@@ -1576,12 +1677,10 @@ int main(int argc, char **argv)
       if (version_flag)
 	    return t_version_only();
 
-	/* If the -E flag was given on the command line, then all we
-	   do is run the preprocessor and put the output where the
-	   user wants it. */
-      if (e_flag)
-	    return t_preprocess_only();
-
-	/* Otherwise, this is a full compile. */
-      return t_compile();
+	/* Run the selected compilation path, then convert the dependency
+	   list if Makefile output was requested. */
+      int rc = e_flag? t_preprocess_only() : t_compile();
+      if (rc == 0 && make_depfile && format_make_depfile() != 0)
+	    return 1;
+      return rc;
 }

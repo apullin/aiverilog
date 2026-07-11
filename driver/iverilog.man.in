@@ -246,6 +246,9 @@ automatically loaded by library support are listed. The output is one
 file name per line, with no leading or trailing space. If \fBmode\fP
 is \fBprefix\fP, files that are included by include directives are
 prefixed by "I " and other files are prefixed by "M ".
+If \fBmode\fP is \fBmake\fP, all dependencies are written as escaped
+prerequisites of the compiler output file, suitable for inclusion in a
+Makefile.
 .TP 8
 .B -m\fImodule\fP
 Add this module to the list of VPI modules to be loaded by the
