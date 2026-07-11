@@ -90,6 +90,7 @@ static double get_float(struct byte_source *src, unsigned width, int *match)
       char *endptr;
       char *strval = malloc(1);
       unsigned len = 0;
+      unsigned digits = 0;
       double result;
       int ch;
 
@@ -125,6 +126,7 @@ static double get_float(struct byte_source *src, unsigned width, int *match)
       while (isdigit(ch) && (len < width)) {
 	    strval = realloc(strval, len+2);
 	    strval[len++] = ch;
+	    digits += 1;
 	    ch = byte_getc(src);
       }
 
@@ -138,13 +140,13 @@ static double get_float(struct byte_source *src, unsigned width, int *match)
 	    while (isdigit(ch) && (len < width)) {
 		  strval = realloc(strval, len+2);
 		  strval[len++] = ch;
+		  digits += 1;
 		  ch = byte_getc(src);
 	    }
       }
 
-	/* No leading digits were matched. */
-      if ((len == 0) ||
-          ((len == 1) && ((strval[0] == '+') || (strval[0] == '-')))) {
+	/* A decimal point and optional sign are not a number. */
+      if (digits == 0) {
 	    byte_ungetc(src, ch);
 	    free(strval);
 	    *match = 0;
