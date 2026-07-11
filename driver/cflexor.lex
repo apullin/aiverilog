@@ -54,6 +54,7 @@ static void forget_file_name(void)
 typedef struct t_cmdfile {
       char *cmdfile;
       YY_BUFFER_STATE buffer;
+      unsigned line;
 } s_cmdfile;
 s_cmdfile cmdfile_stack[MAX_CMDFILE_DEPTH];
 int cmdfile_stack_ptr = 0;
@@ -68,6 +69,7 @@ int cmdfile_stack_ptr = 0;
     yy_switch_to_buffer(cmdfile_stack[cmdfile_stack_ptr].buffer); \
     free(current_file);                         \
     current_file = cmdfile_stack[cmdfile_stack_ptr].cmdfile; \
+    cflloc.first_line = cmdfile_stack[cmdfile_stack_ptr].line; \
   }
 
 %}
@@ -183,6 +185,7 @@ int cmdfile_stack_ptr = 0;
      is a little bit tricky, as we don't want to mistake a comment for
      a string word. */
 "/"[\r\n] { /* Special case of file name "/" */
+      yyless(1);
       cflval.text = trim_trailing_white(yytext, 0);
       return TOK_STRING; }
 "/"[^\*\/] { /* A file name that starts with "/". */
@@ -206,6 +209,7 @@ int cmdfile_stack_ptr = 0;
       /* not a comment... continuing */; }
 <FILE_NAME>[\n\r] {
 	/* No trailing comment. Return the file name. */
+      yyless(yyleng-1);
       cflval.text = trim_trailing_white(yytext, 0);
       forget_file_name();
       BEGIN(0);
@@ -259,6 +263,7 @@ void switch_to_command_file(const char *file)
 
       cmdfile_stack[cmdfile_stack_ptr].buffer = YY_CURRENT_BUFFER;
       cmdfile_stack[cmdfile_stack_ptr].cmdfile = current_file;
+      cmdfile_stack[cmdfile_stack_ptr].line = cflloc.first_line;
       cmdfile_stack_ptr += 1;
 
         /*
