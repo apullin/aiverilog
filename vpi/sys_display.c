@@ -22,6 +22,7 @@
 # include  <string.h>
 # include  <errno.h>
 # include  <ctype.h>
+# include  <limits.h>
 # include  <stdio.h>
 # include  <stdlib.h>
 # include  <math.h>
@@ -916,10 +917,32 @@ static unsigned int get_format(char **rtn, char *fmt,
         ld_zero = 1;
         cp += 1;
       }
-      if (isdigit((int)*cp)) width = strtoul(cp, &cp, 10);
+      if (isdigit((int)*cp)) {
+        unsigned long value;
+        errno = 0;
+        value = strtoul(cp, &cp, 10);
+        if (errno == ERANGE || value > INT_MAX) {
+          vpi_printf("WARNING: %s:%d: %s format width exceeds the "
+                     "implementation limit; using zero.\n",
+                     info->filename, info->lineno, info->name);
+          width = 0;
+        } else {
+          width = value;
+        }
+      }
       if (*cp == '.') {
+        unsigned long value;
         cp += 1;
-        prec = strtoul(cp, &cp, 10);
+        errno = 0;
+        value = strtoul(cp, &cp, 10);
+        if (errno == ERANGE || value > INT_MAX) {
+          vpi_printf("WARNING: %s:%d: %s format precision exceeds the "
+                     "implementation limit; using zero.\n",
+                     info->filename, info->lineno, info->name);
+          prec = 0;
+        } else {
+          prec = value;
+        }
       }
       cnt = get_format_char(&result, ljust, plus, ld_zero, width, prec, *cp,
                             info, idx);

@@ -137,6 +137,7 @@ dffsynth8			vvp_tests/dffsynth8.json
 dffsynth9			vvp_tests/dffsynth9.json
 dffsynth10			vvp_tests/dffsynth10.json
 dffsynth11			vvp_tests/dffsynth11.json
+display_format_overflow		vvp_tests/display_format_overflow.json
 display_time_wide		vvp_tests/display_time_wide.json
 drive_strength4			vvp_tests/drive_strength4.json
 dumpfile			vvp_tests/dumpfile.json
