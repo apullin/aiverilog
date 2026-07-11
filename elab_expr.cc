@@ -55,6 +55,16 @@ bool type_is_vectorable(ivl_variable_type_t type)
       }
 }
 
+static void show_cast_type(ostream&out, ivl_variable_type_t type,
+			   bool signed_flag, unsigned long width)
+{
+      out << type;
+      if (signed_flag)
+	    out << " signed";
+      if (type_is_vectorable(type) && width > 1)
+	    out << " [" << width-1 << ":0]";
+}
+
 static ivl_nature_t find_access_function(const pform_scoped_name_t &path)
 {
       if (path.package || path.name.size() != 1)
@@ -164,8 +174,14 @@ NetExpr* elaborate_rval_expr(Design*des, NetScope*scope, ivl_type_t lv_net_type,
       if (lval_enum) {
 	    const netenum_t *rval_enum = rval->enumeration();
 	    if (!rval_enum) {
-	      cerr << expr->get_fileline() << ": error: "
-			      "This assignment requires an explicit cast." << endl;
+	      cerr << expr->get_fileline() << ": error: Explicit cast required "
+		   << "to convert expression of type '";
+	      show_cast_type(cerr, rval->expr_type(), rval->has_sign(),
+			     rval->expr_width());
+	      cerr << "' to enumeration type 'enum ";
+	      show_cast_type(cerr, lval_enum->base_type(), lval_enum->get_signed(),
+			     lval_enum->packed_width());
+	      cerr << "'." << endl;
 	      des->errors += 1;
 	    } else if (!lval_enum->matches(rval_enum)) {
 	      cerr << expr->get_fileline() << ": error: "

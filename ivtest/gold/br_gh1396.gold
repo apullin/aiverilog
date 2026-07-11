@@ -1,0 +1,3 @@
+./ivltests/br_gh1396.v:12: error: Explicit cast required to convert expression of type 'logic [7:0]' to enumeration type 'enum logic [7:0]'.
+./ivltests/br_gh1396.v:13: error: Explicit cast required to convert expression of type 'logic [7:0]' to enumeration type 'enum logic [7:0]'.
+2 error(s) during elaboration.
