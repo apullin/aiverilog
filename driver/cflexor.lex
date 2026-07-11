@@ -247,6 +247,7 @@ int yywrap(void)
 void switch_to_command_file(const char *file)
 {
       char path[4096];
+      int path_len;
 
       if (cmdfile_stack_ptr >= MAX_CMDFILE_DEPTH) {
 	    fprintf(stderr, "Error: command files nested too deeply (%d) "
@@ -264,15 +265,21 @@ void switch_to_command_file(const char *file)
          * file name.
          */
       if (file[0] != '/') {
-	    char *cp;
-	    strcpy(path, current_file);
-	    cp = strrchr(path, '/');
-	    if (cp == 0) strcpy(path, file);  /* A base file. */
-	    else {
-	          *(cp+1) = '\0';
-	          strcat(path, file);
-	    }
-      } else strcpy(path, file);  /* An absolute path. */
+	    const char *cp = strrchr(current_file, '/');
+	    if (cp == 0)
+		  path_len = snprintf(path, sizeof path, "%s", file);
+	    else
+		  path_len = snprintf(path, sizeof path, "%.*s%s",
+		                      (int)(cp-current_file+1), current_file, file);
+      } else {
+	    path_len = snprintf(path, sizeof path, "%s", file);
+      }
+
+      if ((path_len < 0) || ((size_t)path_len >= sizeof path)) {
+	    fprintf(stderr, "Error: nested command file path is too long "
+	            "at %s:%u.\n", current_file, cflloc.first_line);
+	    exit(1);
+      }
 
       yyin = fopen(path, "r");
       if (yyin == NULL) {

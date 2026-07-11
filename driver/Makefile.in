@@ -86,6 +86,10 @@ check: all
 	@$(builddir)/iverilog@EXEEXT@ \
 	    -f $(srcdir)/tests/unterminated-substitution.conf >/dev/null 2>&1; \
 	    test $$? -eq 1
+	@awk 'BEGIN { printf "-f "; for (i=0; i<5000; i++) printf "a"; print "" }' \
+	    > long-command.conf; \
+	    $(builddir)/iverilog@EXEEXT@ -f long-command.conf >/dev/null 2>&1; \
+	    status=$$?; rm -f long-command.conf; test $$status -eq 1
 	@grep '^top\.vvp:' top.d
 	@grep 'hello_world\.v' top.d
 
@@ -93,7 +97,7 @@ clean:
 	rm -f *.o cflexor.c cfparse.c cfparse.h cfparse.output
 	rm -f iverilog@EXEEXT@ iverilog.man iverilog.pdf iverilog.ps
 	rm -rf dep
-	rm -f top.vvp top.d
+	rm -f top.vvp top.d long-command.conf
 
 distclean: clean
 	rm -f Makefile config.log
