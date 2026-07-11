@@ -52,7 +52,7 @@ static int byte_getc(struct byte_source *src)
 	    assert(! src->fd);
 	    if (src->str[0] == 0) return EOF;
 
-	    return *(src->str)++;
+	    return (unsigned char)*(src->str)++;
       }
 
       assert(src->fd);
