@@ -2061,11 +2061,11 @@ extern "C" s_vpi_vecval vpip_calc_clog2(vpiHandle arg)
 	    unsigned wid = vpi_get(vpiSize, arg);
 	    vec4 = vvp_vector4_t(wid, BIT4_0);
 	    for (unsigned idx=0; idx < wid; idx += 1) {
-		PLI_INT32 aval = val.value.vector[idx/32].aval;
-		PLI_INT32 bval = val.value.vector[idx/32].bval;
+		PLI_UINT32 aval = val.value.vector[idx/32].aval;
+		PLI_UINT32 bval = val.value.vector[idx/32].bval;
 		aval >>= idx % 32;
 		bval >>= idx % 32;
-		int bitmask = (aval&1) | ((bval<<1)&2);
+		int bitmask = (aval&1) | ((bval&1)<<1);
 		vvp_bit4_t bit = scalar_to_bit4(bitmask);
 		vec4.set_bit(idx, bit);
 	    }
