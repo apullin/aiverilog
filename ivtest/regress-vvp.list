@@ -450,6 +450,7 @@ scanf_high_format_byte		vvp_tests/scanf_high_format_byte.json
 scanf_high_byte			vvp_tests/scanf_high_byte.json
 scanf_percent_width_fail	vvp_tests/scanf_percent_width_fail.json
 scanf_string_format		vvp_tests/scanf_string_format.json
+scanf_trailing_percent_fail	vvp_tests/scanf_trailing_percent_fail.json
 scanf_width_overflow		vvp_tests/scanf_width_overflow.json
 task_return1			vvp_tests/task_return1.json
 task_return2			vvp_tests/task_return2.json

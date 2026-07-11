@@ -1128,8 +1128,8 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 		  }
 
 		    /* Get the format character. */
-		  code = *fmtp;
-		  fmtp += 1;
+		  code = (unsigned char)*fmtp;
+		  if (code != 0) fmtp += 1;
 
 		    /* The format string is parsed:
 		     *   - max_width is the width,
@@ -1253,8 +1253,13 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 			vpi_printf("ERROR: %s:%d: ",
 			           vpi_get_str(vpiFile, callh),
 			           (int)vpi_get(vpiLineNo, callh));
-			vpi_printf("%s() was given an invalid format code: "
-			           "%%%c\n", name, code);
+			if (code == 0) {
+			      vpi_printf("%s() format string ends after %%.\n",
+			                 name);
+			} else {
+			      vpi_printf("%s() was given an invalid format code: "
+			                 "%%%c\n", name, code);
+			}
 			vpip_set_return_value(1);
 			vpi_control(vpiFinish, 1);
 			break;

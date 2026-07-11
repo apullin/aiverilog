@@ -1,0 +1,5 @@
+{
+    "type"          : "EF",
+    "source"        : "scanf_trailing_percent_fail.v",
+    "iverilog-args" : [ "-g2012" ]
+}
