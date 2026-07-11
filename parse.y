@@ -2610,7 +2610,10 @@ simple_type_or_string /* IEEE1800-2005: A.2.2.1 */
 
 statement /* IEEE1800-2005: A.6.4 */
   : attribute_list_opt statement_item
-      { pform_bind_attributes($2->attributes, $1);
+      { if ($2)
+	      pform_bind_attributes($2->attributes, $1);
+	else
+	      delete $1;
 	$$ = $2;
       }
   ;
