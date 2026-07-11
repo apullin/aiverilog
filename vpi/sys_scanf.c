@@ -1033,23 +1033,25 @@ static int scan_format(vpiHandle callh, struct byte_source*src, vpiHandle argv,
 	/* Look for an undefined bit (X/Z) in the format string. If one is
 	 * found just return EOF. */
       len = vpi_get(vpiSize, item);
-      words = ((len + 31) / 32) - 1;
-      val.format = vpiVectorVal;
-      vpi_get_value(item, &val);
-	/* Check the full words for an undefined bit. */
-      for (idx = 0; idx < words; idx += 1) {
-	    if (val.value.vector[idx].bval) {
+      if (len > 0) {
+	    words = ((len + 31) / 32) - 1;
+	    val.format = vpiVectorVal;
+	    vpi_get_value(item, &val);
+	      /* Check the full words for an undefined bit. */
+	    for (idx = 0; idx < words; idx += 1) {
+		  if (val.value.vector[idx].bval) {
+			match = 0;
+			rc = EOF;
+			break;
+		  }
+	    }
+	      /* The mask is defined to be 32 bits. */
+	    mask = UINT32_MAX >> (32U - ((len - 1U) % 32U + 1U));
+	      /* Check the top word for an undefined bit. */
+	    if (match && (val.value.vector[words].bval & mask)) {
 		  match = 0;
 		  rc = EOF;
-		  break;
 	    }
-      }
-	/* The mask is defined to be 32 bits. */
-      mask = UINT32_MAX >> (32U - ((len - 1U) % 32U + 1U));
-	/* Check the top word for an undefined bit. */
-      if (match && (val.value.vector[words].bval & mask)) {
-	    match = 0;
-	    rc = EOF;
       }
 
 	/* Now get the format as a string. */

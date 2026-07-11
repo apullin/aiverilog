@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "scanf_empty_format.v",
+    "iverilog-args" : [ "-g2012" ]
+}
