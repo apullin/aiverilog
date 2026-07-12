@@ -728,7 +728,7 @@ class NetNet  : public NetObj, public PortType {
         // This method returns true if we have changed the net type from being
         // a variable to being an unresolved wire. This happens in SystemVerilog
         // when we find a continuous assignment to a variable.
-      bool coerced_to_uwire() { return coerced_to_uwire_; }
+      bool coerced_to_uwire() const { return coerced_to_uwire_; }
 
       PortType port_type() const;
       void port_type(PortType t);
@@ -834,7 +834,7 @@ class NetNet  : public NetObj, public PortType {
 	// only useful for UNRESOLVED_WIRE objects. The msb and lsb
 	// are the part select of the signal, and the widx is the word
 	// index if this is an unpacked array.
-      bool test_part_driven(unsigned msb, unsigned lsb, int widx =0);
+      bool test_part_driven(unsigned msb, unsigned lsb, int widx =0) const;
 
 	// Treating this node as a uwire, this function tests whether
 	// any bits in the canonical part are already driven and sets

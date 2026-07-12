@@ -2545,6 +2545,7 @@ void dll_target::signal(const NetNet*net)
       obj->local_ = net->local_flag()? 1 : 0;
       obj->forced_net_ = (net->type() != NetNet::REG) &&
                          (net->peek_lref() > 0) ? 1 : 0;
+      obj->coerced_to_uwire_ = net->coerced_to_uwire()? 1 : 0;
       obj->discipline = net->get_discipline();
 
       obj->array_dimensions_ = net->unpacked_dimensions();
@@ -2674,6 +2675,16 @@ void dll_target::signal(const NetNet*net)
 
       ivl_assert(*net, (obj->array_words == net->pin_count()) ||
                        (obj->net_type->base_type() == IVL_VT_QUEUE));
+      if (obj->coerced_to_uwire_) {
+	    unsigned width = net->vector_width();
+	    obj->continuous_driver_mask_.resize(width * obj->array_words);
+	    for (unsigned word = 0 ; word < obj->array_words ; word += 1) {
+		  for (unsigned bit = 0 ; bit < width ; bit += 1) {
+			obj->continuous_driver_mask_[word*width + bit]
+			      = net->test_part_driven(bit, bit, word);
+		  }
+	    }
+      }
       if (debug_optimizer && obj->array_words > 1000) cerr << "debug: "
 	    "t-dll creating nexus array " << obj->array_words << " long" << endl;
       if (obj->array_words > 1 && net->pins_are_virtual()) {

@@ -1,5 +1,5 @@
 {
-    "type"          : "NI",
+    "type"          : "normal",
     "source"        : "sv_mixed_assign2.v",
     "iverilog-args" : [ "-g2009" ]
 }

@@ -1992,6 +1992,15 @@ extern unsigned ivl_scope_func_width(ivl_scope_t net);
  *    Return whether the signal is a net that is the subject of a force
  *    statement.
  *
+ * ivl_signal_coerced_to_uwire
+ *    Return whether a SystemVerilog variable was converted to an unresolved
+ *    wire because it has a continuous assignment.
+ *
+ * ivl_signal_is_continuously_driven
+ *    Return whether a bit of a signal word has a structural continuous
+ *    driver. This is used with ivl_signal_coerced_to_uwire to preserve the
+ *    variable behavior of the remaining bits.
+ *
  * ivl_signal_type
  *    Return the type of the signal, i.e., reg, wire, tri0, etc.
  *
@@ -2050,8 +2059,11 @@ extern ivl_signal_port_t ivl_signal_port(ivl_signal_t net);
 extern int         ivl_signal_module_port_index(ivl_signal_t net);
 extern int         ivl_signal_signed(ivl_signal_t net);
 extern int         ivl_signal_integer(ivl_signal_t net);
+extern unsigned    ivl_signal_is_continuously_driven(ivl_signal_t net,
+					      unsigned word, unsigned bit);
 extern int         ivl_signal_local(ivl_signal_t net);
 extern unsigned    ivl_signal_forced_net(ivl_signal_t net);
+extern unsigned    ivl_signal_coerced_to_uwire(ivl_signal_t net);
 extern unsigned    ivl_signal_npath(ivl_signal_t net);
 extern ivl_delaypath_t ivl_signal_path(ivl_signal_t net, unsigned idx);
 extern ivl_signal_type_t ivl_signal_type(ivl_signal_t net);

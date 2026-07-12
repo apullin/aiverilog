@@ -289,12 +289,15 @@ class __compile_net_resolv : public base_net_resolv {
 				    __vpiScope*scope,
 				    char*my_label, char*name,
 				    int msb, int lsb, unsigned array_addr,
-				    int vpi_type_code, bool signed_flag, bool local_flag)
+				    int vpi_type_code, bool signed_flag,
+				    bool local_flag,
+				    const vvp_vector4_t&variable_mask)
       : base_net_resolv(ref_label, array, scope, my_label, name, array_addr, local_flag)
       { msb_ = msb;
 	lsb_ = lsb;
 	vpi_type_code_ = vpi_type_code;
 	signed_flag_ = signed_flag;
+	variable_mask_ = variable_mask;
       }
 
       ~__compile_net_resolv() override { }
@@ -305,6 +308,7 @@ class __compile_net_resolv : public base_net_resolv {
       int msb_, lsb_;
       int vpi_type_code_;
       bool signed_flag_;
+      vvp_vector4_t variable_mask_;
 };
 
 /*
@@ -315,6 +319,9 @@ class __compile_net_resolv : public base_net_resolv {
  *    .net8   <name>, <msb>, <lsb>, <input> ;
  *    .net8/s <name>, <msb>, <lsb>, <input> ;
  *
+ * A second input describes a variable coerced into a net. Bits set to 1
+ * identify structural drivers; X and 0 encode the other bits' initial state.
+ *
  * Create a VPI handle to represent it, and fill that handle in with
  * references into the net.
  */
@@ -323,10 +330,14 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 			   __vpiScope*scope,
 			   char*my_label, char*name,
 			   int msb, int lsb, unsigned array_addr,
-			   int vpi_type_code, bool signed_flag, bool local_flag)
+			   int vpi_type_code, bool signed_flag, bool local_flag,
+			   const vvp_vector4_t&variable_mask)
 {
       unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
       assert(node);
+
+      bool variable_init = variable_mask.size() != 0;
+      assert(!variable_init || variable_mask.size() == wid);
 
       vvp_wire_base*vsig = dynamic_cast<vvp_wire_base*>(node->fil);
 
@@ -336,7 +347,8 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 		  vsig = new vvp_wire_vec4(wid,BIT4_0);
 		  break;
 		case vpiLogicVar:
-		  vsig = new vvp_wire_vec4(wid,BIT4_Z);
+		  vsig = new vvp_wire_vec4(wid,
+				variable_init? BIT4_X : BIT4_Z);
 		  break;
 		case -vpiLogicVar:
 		  vsig = new vvp_wire_vec8(wid);
@@ -344,6 +356,12 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 	    }
 	    assert(vsig);
 	    node->fil = vsig;
+      }
+
+      if (variable_init) {
+	    vvp_wire_vec4*vec4 = dynamic_cast<vvp_wire_vec4*>(vsig);
+	    assert(vec4);
+	    vec4->set_variable_mask(variable_mask);
       }
 
       vpiHandle obj = 0;
@@ -383,7 +401,15 @@ static void __compile_net(char*label,
 
       free(array_label);
 
-      assert(argc == 1);
+      assert(argc == 1 || argc == 2);
+      vvp_vector4_t variable_mask;
+      if (argc == 2) {
+	    assert(c4string_test(argv[1].text));
+	    variable_mask = c4string_to_vector4(argv[1].text);
+	    free(argv[1].text);
+	    unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
+	    assert(variable_mask.size() == wid);
+      }
       vvp_net_t*node = vvp_net_lookup(argv[0].text);
 #if 1
       if (node == 0) {
@@ -402,7 +428,8 @@ static void __compile_net(char*label,
 		  = new __compile_net_resolv(argv[0].text,
 					     array, scope, label, name,
 					     msb, lsb, array_addr,
-					     vpi_type_code, signed_flag, local_flag);
+					     vpi_type_code, signed_flag, local_flag,
+					     variable_mask);
 	    resolv_submit(res);
 	    free(argv);
 	    return;
@@ -411,7 +438,7 @@ static void __compile_net(char*label,
 
       __vpiScope*scope = vpip_peek_current_scope();
       do_compile_net(node, array, scope, label, name, msb, lsb, array_addr,
-		     vpi_type_code, signed_flag, local_flag);
+		     vpi_type_code, signed_flag, local_flag, variable_mask);
 
       free(argv[0].text);
       free(argv);
@@ -426,7 +453,9 @@ bool __compile_net_resolv::resolve(bool msg_flag)
 	    return false;
       }
 
-      do_compile_net(node, array_, scope_, my_label_, name_, msb_, lsb_, array_addr_, vpi_type_code_, signed_flag_, local_flag_);
+      do_compile_net(node, array_, scope_, my_label_, name_, msb_, lsb_,
+		     array_addr_, vpi_type_code_, signed_flag_, local_flag_,
+		     variable_mask_);
       return true;
 }
 

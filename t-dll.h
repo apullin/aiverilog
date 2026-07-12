@@ -741,6 +741,8 @@ struct ivl_signal_s {
       unsigned local_  : 1;
 
       unsigned forced_net_ : 1;
+      unsigned coerced_to_uwire_ : 1;
+      std::vector<bool> continuous_driver_mask_;
 
 	/* For now, support only 0 or 1 array dimensions. */
       unsigned array_dimensions_ : 8;

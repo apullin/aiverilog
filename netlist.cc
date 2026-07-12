@@ -841,7 +841,7 @@ unsigned NetNet::peek_eref() const
 /*
  * Test each of the bits in the range. If any bits are set then return true.
  */
-bool NetNet::test_part_driven(unsigned pmsb, unsigned plsb, int widx)
+bool NetNet::test_part_driven(unsigned pmsb, unsigned plsb, int widx) const
 {
       if (lref_mask_.empty())
            return false;

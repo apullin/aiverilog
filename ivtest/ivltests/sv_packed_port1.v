@@ -7,7 +7,7 @@ module main;
    } foo_s;
 
    foo_s [1:0][3:0] ival;
-   foo_s [1:0][3:0] oval;
+   wire foo_s [1:0][3:0] oval;
 
    genvar	    g;
    for (g = 0 ; g < 4 ; g = g+1) begin:loop

@@ -2596,6 +2596,24 @@ extern "C" unsigned ivl_signal_forced_net(ivl_signal_t net)
       return net->forced_net_;
 }
 
+extern "C" unsigned ivl_signal_coerced_to_uwire(ivl_signal_t net)
+{
+      assert(net);
+      return net->coerced_to_uwire_;
+}
+
+extern "C" unsigned ivl_signal_is_continuously_driven(ivl_signal_t net,
+					       unsigned word, unsigned bit)
+{
+      assert(net);
+      unsigned width = net->net_type->packed_width();
+      assert(word < net->array_words);
+      assert(bit < width);
+      if (net->continuous_driver_mask_.empty())
+	    return 0;
+      return net->continuous_driver_mask_[word*width + bit]? 1 : 0;
+}
+
 extern "C" const char* ivl_signal_file(ivl_signal_t net)
 {
       assert(net);

@@ -1750,7 +1750,10 @@ inline void vvp_net_t::send_vec4_pv(const vvp_vector4_t&val,
 	    vvp_send_vec4_pv(out_, val, base, vwid, context);
 	    break;
 	  case vvp_net_fil_t::REPL:
-	    vvp_send_vec4_pv(out_, rep, base, vwid, context);
+	    if (rep.size() == vwid && (base != 0 || val.size() != vwid))
+		  vvp_send_vec4(out_, rep, context);
+	    else
+		  vvp_send_vec4_pv(out_, rep, base, vwid, context);
 	    break;
       }
 }
@@ -1791,7 +1794,10 @@ inline void vvp_net_t::send_vec8_pv(const vvp_vector8_t&val,
 	    vvp_send_vec8_pv(out_, val, base, vwid);
 	    break;
 	  case vvp_net_fil_t::REPL:
-	    vvp_send_vec8_pv(out_, rep, base, vwid);
+	    if (rep.size() == vwid && (base != 0 || val.size() != vwid))
+		  vvp_send_vec8(out_, rep);
+	    else
+		  vvp_send_vec8_pv(out_, rep, base, vwid);
 	    break;
       }
 }

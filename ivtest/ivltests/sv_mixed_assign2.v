@@ -2,8 +2,9 @@
 module test();
 
 logic [11:0] v;
+logic [3:0] continuous_value = 4'd1;
 
-assign v[7:4] = 4'd1;
+assign v[7:4] = continuous_value;
 
 reg failed = 0;
 
@@ -30,6 +31,19 @@ initial begin
   release v[11:8];
   #0 $display("%b", v);
   if (v !== 12'b01000001xxxx) failed = 1;
+
+  // A later continuous update must not overwrite retained variable bits.
+  continuous_value = 4'd5;
+  #0 $display("%b", v);
+  if (v !== 12'b01000101xxxx) failed = 1;
+
+  // Split a release that spans continuously and procedurally driven bits.
+  force v[9:6] = 4'b1010;
+  #0 $display("%b", v);
+  if (v !== 12'b01101001xxxx) failed = 1;
+  release v[9:6];
+  #0 $display("%b", v);
+  if (v !== 12'b01100101xxxx) failed = 1;
 
   if (failed)
     $display("FAILED");
