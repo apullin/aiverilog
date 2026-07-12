@@ -1,0 +1,3 @@
+./ivltests/br_gh1317.v:9: error: variable written by an always_ff process is also written by another process.
+./ivltests/br_gh1317.v:7:      : conflicting initial process starts here.
+Elaboration failed
