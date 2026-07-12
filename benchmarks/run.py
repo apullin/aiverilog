@@ -17,6 +17,14 @@ import time
 
 ROOT = Path(__file__).resolve().parent
 
+# External design corpora are staged outside the repository (pinned
+# checkouts; see benchmarks/corpora/README.md for provenance and
+# hashes). Workloads whose staged files are missing are skipped unless
+# explicitly requested.
+CORPUS = Path(
+    os.environ.get("AIVERILOG_BENCH_CORPUS", Path.home() / "personal/benchmark-corpora")
+)
+
 
 @dataclass(frozen=True)
 class Workload:
@@ -25,6 +33,21 @@ class Workload:
     top: str
     sources: tuple
     gold: Path
+    # Extra compile arguments (defines etc.) and extra vvp arguments
+    # (plusargs etc.) for this workload.
+    iverilog_args: tuple = ()
+    vvp_args: tuple = ()
+    # Non-compiled input files (firmware images etc.) that are hashed
+    # into the report so compared runs are known to use identical data.
+    inputs: tuple = ()
+    # Corpus workloads compile and simulate from their own directory
+    # with sources named relative to it, so that source paths embedded
+    # in tool output (and therefore the gold oracle) do not depend on
+    # where the corpus is staged.
+    cwd: Path = None
+
+    def staged(self):
+        return all(path.is_file() for path in (*self.sources, *self.inputs))
 
 
 WORKLOADS = {
@@ -72,6 +95,19 @@ WORKLOADS = {
             (ROOT / "workloads/elaboration_heavy.sv",),
             ROOT / "gold/elaboration_heavy.stdout",
         ),
+        Workload(
+            "picorv32",
+            "picorv32 RISC-V core running its ISA test firmware",
+            "testbench",
+            (
+                CORPUS / "picorv32/testbench.v",
+                CORPUS / "picorv32/picorv32.v",
+            ),
+            ROOT / "gold/picorv32.stdout",
+            iverilog_args=("-DCOMPRESSED_ISA",),
+            inputs=(CORPUS / "picorv32/firmware/firmware.hex",),
+            cwd=CORPUS / "picorv32",
+        ),
     )
 }
 
@@ -115,11 +151,12 @@ def command_output(command, *, cwd=None):
     return result
 
 
-def timed_run(command, *, env):
+def timed_run(command, *, env, cwd=None):
     started = time.perf_counter_ns()
     result = subprocess.run(
         command,
         env=env,
+        cwd=cwd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
@@ -166,16 +203,16 @@ def stats(samples):
     }
 
 
-def benchmark_phase(command, runs, warmups, env, validator=None):
+def benchmark_phase(command, runs, warmups, env, validator=None, cwd=None):
     for _ in range(warmups):
-        _, stdout, stderr = timed_run(command, env=env)
+        _, stdout, stderr = timed_run(command, env=env, cwd=cwd)
         if validator:
             validator(stdout, stderr)
 
     samples = []
     last_output = (b"", b"")
     for _ in range(runs):
-        elapsed, stdout, stderr = timed_run(command, env=env)
+        elapsed, stdout, stderr = timed_run(command, env=env, cwd=cwd)
         if validator:
             validator(stdout, stderr)
         samples.append(elapsed)
@@ -252,6 +289,17 @@ def main():
     work_dir = args.work_dir.resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
     selected = args.workload or list(WORKLOADS)
+    if not args.workload:
+        skipped = [name for name in selected if not WORKLOADS[name].staged()]
+        for name in skipped:
+            print(f"skipping {name}: corpus files not staged under {CORPUS}")
+        selected = [name for name in selected if name not in skipped]
+    else:
+        for name in selected:
+            if not WORKLOADS[name].staged():
+                raise RuntimeError(
+                    f"workload {name} requires corpus files under {CORPUS}"
+                )
     env = os.environ.copy()
     env.update({"LC_ALL": "C", "LANG": "C", "TZ": "UTC"})
 
@@ -285,34 +333,42 @@ def main():
         workload_dir = work_dir / name
         workload_dir.mkdir(parents=True, exist_ok=True)
         executable = workload_dir / f"{name}.vvp"
+        source_args = [
+            str(path.relative_to(workload.cwd)) if workload.cwd else str(path)
+            for path in sources
+        ]
         compile_command = [
             str(iverilog),
             "-g2012",
+            *workload.iverilog_args,
             "-s",
             workload.top,
             "-o",
             str(executable),
-            *(str(path) for path in sources),
+            *source_args,
         ]
-        simulate_command = [str(vvp), str(executable)]
+        simulate_command = [str(vvp), str(executable), *workload.vvp_args]
         result = {
             "description": workload.description,
             "top": workload.top,
-            "sources": {source_label(path): digest_file(path) for path in sources},
+            "sources": {
+                source_label(path): digest_file(path)
+                for path in (*sources, *workload.inputs)
+            },
             "expected_stdout_sha256": digest_file(workload.gold),
         }
 
         print(f"\n{name}: {workload.description}")
         if args.phase in ("compile", "both"):
             compile_stats, diagnostics = benchmark_phase(
-                compile_command, args.runs, args.warmups, env
+                compile_command, args.runs, args.warmups, env, cwd=workload.cwd
             )
             result["compile"] = compile_stats
             result["compile_stdout_sha256"] = hashlib.sha256(diagnostics[0]).hexdigest()
             result["compile_stderr_sha256"] = hashlib.sha256(diagnostics[1]).hexdigest()
             print(f"  compile median:  {compile_stats['median_seconds']:.6f} s")
         else:
-            timed_run(compile_command, env=env)
+            timed_run(compile_command, env=env, cwd=workload.cwd)
 
         if args.phase in ("simulate", "both"):
 
@@ -320,7 +376,8 @@ def main():
                 validate_simulation(workload, stdout, stderr)
 
             simulate_stats, _ = benchmark_phase(
-                simulate_command, args.runs, args.warmups, env, validator
+                simulate_command, args.runs, args.warmups, env, validator,
+                cwd=workload.cwd,
             )
             result["simulate"] = simulate_stats
             print(f"  simulate median: {simulate_stats['median_seconds']:.6f} s")
