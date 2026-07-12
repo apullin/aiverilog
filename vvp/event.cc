@@ -512,12 +512,9 @@ bool anyedge_vec4_value::recv_vec4(const vvp_vector4_t&bit)
 	    }
 
       } else {
-	    for (unsigned idx = 0 ;  idx < bit.size() ;  idx += 1) {
-		  if (old_bits.value(idx) != bit.value(idx)) {
-			flag = true;
-			break;
-		  }
-	    }
+	      // Same width: any difference in the value planes is an
+	      // edge. eeq compares a plane word at a time.
+	    flag = ! old_bits.eeq(bit);
       }
 
       if (flag) {
