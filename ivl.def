@@ -221,6 +221,7 @@ ivl_scope_func_signed
 ivl_scope_func_width
 ivl_scope_is_auto
 ivl_scope_is_cell
+ivl_scope_is_disable_target
 ivl_scope_lineno
 ivl_scope_logs
 ivl_scope_log

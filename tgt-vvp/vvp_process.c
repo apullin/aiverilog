@@ -599,6 +599,17 @@ static int show_stmt_block_named(ivl_statement_t net, ivl_scope_t scope)
       unsigned out_id, sub_id;
       ivl_scope_t subscope = ivl_stmt_block_scope(net);
 
+	/* A sequential block only needs a child thread when a disable
+	 * statement can target its scope. Keeping ordinary blocks in the
+	 * current thread also lets break and continue reach an enclosing
+	 * loop's control-flow labels. */
+      if (!ivl_scope_is_disable_target(subscope)) {
+	    fprintf(vvp_out, "    .scope S_%p;\n", subscope);
+	    rc = show_stmt_block(net, subscope);
+	    fprintf(vvp_out, "    .scope S_%p;\n", scope);
+	    return rc;
+      }
+
       out_id = transient_id++;
       sub_id = transient_id++;
 

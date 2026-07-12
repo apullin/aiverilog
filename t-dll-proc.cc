@@ -659,7 +659,11 @@ bool dll_target::proc_disable(const NetDisable*net)
       stmt_cur_->u_.disable_.flow_control = net->flow_control();
       const NetScope* dis_scope = net->target();
 	/* A normal disable. */
-      if (dis_scope) stmt_cur_->u_.disable_.scope = lookup_scope_(dis_scope);
+      if (dis_scope) {
+	    stmt_cur_->u_.disable_.scope = lookup_scope_(dis_scope);
+	    if (!net->flow_control())
+		  stmt_cur_->u_.disable_.scope->is_disable_target = 1;
+      }
 	/* A SystemVerilog disable fork. */
       else stmt_cur_->u_.disable_.scope = 0;
       return true;
