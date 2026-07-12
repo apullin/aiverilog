@@ -1928,6 +1928,38 @@ void compile_code(char*label, char*mnem, comp_operands_t opa)
       if (peep_disable < 0)
 	    peep_disable = (getenv("VVP_NO_FUSE") != 0);
       if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && peep_prev_code_->opcode == &of_PUSHI_VEC4
+	  && code->opcode == &of_ASSIGN_VEC4
+	  && peep_prev_code_->bit_idx[1] == 0
+	  && peep_prev_code_->number < (1UL<<20)
+	  && code->bit_idx[0] < 64) {
+	      /* Fuse %pushi/vec4 + %assign/vec4 when the immediate
+		 has no X/Z bits (valb == 0) and the delay is small.
+		 The %assign's net pointer shares a union with number,
+		 so pack: bit_idx[0] = value word, bit_idx[1] =
+		 (wid << 6) | delay. The %assign slot keeps its net
+		 and becomes the fused op; the %pushi becomes %noop
+		 (it is the first of the pair, so a label bound to it
+		 executes the fused pair semantics unchanged... but a
+		 label bound to the %assign must still suppress
+		 fusion, which the standard barrier already does). */
+	    uint32_t vala = peep_prev_code_->bit_idx[0];
+	    uint32_t wid  = peep_prev_code_->number;
+	    uint32_t delay = code->bit_idx[0];
+	    peep_prev_code_->opcode = &of_NOOP;
+	    peep_prev_code_->bit_idx[0] = 0;
+	    peep_prev_code_->bit_idx[1] = 0;
+	    code->opcode = &of_ASSIGNI_VEC4;
+	    code->bit_idx[0] = vala;
+	    code->bit_idx[1] = (wid << 6) | delay;
+	    peep_prev_code_ = 0;
+	    peep_fuse_slot_ = codespace_next();
+	    free(opa);
+	    free(mnem);
+	    return;
+      }
+
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
 	  && peep_prev_code_->opcode == &of_LOAD_VEC4
 	  && code->opcode == &of_FLAG_SET_VEC4) {
 	      /* Fuse %load/vec4 + %flag_set/vec4: read the signal

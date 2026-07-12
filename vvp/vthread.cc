@@ -4642,6 +4642,34 @@ bool of_FLAG_SETGET_VEC4(vthread_t thr, vvp_code_t cp)
 }
 
 /*
+ * Fused %pushi/vec4 + %assign/vec4, for immediates with no X/Z bits
+ * and a small literal delay: the nonblocking assignment of a constant.
+ * The net pointer shares a union with number, so the operands are
+ * packed into bit_idx: bit_idx[0] is the value word, bit_idx[1] is
+ * (wid << 6) | delay.
+ */
+bool of_ASSIGNI_VEC4(vthread_t, vvp_code_t cp)
+{
+      vvp_net_ptr_t ptr (cp->net, 0);
+      unsigned wid = cp->bit_idx[1] >> 6;
+      unsigned delay = cp->bit_idx[1] & 63;
+      unsigned long vala = cp->bit_idx[0];
+
+      vvp_vector4_t val (wid, BIT4_0);
+      if (vala) {
+	    unsigned use_wid = 8*sizeof(unsigned long);
+	    if (wid < use_wid)
+		  use_wid = wid;
+	    unsigned long tmp[1];
+	    tmp[0] = vala;
+	    val.setarray(0, use_wid, tmp);
+      }
+
+      schedule_assign_vector(ptr, 0, 0, val, delay);
+      return true;
+}
+
+/*
  * %mul
  */
 bool of_MUL(vthread_t thr, vvp_code_t)
