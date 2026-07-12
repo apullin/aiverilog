@@ -156,6 +156,8 @@ class vvp_fun_edge : public vvp_net_fun_t, public waitable_hooks_s {
       explicit vvp_fun_edge(edge_t e);
       virtual ~vvp_fun_edge() override;
 
+      waitable_hooks_s* as_waitable() override { return this; }
+
     protected:
       bool recv_vec4_(const vvp_vector4_t&bit,
                       vvp_bit4_t&old_bit, vthread_t&threads);
@@ -238,6 +240,8 @@ class vvp_fun_anyedge : public vvp_net_fun_t, public waitable_hooks_s {
       explicit vvp_fun_anyedge();
       virtual ~vvp_fun_anyedge() override;
 
+      waitable_hooks_s* as_waitable() override { return this; }
+
     protected:
       anyedge_value*last_value_[4];
 };
@@ -313,6 +317,8 @@ class vvp_fun_event_or : public vvp_net_fun_t, public waitable_hooks_s {
       explicit vvp_fun_event_or(vvp_net_t*base_net);
       ~vvp_fun_event_or() override;
 
+      waitable_hooks_s* as_waitable() override { return this; }
+
     protected:
       vvp_net_t*base_net_;
 };
@@ -370,6 +376,8 @@ class vvp_named_event : public vvp_net_fun_t, public waitable_hooks_s {
     public:
       explicit vvp_named_event(class __vpiHandle*eh);
       ~vvp_named_event() override;
+
+      waitable_hooks_s* as_waitable() override { return this; }
 
     protected:
       class __vpiHandle*handle_;

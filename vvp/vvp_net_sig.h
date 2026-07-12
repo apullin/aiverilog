@@ -117,6 +117,7 @@ class vvp_fun_signal_vec : public vvp_fun_signal_base {
 class automatic_signal_base : public vvp_signal_value, public vvp_net_fil_t {
 
     public:
+      vvp_signal_value* as_signal_value() override { return this; }
 	// Automatic variables cannot be forced or released. Provide
 	// stubs that assert.
       virtual void release(vvp_net_ptr_t ptr, bool net_flag) override;
@@ -403,6 +404,8 @@ class vvp_wire_base  : public vvp_net_fil_t, public vvp_signal_value {
     public:
       vvp_wire_base();
       ~vvp_wire_base() override;
+
+      vvp_signal_value* as_signal_value() override { return this; }
 
         // Support for $countdrivers
       virtual vvp_bit4_t driven_value(unsigned idx) const;

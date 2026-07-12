@@ -4032,7 +4032,7 @@ bool of_LOAD_VEC4(vthread_t thr, vvp_code_t cp)
 
 	// For the %load to work, the functor must actually be a
 	// signal functor. Only signals save their vector value.
-      vvp_signal_value*sig = dynamic_cast<vvp_signal_value*> (net->fil);
+      vvp_signal_value*sig = net->fil? net->fil->as_signal_value() : 0;
       if (sig == 0) {
 	    cerr << thr->get_fileline()
 	         << "%load/v error: Net arg not a signal? "
@@ -6211,7 +6211,7 @@ bool of_STORE_STRA(vthread_t thr, vvp_code_t cp)
 bool of_STORE_VEC4(vthread_t thr, vvp_code_t cp)
 {
       vvp_net_ptr_t ptr(cp->net, 0);
-      const vvp_signal_value*sig = dynamic_cast<vvp_signal_value*> (cp->net->fil);
+      const vvp_signal_value*sig = cp->net->fil? cp->net->fil->as_signal_value() : 0;
       unsigned off_index = cp->bit_idx[0];
       unsigned int wid = cp->bit_idx[1];
 
@@ -6504,7 +6504,7 @@ bool of_WAIT(vthread_t thr, vvp_code_t cp)
       thr->waiting_for_event = 1;
 
 	/* Add this thread to the list in the event. */
-      waitable_hooks_s*ep = dynamic_cast<waitable_hooks_s*> (cp->net->fun);
+      waitable_hooks_s*ep = cp->net->fun? cp->net->fun->as_waitable() : 0;
       assert(ep);
       thr->wait_next = ep->add_waiting_thread(thr);
 

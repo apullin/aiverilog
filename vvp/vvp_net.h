@@ -1247,6 +1247,13 @@ class vvp_net_fun_t {
 	// do something about it.
       virtual void force_flag(bool run_now);
 
+	// Waitable functors (event functors that the %wait
+	// instruction can block on) return their waitable_hooks_s
+	// interface here. This replaces a dynamic_cast cross-cast in
+	// the %wait opcode, which is far too expensive for that
+	// per-instruction path.
+      virtual struct waitable_hooks_s* as_waitable() { return 0; }
+
    protected:
       void recv_vec4_pv_(vvp_net_ptr_t p, const vvp_vector4_t&bit,
 			 unsigned base, unsigned vwid, vvp_context_t context);
@@ -1308,6 +1315,13 @@ class vvp_net_fil_t  : public vvp_vpi_callback {
 
       virtual void release(vvp_net_ptr_t ptr, bool net_flag) =0;
       virtual void release_pv(vvp_net_ptr_t ptr, unsigned base, unsigned wid, bool net_flag) =0;
+
+	// Every concrete filter also implements the vvp_signal_value
+	// interface, and hot opcodes need to reach it from the
+	// vvp_net_t::fil pointer. Return it here instead of making
+	// those per-instruction paths pay for a dynamic_cast
+	// cross-cast between the two base classes.
+      virtual class vvp_signal_value* as_signal_value() { return 0; }
 
 	// The %force/link instruction needs a place to write the
 	// source node of the force, so that subsequent %force and
