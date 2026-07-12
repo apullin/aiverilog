@@ -1929,6 +1929,37 @@ void compile_code(char*label, char*mnem, comp_operands_t opa)
 	    peep_disable = (getenv("VVP_NO_FUSE") != 0);
       if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
 	  && peep_prev_code_->opcode == &of_LOAD_VEC4
+	  && code->opcode == &of_FLAG_SET_VEC4) {
+	      /* Fuse %load/vec4 + %flag_set/vec4: read the signal
+		 bit directly into the flag. Flag index moves to
+		 bit_idx[0] (the net pointer shares a union with
+		 number). */
+	    peep_prev_code_->opcode = &of_LOAD_FLAG;
+	    peep_prev_code_->bit_idx[0] = code->number;
+	    code->opcode = &of_NOOP;
+	    peep_prev_code_ = 0;
+	    peep_fuse_slot_ = codespace_next();
+	    free(opa);
+	    free(mnem);
+	    return;
+      }
+
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && peep_prev_code_->opcode == &of_FLAG_SET_VEC4
+	  && code->opcode == &of_FLAG_GET_VEC4
+	  && peep_prev_code_->number == code->number) {
+	      /* Fuse same-flag %flag_set/vec4 + %flag_get/vec4. */
+	    peep_prev_code_->opcode = &of_FLAG_SETGET_VEC4;
+	    code->opcode = &of_NOOP;
+	    peep_prev_code_ = 0;
+	    peep_fuse_slot_ = codespace_next();
+	    free(opa);
+	    free(mnem);
+	    return;
+      }
+
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && peep_prev_code_->opcode == &of_LOAD_VEC4
 	  && (code->opcode == &of_PARTI_S || code->opcode == &of_PARTI_U)
 	  && code->number < (1UL<<26) && code->bit_idx[1] < 64) {
 	    /* The %load's net pointer shares a union with `number`,

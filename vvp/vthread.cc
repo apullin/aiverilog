@@ -4598,6 +4598,50 @@ bool of_LOAD_PARTI_U(vthread_t thr, vvp_code_t cp)
 }
 
 /*
+ * Fused %load/vec4 + %flag_set/vec4. The loader's peephole rewrites
+ * the pair into this operation, which reads bit 0 of the signal
+ * directly into the flag with no value-stack traffic. The flag index
+ * lives in bit_idx[0] because the net pointer shares a union with
+ * the number field.
+ */
+bool of_LOAD_FLAG(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t*net = cp->net;
+      vvp_signal_value*sig = net->fil? net->fil->as_signal_value() : 0;
+      if (sig == 0) {
+	    cerr << thr->get_fileline()
+	         << "%load/flag error: Net arg not a signal? "
+		 << (net->fil ? typeid(*net->fil).name() :
+	                        typeid(*net->fun).name())
+	         << endl;
+	    assert(sig);
+	    return true;
+      }
+
+      int flag = cp->bit_idx[0];
+      assert(flag < vthread_s::FLAGS_COUNT);
+      thr->flags[flag] = sig->value(0);
+      return true;
+}
+
+/*
+ * Fused %flag_set/vec4 <f> + %flag_get/vec4 <f> (same flag). The
+ * value popped into the flag is immediately pushed back as a one-bit
+ * vector; do both in one operation. Operands are the %flag_set's.
+ */
+bool of_FLAG_SETGET_VEC4(vthread_t thr, vvp_code_t cp)
+{
+      int flag = cp->number;
+      assert(flag < vthread_s::FLAGS_COUNT);
+
+      vvp_bit4_t bit = thr->peek_vec4().value(0);
+      thr->flags[flag] = bit;
+      thr->pop_vec4(1);
+      thr->push_vec4(vvp_vector4_t(1, bit));
+      return true;
+}
+
+/*
  * %mul
  */
 bool of_MUL(vthread_t thr, vvp_code_t)
