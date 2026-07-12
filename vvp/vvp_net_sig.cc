@@ -230,12 +230,25 @@ void vvp_fun_signal4_sa::recv_vec4_pv(vvp_net_ptr_t ptr, const vvp_vector4_t&bit
       switch (ptr.port()) {
 	  case 0: // Normal input
 	    if (assign_mask_.size() == 0) {
-                  for (unsigned idx = 0 ;  idx < wid ;  idx += 1) {
-			if (base+idx >= bits4_.size()) break;
-			bits4_.set_bit(base+idx, bit.value(idx));
+		  bool changed = true;
+		  if (base + wid <= bits4_.size()) {
+			  // The part fits entirely: write it a word
+			  // at a time, and learn whether any bit
+			  // actually changed.
+			changed = bits4_.set_vec(base, bit);
+		  } else {
+			for (unsigned idx = 0 ;  idx < wid ;  idx += 1) {
+			      if (base+idx >= bits4_.size()) break;
+			      bits4_.set_bit(base+idx, bit.value(idx));
+			}
 		  }
-		  needs_init_ = false;
-		  ptr.ptr()->send_vec4(bits4_,0);
+		    // Like the full-width and masked paths, only
+		    // propagate when the stored value changed (or the
+		    // initial value still needs to propagate).
+		  if (needs_init_ || changed) {
+			needs_init_ = false;
+			ptr.ptr()->send_vec4(bits4_,0);
+		  }
 	    } else {
 		  bool changed = false;
 		  assert(bits4_.size() == assign_mask_.size());
