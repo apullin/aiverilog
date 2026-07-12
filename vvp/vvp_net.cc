@@ -2137,26 +2137,31 @@ template <class INT>bool vector4_to_value(const vvp_vector4_t&vec, INT&val,
 {
       typedef typename std::make_unsigned<INT>::type UINT;
       UINT res = 0;
-      UINT msk = 1;
       bool rc_flag = true;
 
       unsigned size = vec.size();
       if (size > 8*sizeof(val)) size = 8*sizeof(val);
-      for (unsigned idx = 0 ;  idx < size ;  idx += 1) {
-	    switch (vec.value(idx)) {
-		case BIT4_0:
-		  break;
-		case BIT4_1:
-		  res |= msk;
-		  break;
-		default:
+
+	// Convert a plane word at a time instead of a bit at a time.
+	// The value contribution of a bit is abit&~bbit (X and Z bits
+	// contribute zero), and any set bbit is an X/Z bit.
+      const unsigned BPW = 8*sizeof(unsigned long);
+      for (unsigned base = 0 ;  base < size ;  base += BPW) {
+	    unsigned trans = size - base;
+	    if (trans > BPW) trans = BPW;
+	    unsigned long mask = (trans == BPW)? -1UL : (1UL<<trans)-1UL;
+
+	    unsigned long abits = vec.abits_word(base/BPW) & mask;
+	    unsigned long bbits = vec.bbits_word(base/BPW) & mask;
+
+	    if (bbits) {
 		  if (is_arithmetic)
 			return false;
-		  else
-			rc_flag = false;
+		  rc_flag = false;
+		  abits &= ~bbits;
 	    }
 
-	    msk <<= 1;
+	    res |= static_cast<UINT>(static_cast<UINT>(abits) << base);
       }
 
       if (is_signed && vec.value(vec.size()-1) == BIT4_1) {
@@ -2189,25 +2194,37 @@ template <class T> bool vector4_to_value(const vvp_vector4_t&vec,
                                          bool&overflow_flag, T&val)
 {
       T res = 0;
-      T msk = 1;
 
       overflow_flag = false;
       unsigned size = vec.size();
-      for (unsigned idx = 0 ;  idx < size ;  idx += 1) {
-	    switch (vec.value(idx)) {
-		case BIT4_0:
-		  break;
-		case BIT4_1:
-		  if (msk == 0)
-			overflow_flag = true;
-		  else
-			res |= msk;
-		  break;
-		default:
-		  return false;
-	    }
 
-	    msk <<= static_cast<T>(1);
+	// Convert a plane word at a time. Any set bbit is an X/Z bit
+	// and fails the conversion; value bits at and above the
+	// destination width only raise the overflow flag.
+      const unsigned BPW = 8*sizeof(unsigned long);
+      const unsigned CAP = 8*sizeof(T);
+      for (unsigned base = 0 ;  base < size ;  base += BPW) {
+	    unsigned trans = size - base;
+	    if (trans > BPW) trans = BPW;
+	    unsigned long mask = (trans == BPW)? -1UL : (1UL<<trans)-1UL;
+
+	    unsigned long abits = vec.abits_word(base/BPW) & mask;
+	    unsigned long bbits = vec.bbits_word(base/BPW) & mask;
+
+	    if (bbits)
+		  return false;
+
+	    if (base >= CAP) {
+		  if (abits)
+			overflow_flag = true;
+	    } else if (trans > CAP - base) {
+		  unsigned cap = CAP - base;
+		  if (abits >> cap)
+			overflow_flag = true;
+		  res |= static_cast<T>(abits & ((1UL<<cap)-1UL)) << base;
+	    } else {
+		  res |= static_cast<T>(abits) << base;
+	    }
       }
 
       val = res;

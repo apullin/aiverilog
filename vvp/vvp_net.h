@@ -277,6 +277,14 @@ class vvp_vector4_t {
       inline unsigned size() const { return size_; }
       void resize(unsigned new_size, vvp_bit4_t pad_bit = BIT4_X);
 
+	// Word-level access to the value planes, for converters that
+	// would otherwise walk the vector bit by bit. Bits at and
+	// above size() are undefined and must be masked by the caller.
+      unsigned long abits_word(unsigned wdx) const
+      { return (size_ <= BITS_PER_WORD)? abits_val_ : abits_ptr_[wdx]; }
+      unsigned long bbits_word(unsigned wdx) const
+      { return (size_ <= BITS_PER_WORD)? bbits_val_ : bbits_ptr_[wdx]; }
+
 	// Get the bit at the specified address
       vvp_bit4_t value(unsigned idx) const;
 	// Get the vector4 subvector starting at the address
