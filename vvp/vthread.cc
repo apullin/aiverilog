@@ -127,6 +127,10 @@ struct vthread_s {
       {
 	    stack_vec4_.push_back(val);
       }
+      inline void push_vec4(vvp_vector4_t&&val)
+      {
+	    stack_vec4_.push_back(std::move(val));
+      }
       inline const vvp_vector4_t& peek_vec4(unsigned depth)
       {
 	    unsigned size = stack_vec4_.size();
@@ -5003,7 +5007,7 @@ bool of_PUSHI_VEC4(vthread_t thr, vvp_code_t cp)
       vvp_vector4_t val (wid, BIT4_0);
       get_immediate_rval (cp, val);
 
-      thr->push_vec4(val);
+      thr->push_vec4(std::move(val));
 
       return true;
 }
