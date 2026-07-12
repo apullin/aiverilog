@@ -1748,7 +1748,7 @@ description /* IEEE1800-2005: A.1.2 */
   | package_declaration
   | discipline_declaration
   | package_item
-  | KK_attribute '(' IDENTIFIER ',' STRING ',' STRING ')'
+  | KK_attribute '(' identifier_name ',' STRING ',' STRING ')'
       { perm_string tmp3 = lex_strings.make($3);
 	pform_set_type_attrib(tmp3, $5, $7);
 	delete[] $3;
@@ -2030,7 +2030,9 @@ loop_statement /* IEEE1800-2005: A.6.8 */
       // statement in a synthetic named block. We can name the block
       // after the variable that we are creating, that identifier is
       // safe in the controlling scope.
-  | K_for '(' K_var_opt data_type IDENTIFIER '=' expression ';' expression_opt ';' for_step_opt ')'
+  | K_for '(' K_var_opt data_type identifier_name
+      // Make the loop variable symbol visible while parsing the rest of
+      // the header.
       { static unsigned for_counter = 0;
 	char for_block_name [64];
 	snprintf(for_block_name, sizeof for_block_name, "$ivl_for_loop%u", for_counter);
@@ -2044,6 +2046,7 @@ loop_statement /* IEEE1800-2005: A.6.8 */
 	assign_list.push_back(tmp_assign);
 	pform_make_var(@5, &assign_list, $4);
       }
+    '=' expression ';' expression_opt ';' for_step_opt ')'
     statement_or_null
       { pform_name_t tmp_hident;
 	tmp_hident.push_back(name_component_t(lex_strings.make($5)));
@@ -2051,8 +2054,8 @@ loop_statement /* IEEE1800-2005: A.6.8 */
 	PEIdent*tmp_ident = pform_new_ident(@5, tmp_hident);
 	FILE_NAME(tmp_ident, @5);
 
-	check_for_loop(@1, $7, $9, $11);
-	PForStatement*tmp_for = new PForStatement(tmp_ident, $7, $9, $11, $14);
+	check_for_loop(@1, $8, $10, $12);
+	PForStatement*tmp_for = new PForStatement(tmp_ident, $8, $10, $12, $14);
 	FILE_NAME(tmp_for, @1);
 
 	pform_pop_scope();
@@ -2091,7 +2094,7 @@ loop_statement /* IEEE1800-2005: A.6.8 */
 
       // When matching a foreach loop, implicitly create a named block
       // to hold the definitions for the index variables.
-  | K_foreach '(' IDENTIFIER '[' loop_variables ']' ')'
+  | K_foreach '(' identifier_name '[' loop_variables ']' ')'
       { static unsigned foreach_counter = 0;
 	char for_block_name[64];
 	snprintf(for_block_name, sizeof for_block_name, "$ivl_foreach%u", foreach_counter);
@@ -2143,7 +2146,7 @@ loop_statement /* IEEE1800-2005: A.6.8 */
 	yyerror(@1, "error: Error in do/while loop condition.");
       }
 
-  | K_foreach '(' IDENTIFIER '[' error ']' ')' statement_or_null
+  | K_foreach '(' identifier_name '[' error ']' ')' statement_or_null
       { $$ = 0;
         yyerror(@4, "error: Errors in foreach loop variables list.");
       }
@@ -3112,7 +3115,7 @@ attribute_list
 
 
 attribute
-  : IDENTIFIER initializer_opt
+  : identifier_name initializer_opt
       { named_pexpr_t*tmp = new named_pexpr_t;
 	FILE_NAME(tmp, @$);
 	tmp->name = lex_strings.make($1);
@@ -3614,7 +3617,7 @@ delay_value_simple
 optional_semicolon : ';' | ;
 
 discipline_declaration
-  : K_discipline IDENTIFIER optional_semicolon
+  : K_discipline identifier_name optional_semicolon
       { pform_start_discipline($2); }
     discipline_items K_enddiscipline
       { pform_end_discipline(@1); delete[] $2; }
@@ -3630,14 +3633,14 @@ discipline_item
       { pform_discipline_domain(@1, IVL_DIS_DISCRETE); }
   | K_domain K_continuous ';'
       { pform_discipline_domain(@1, IVL_DIS_CONTINUOUS); }
-  | K_potential IDENTIFIER ';'
+  | K_potential identifier_name ';'
       { pform_discipline_potential(@1, $2); delete[] $2; }
-  | K_flow IDENTIFIER ';'
+  | K_flow identifier_name ';'
       { pform_discipline_flow(@1, $2); delete[] $2; }
   ;
 
 nature_declaration
-  : K_nature IDENTIFIER optional_semicolon
+  : K_nature identifier_name optional_semicolon
       { pform_start_nature($2); }
     nature_items
     K_endnature
@@ -5718,7 +5721,7 @@ module_item
   /* These rules are for the Icarus Verilog specific $attribute
      extensions. Then catch the parameters of the $attribute keyword. */
 
-  | KK_attribute '(' IDENTIFIER ',' STRING ',' STRING ')' ';'
+  | KK_attribute '(' identifier_name ',' STRING ',' STRING ')' ';'
       { perm_string tmp3 = lex_strings.make($3);
 	perm_string tmp5 = lex_strings.make($5);
 	pform_set_attrib(tmp3, tmp5, $7);
