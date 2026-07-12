@@ -53,7 +53,8 @@ all: ivlpp@EXEEXT@
 
 check: all
 	./ivlpp@EXEEXT@ -F $(srcdir)/tests/keyword.flags \
-	    $(srcdir)/tests/keyword.in | cmp - $(srcdir)/tests/keyword.out
+	    $(srcdir)/tests/keyword.in | tr -d '\r' \
+	    | cmp - $(srcdir)/tests/keyword.out
 
 clean:
 	rm -f *.o lexor.c ivlpp@EXEEXT@
