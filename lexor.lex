@@ -112,6 +112,7 @@ static int dec_buf_div2(char *buf);
 
 static int get_timescale_scale(const char*cp);
 static int get_timescale_const(int scale, const char*units);
+static verireal* make_scaled_real(const char*text, size_t token_len);
 
 static void process_ucdrive(const char*txt);
 
@@ -559,17 +560,18 @@ TU [munpf]
       generation_flag = generation_save;
       return UNBASED_NUMBER; }
 
-  /* Decimal numbers are the usual. But watch out for the UDPTABLE
-     mode, where there are no decimal numbers. Reject the match if we
-     are in the UDPTABLE state. */
-[0-9][0-9_]* {
-      if (YY_START==UDPTABLE) {
-	    REJECT;
-      } else {
-	    yylval.number = make_unsized_dec(yytext);
-	    based_size = yylval.number->as_ulong();
-	    return DEC_NUMBER;
-      }
+  /* A UDP table treats each digit as a separate symbol. Match the full
+     run so the ordinary decimal rule cannot win, then put all but the
+     first character back. */
+<UDPTABLE>[0-9][0-9_]* {
+      yyless(1);
+      return yytext[0];
+}
+
+<INITIAL,EDGES>[0-9][0-9_]* {
+      yylval.number = make_unsized_dec(yytext);
+      based_size = yylval.number->as_ulong();
+      return DEC_NUMBER;
 }
 
   /* This rule handles scaled time values for SystemVerilog. */
@@ -577,44 +579,50 @@ TU [munpf]
       if (gn_system_verilog()) {
 	    yylval.text = strdupnew(yytext);
 	    return TIME_LITERAL;
-      } else REJECT; }
+      } else {
+	    size_t token_len = yyleng;
+	    bool has_scale = strchr("munpf", yytext[token_len-2]) != 0;
+	    if (gn_verilog_ams_flag && has_scale) {
+		  yyless(token_len-1);
+		  yylval.realtime = make_scaled_real(yytext, token_len-1);
+		  return REALTIME;
+	    }
+	    size_t number_len = token_len - 1 - has_scale;
+	    yyless(number_len);
+	    if (strchr(yytext, '.')) {
+		  yylval.realtime = new verireal(yytext);
+		  return REALTIME;
+	    }
+	    yylval.number = make_unsized_dec(yytext);
+	    based_size = yylval.number->as_ulong();
+	    return DEC_NUMBER;
+      }
+}
 
   /* These rules handle the scaled real literals from Verilog-AMS. The
-     value is a number with a single letter scale factor. If
-     verilog-ams is not enabled, then reject this rule. If it is
-     enabled, then collect the scale and use it to scale the value. */
+     value is a number with a single letter scale factor. If Verilog-AMS
+     is disabled, return the ordinary number and leave the scale suffix
+     for the next token. */
 [0-9][0-9_]*\.[0-9][0-9_]*/{S} {
-      if (!gn_verilog_ams_flag) REJECT;
+      if (!gn_verilog_ams_flag) {
+	    yylval.realtime = new verireal(yytext);
+	    return REALTIME;
+      }
       BEGIN(REAL_SCALE);
       yymore();  }
 
 [0-9][0-9_]*/{S} {
-      if (!gn_verilog_ams_flag) REJECT;
+      if (!gn_verilog_ams_flag) {
+	    yylval.number = make_unsized_dec(yytext);
+	    based_size = yylval.number->as_ulong();
+	    return DEC_NUMBER;
+      }
       BEGIN(REAL_SCALE);
       yymore();  }
 
 <REAL_SCALE>{S} {
       size_t token_len = strlen(yytext);
-      char*tmp = new char[token_len + 5];
-      int scale = 0;
-      strcpy(tmp, yytext);
-      switch (tmp[token_len-1]) {
-	  case 'a': scale = -18; break; /* atto- */
-	  case 'f': scale = -15; break; /* femto- */
-	  case 'p': scale = -12; break; /* pico- */
-	  case 'n': scale = -9;  break; /* nano- */
-	  case 'u': scale = -6;  break; /* micro- */
-	  case 'm': scale = -3;  break; /* milli- */
-	  case 'k': scale = 3;  break; /* kilo- */
-	  case 'K': scale = 3;  break; /* kilo- */
-	  case 'M': scale = 6;  break; /* mega- */
-	  case 'G': scale = 9;  break; /* giga- */
-	  case 'T': scale = 12; break; /* tera- */
-	  default: assert(0); break;
-      }
-      snprintf(tmp+token_len-1, 5, "e%d", scale);
-      yylval.realtime = new verireal(tmp);
-      delete[]tmp;
+      yylval.realtime = make_scaled_real(yytext, token_len);
 
       BEGIN(0);
       return REALTIME;  }
@@ -956,6 +964,31 @@ TU [munpf]
 }
 
 %%
+
+static verireal* make_scaled_real(const char*text, size_t token_len)
+{
+      char*tmp = new char[token_len + 5];
+      int scale = 0;
+      strcpy(tmp, text);
+      switch (tmp[token_len-1]) {
+	  case 'a': scale = -18; break; /* atto- */
+	  case 'f': scale = -15; break; /* femto- */
+	  case 'p': scale = -12; break; /* pico- */
+	  case 'n': scale = -9;  break; /* nano- */
+	  case 'u': scale = -6;  break; /* micro- */
+	  case 'm': scale = -3;  break; /* milli- */
+	  case 'k': scale = 3;  break; /* kilo- */
+	  case 'K': scale = 3;  break; /* kilo- */
+	  case 'M': scale = 6;  break; /* mega- */
+	  case 'G': scale = 9;  break; /* giga- */
+	  case 'T': scale = 12; break; /* tera- */
+	  default: assert(0); break;
+      }
+      snprintf(tmp+token_len-1, 5, "e%d", scale);
+      verireal*result = new verireal(tmp);
+      delete[]tmp;
+      return result;
+}
 
 /*
  * The UDP state table needs some slightly different treatment by the

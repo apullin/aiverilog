@@ -280,8 +280,8 @@ keywords (line|include|define|undef|ifdef|ifndef|else|elsif|endif)
 <PCOMENT>`[a-zA-Z][a-zA-Z0-9_$]* {
     if (macro_needs_args(yytext+1)) yy_push_state(MA_START); else do_expand(0);
 }
-<PCOMENT>`\"     { if (!istack->file) fputc('"', yyout); else REJECT; }
-<PCOMENT>`\\`\"  { if (!istack->file) fputs("\\\"", yyout); else REJECT; }
+<PCOMENT>`\"     { if (!istack->file) fputc('"', yyout); else ECHO; }
+<PCOMENT>`\\`\"  { if (!istack->file) fputs("\\\"", yyout); else ECHO; }
 
  /* Strings do not contain preprocessor directives or macro expansions.
   */
@@ -627,23 +627,37 @@ keywords (line|include|define|undef|ifdef|ifndef|else|elsif|endif)
 	else
 	    do_expand(0);
     } else {
-	REJECT;
+	yyless(2);
     }
 }
 
   /* If we are expanding a macro, remove the SV `` delimiter, otherwise
    * leave it to be handled by the normal rules.
    */
-`` { if (istack->file) REJECT; }
+`` { if (istack->file) ECHO; }
 
   /* If we are expanding a macro, handle the SV `" override. This avoids
    * entering CSTRING state, thus allowing nested macro expansions.
    */
-`\" { if (!istack->file) fputc('"', yyout); else REJECT; }
+`\" {
+    if (!istack->file) {
+	fputc('"', yyout);
+    } else {
+	yyless(1);
+	ECHO;
+    }
+}
 
   /* If we are expanding a macro, handle the SV `\`" escape sequence.
    */
-`\\`\" { if (!istack->file) fputs("\\\"", yyout); else REJECT; }
+`\\`\" {
+    if (!istack->file) {
+	fputs("\\\"", yyout);
+    } else {
+	yyless(yyleng-1);
+	ECHO;
+    }
+}
 
 <MA_START>\(  { BEGIN(MA_ADD); macro_start_args(); }
 
