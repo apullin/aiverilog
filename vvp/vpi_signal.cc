@@ -816,8 +816,13 @@ vpiHandle __vpiSignal::put_bit_value(struct __vpiBit*bit, p_vpi_value vp, int fl
 
       if ((get_type_code() == vpiNet) &&
           !dynamic_cast<vvp_island_port*>(node->fun)) {
-	    node->send_vec4_pv(val, index, width(),
-	                            vthread_get_wt_context());
+	    vvp_wire_vec4*wire = dynamic_cast<vvp_wire_vec4*>(node->fil);
+	    if (wire && wire->has_variable_mask())
+		  wire->assign_variable(node, val, index, width(),
+					vthread_get_wt_context());
+	    else
+		  node->send_vec4_pv(val, index, width(),
+				     vthread_get_wt_context());
       } else {
 	    vvp_send_vec4_pv(dest, val, index, width(),
 	                     vthread_get_wt_context());
@@ -995,7 +1000,12 @@ static vpiHandle signal_put_value(vpiHandle ref, s_vpi_value*vp, int flags)
 	    vvp_vector2_t mask (vvp_vector2_t::FILL1, wid);
 	    rfp->node->force_vec4(val, mask);
       } else if (net_flag && !dynamic_cast<vvp_island_port*>(rfp->node->fun)) {
-	    rfp->node->send_vec4(val, vthread_get_wt_context());
+	    vvp_wire_vec4*wire = dynamic_cast<vvp_wire_vec4*>(rfp->node->fil);
+	    if (wire && wire->has_variable_mask())
+		  wire->assign_variable(rfp->node, val, 0, wid,
+					vthread_get_wt_context());
+	    else
+		  rfp->node->send_vec4(val, vthread_get_wt_context());
       } else {
 	    vvp_send_vec4(dest, val, vthread_get_wt_context());
       }
@@ -1556,12 +1566,15 @@ static vpiHandle PV_put_value(vpiHandle ref, p_vpi_value vp, int flags)
 		  rfp->net->force_vec4(tmp, mask);
 	    }
       } else if (net_flag && !dynamic_cast<vvp_island_port*>(rfp->net->fun)) {
-	    if (full_sig) {
+	    vvp_wire_vec4*wire = dynamic_cast<vvp_wire_vec4*>(rfp->net->fil);
+	    if (wire && wire->has_variable_mask())
+		  wire->assign_variable(rfp->net, val, base, sig_size,
+					vthread_get_wt_context());
+	    else if (full_sig)
 		  rfp->net->send_vec4(val, vthread_get_wt_context());
-	    } else {
+	    else
 		  rfp->net->send_vec4_pv(val, base, sig_size,
-		                         vthread_get_wt_context());
-	    }
+					 vthread_get_wt_context());
       } else {
 	    if (full_sig) {
 		  vvp_send_vec4(dest, val, vthread_get_wt_context());

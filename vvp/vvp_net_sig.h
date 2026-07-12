@@ -427,6 +427,10 @@ class vvp_wire_vec4 : public vvp_wire_base {
 
     public:
       vvp_wire_vec4(unsigned wid, vvp_bit4_t init);
+      void set_variable_mask(const vvp_vector4_t&state_mask);
+      bool has_variable_mask() const { return driver_mask_.size() != 0; }
+      void assign_variable(vvp_net_t*net, const vvp_vector4_t&val,
+			   unsigned base, unsigned vwid, vvp_context_t context);
 
 	// The main filter behavior for this class. These methods take
 	// the value that the node is driven to, and applies the force
@@ -465,6 +469,7 @@ class vvp_wire_vec4 : public vvp_wire_base {
       bool needs_init_;
       vvp_vector4_t bits4_; // The tracked driven value
       vvp_vector4_t force4_; // the value being forced
+      vvp_vector2_t driver_mask_; // Bits with structural drivers
 };
 
 class vvp_wire_vec8 : public vvp_wire_base {

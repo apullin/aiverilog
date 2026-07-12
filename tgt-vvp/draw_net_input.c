@@ -98,6 +98,70 @@ static ivl_variable_type_t signal_data_type_of_nexus(ivl_nexus_t nex)
       return out;
 }
 
+/* Encode structural bits as 1 and unassigned variable bits as their X/0
+   default. The VVP runtime uses both pieces of information. */
+char* nexus_variable_state_mask(ivl_nexus_t nex)
+{
+      unsigned wid = width_of_nexus(nex);
+      char*result = malloc(wid + 5);
+      strcpy(result, "C4<");
+      memset(result + 3, 'x', wid);
+      result[wid + 3] = '>';
+      result[wid + 4] = 0;
+
+      int found = 0;
+      int four_state = 0;
+      int driven = 0;
+      for (unsigned idx = 0 ; idx < ivl_nexus_ptrs(nex) ; idx += 1) {
+	    ivl_nexus_ptr_t ptr = ivl_nexus_ptr(nex, idx);
+	    ivl_signal_t sig = ivl_nexus_ptr_sig(ptr);
+	    if (!sig || !ivl_signal_coerced_to_uwire(sig))
+		  continue;
+	    ivl_variable_type_t data_type = ivl_signal_data_type(sig);
+	    if (data_type != IVL_VT_LOGIC && data_type != IVL_VT_BOOL)
+		  continue;
+
+	    found = 1;
+	    if (data_type != IVL_VT_BOOL)
+		  four_state = 1;
+	    unsigned sig_wid = ivl_signal_width(sig);
+	    unsigned test_wid = sig_wid < wid? sig_wid : wid;
+	    unsigned word = ivl_nexus_ptr_pin(ptr);
+	    for (unsigned bit = 0 ; bit < test_wid ; bit += 1) {
+		  if (ivl_signal_is_continuously_driven(sig, word, bit)) {
+			result[3 + wid - bit - 1] = '1';
+			driven = 1;
+		  }
+	    }
+      }
+
+      if (!found) {
+	    free(result);
+	    return 0;
+      }
+      /* Port connections can coerce a variable without populating its
+         per-bit continuous-assignment mask. */
+      if (!driven) {
+	    for (unsigned idx = 0 ; idx < ivl_nexus_ptrs(nex) ; idx += 1) {
+		  ivl_nexus_ptr_t ptr = ivl_nexus_ptr(nex, idx);
+		  if (ivl_nexus_ptr_drive0(ptr) != IVL_DR_HiZ ||
+		      ivl_nexus_ptr_drive1(ptr) != IVL_DR_HiZ) {
+			driven = 1;
+			break;
+		  }
+	    }
+	    if (driven)
+		  memset(result + 3, '1', wid);
+      }
+      if (!four_state) {
+	    for (unsigned bit = 0 ; bit < wid ; bit += 1) {
+		  if (result[3+bit] != '1')
+			result[3+bit] = '0';
+	    }
+      }
+      return result;
+}
+
 static char* draw_C4_to_string(ivl_net_const_t cptr)
 {
       const char*bits = ivl_const_bits(cptr);
@@ -580,6 +644,8 @@ static void draw_net_input_x(ivl_nexus_t nex,
       unsigned idx;
       char**driver_labels;
       unsigned ndrivers = 0;
+      char*variable_mask = nexus_variable_state_mask(nex);
+      int variable_init = variable_mask != 0;
 
       const char*resolv_type;
 
@@ -667,8 +733,8 @@ static void draw_net_input_x(ivl_nexus_t nex,
       nex_data->drivers_count = ndrivers;
       nex_data->flags |= nex_flags;
 
-	/* If the nexus has no drivers, then send a constant HiZ or
-	   0.0 into the net. Use a lower case 'c' prefix for the
+	/* If the nexus has no drivers, send its default value into the net.
+	   Use a lower case 'c' prefix for the
 	   constant to inform vvp that this is an undriven value. */
       if (ndrivers == 0) {
 	    unsigned wid = width_of_nexus(nex);
@@ -688,8 +754,14 @@ static void draw_net_input_x(ivl_nexus_t nex,
 		      case IVL_SIT_TRIAND:
 		      case IVL_SIT_TRIOR:
 		      case IVL_SIT_UWIRE:
-			for (jdx = 0 ;  jdx < wid ;  jdx += 1)
-			      *tmp++ = 'z';
+			for (jdx = 0 ;  jdx < wid ;  jdx += 1) {
+			      if (variable_mask && variable_mask[3+jdx] == '1')
+				    *tmp++ = 'z';
+			      else if (variable_mask && variable_mask[3+jdx] == '0')
+				    *tmp++ = '0';
+			      else
+				    *tmp++ = variable_init? 'x' : 'z';
+			}
 			break;
 		      case IVL_SIT_TRI0:
 			for (jdx = 0 ;  jdx < wid ;  jdx += 1) {
@@ -720,7 +792,7 @@ static void draw_net_input_x(ivl_nexus_t nex,
 		  fprintf(vvp_out, "%s .functor BUFT %u, %s, C4<0>, C4<0>, C4<0>; pull drive\n",
 			  buf, wid, nex_private);
 	    } else {
-		  fprintf(vvp_out, "%s .functor BUFZ %u, %s; HiZ drive\n",
+		  fprintf(vvp_out, "%s .functor BUFZ %u, %s; open drive\n",
 			  buf, wid, nex_private);
 	    }
 	    nex_private = realloc(nex_private, strlen(buf)+1);
@@ -733,6 +805,7 @@ static void draw_net_input_x(ivl_nexus_t nex,
 	    }
 	    assert(nex_data->net_input == 0);
 	    nex_data->net_input = nex_private;
+	    free(variable_mask);
 	    return;
       }
 
@@ -767,6 +840,7 @@ static void draw_net_input_x(ivl_nexus_t nex,
 	    }
 	    assert(nex_data->net_input == 0);
 	    nex_data->net_input = nex_private;
+	    free(variable_mask);
 	    return;
       }
 
@@ -808,6 +882,7 @@ static void draw_net_input_x(ivl_nexus_t nex,
 
       assert(nex_data->net_input == 0);
       nex_data->net_input = nex_private;
+      free(variable_mask);
 }
 
 /*

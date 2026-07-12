@@ -886,6 +886,68 @@ vvp_wire_vec4::vvp_wire_vec4(unsigned wid, vvp_bit4_t init)
       needs_init_ = true;
 }
 
+void vvp_wire_vec4::set_variable_mask(const vvp_vector4_t&state_mask)
+{
+      assert(state_mask.size() == bits4_.size());
+      if (driver_mask_.size() == 0) {
+	    driver_mask_ = vvp_vector2_t(vvp_vector2_t::FILL0,
+					 bits4_.size());
+	    for (unsigned idx = 0 ; idx < state_mask.size() ; idx += 1) {
+		  if (state_mask.value(idx) == BIT4_1) {
+			driver_mask_.set_bit(idx, 1);
+			bits4_.set_bit(idx, BIT4_X);
+		  } else if (state_mask.value(idx) == BIT4_0) {
+			bits4_.set_bit(idx, BIT4_0);
+		  } else {
+			bits4_.set_bit(idx, BIT4_X);
+		  }
+	    }
+	    needs_init_ = true;
+	    return;
+      }
+
+      assert(driver_mask_.size() == state_mask.size());
+      for (unsigned idx = 0 ; idx < state_mask.size() ; idx += 1) {
+	    if (state_mask.value(idx) == BIT4_1)
+		  driver_mask_.set_bit(idx, 1);
+      }
+}
+
+void vvp_wire_vec4::assign_variable(vvp_net_t*net,
+				    const vvp_vector4_t&val,
+				    unsigned base, unsigned vwid,
+				    vvp_context_t context)
+{
+      assert(net);
+      assert(driver_mask_.size() == bits4_.size());
+      assert(vwid == bits4_.size());
+      assert(base + val.size() <= vwid);
+
+      vvp_vector4_t accepted_part = bits4_.subvalue(base, val.size());
+      for (unsigned idx = 0 ; idx < val.size() ; idx += 1) {
+	    if (!driver_mask_.value(base+idx))
+		  accepted_part.set_bit(idx, val.value(idx));
+      }
+
+      bool changed = bits4_.set_vec(base, accepted_part);
+      if (!changed && !needs_init_)
+	    return;
+      needs_init_ = false;
+
+      vvp_vector4_t accepted = bits4_;
+      vvp_vector4_t rep;
+      switch (filter_mask_(accepted, force4_, rep, 0)) {
+	  case STOP:
+	    break;
+	  case PROP:
+	    vvp_send_vec4(net->out_, accepted, context);
+	    break;
+	  case REPL:
+	    vvp_send_vec4(net->out_, rep, context);
+	    break;
+      }
+}
+
 vvp_net_fil_t::prop_t vvp_wire_vec4::filter_vec4(const vvp_vector4_t&bit, vvp_vector4_t&rep,
 						 unsigned base, unsigned vwid)
 {
@@ -909,6 +971,27 @@ vvp_net_fil_t::prop_t vvp_wire_vec4::filter_vec4(const vvp_vector4_t&bit, vvp_ve
       }
       assert(bits4_.size() == vwid);
 
+      if (driver_mask_.size()) {
+	    assert(base + bit.size() <= driver_mask_.size());
+	    vvp_vector4_t accepted_part = bits4_.subvalue(base, bit.size());
+	    for (unsigned idx = 0 ; idx < bit.size() ; idx += 1) {
+		  if (driver_mask_.value(base+idx))
+			accepted_part.set_bit(idx, bit.value(idx));
+	    }
+
+	    bool changed = bits4_.set_vec(base, accepted_part);
+	    if (!changed && !needs_init_)
+		  return STOP;
+	    needs_init_ = false;
+	    vvp_vector4_t accepted = bits4_;
+	    prop_t result = filter_mask_(accepted, force4_, rep, 0);
+	    if (result == PROP) {
+		  rep = accepted;
+		  return REPL;
+	    }
+	    return result;
+      }
+
 	// Keep track of the value being driven from this net, even if
 	// it is not ultimately what survives the force filter.
       if (base==0 && bit.size()==vwid) {
@@ -929,6 +1012,34 @@ vvp_net_fil_t::prop_t vvp_wire_vec4::filter_vec8(const vvp_vector8_t&bit,
                                                  unsigned vwid)
 {
       assert(bits4_.size() == vwid);
+
+      if (driver_mask_.size()) {
+	    assert(base + bit.size() <= driver_mask_.size());
+	    vvp_vector4_t bit4 = reduce4(bit);
+	    vvp_vector4_t accepted_part = bits4_.subvalue(base, bit.size());
+	    for (unsigned idx = 0 ; idx < bit.size() ; idx += 1) {
+		  if (driver_mask_.value(base+idx)) {
+			accepted_part.set_bit(idx, bit4.value(idx));
+		  }
+	    }
+
+	    bool changed = bits4_.set_vec(base, accepted_part);
+	    if (!changed && !needs_init_)
+		  return STOP;
+	    needs_init_ = false;
+	    vvp_vector8_t accepted8(bits4_, 6, 6);
+	    for (unsigned idx = 0 ; idx < bit.size() ; idx += 1) {
+		  if (driver_mask_.value(base+idx))
+			accepted8.set_bit(base+idx, bit.value(idx));
+	    }
+	    prop_t result = filter_mask_(accepted8,
+				vvp_vector8_t(force4_,6,6), rep, 0);
+	    if (result == PROP) {
+		  rep = accepted8;
+		  return REPL;
+	    }
+	    return result;
+      }
 
 	// Keep track of the value being driven from this net, even if
 	// it is not ultimately what survives the force filter.
@@ -982,6 +1093,12 @@ void vvp_wire_vec4::release(vvp_net_ptr_t ptr, bool net_flag)
       vvp_vector2_t mask (vvp_vector2_t::FILL1, bits4_.size());
       if (net_flag) {
 	      // Wires revert to their unforced value after release.
+	    if (driver_mask_.size()) {
+		  for (unsigned idx = 0 ; idx < bits4_.size() ; idx += 1) {
+			if (!driver_mask_.value(idx))
+			      bits4_.set_bit(idx, value(idx));
+		  }
+	    }
             release_mask(mask);
 	    needs_init_ = ! force4_ .eeq(bits4_);
 	    ptr.ptr()->send_vec4(bits4_, 0);
@@ -1006,6 +1123,12 @@ void vvp_wire_vec4::release_pv(vvp_net_ptr_t ptr, unsigned base, unsigned wid, b
 
       if (net_flag) {
 	      // Wires revert to their unforced value after release.
+	    if (driver_mask_.size()) {
+		  for (unsigned idx = 0 ; idx < wid ; idx += 1) {
+			if (!driver_mask_.value(base+idx))
+			      bits4_.set_bit(base+idx, value(base+idx));
+		  }
+	    }
 	    release_mask(mask);
 	    needs_init_ = ! force4_.subvalue(base,wid) .eeq(bits4_.subvalue(base,wid));
 	    ptr.ptr()->send_vec4_pv(bits4_.subvalue(base,wid),

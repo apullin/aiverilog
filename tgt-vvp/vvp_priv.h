@@ -157,6 +157,7 @@ struct vvp_nexus_data {
  * cache it.
  */
 extern const char* draw_net_input(ivl_nexus_t nex);
+extern char* nexus_variable_state_mask(ivl_nexus_t nex);
 void EOC_cleanup_drivers(void);
 
 /*

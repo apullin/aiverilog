@@ -9,7 +9,7 @@ typedef struct packed {
 } two_bits;
 
 module simple(input two_bits b2in,
-              output two_bits b2out);
+              output wire two_bits b2out);
    assign b2out.b1.b = b2in.b1.b;
 endmodule // simple
 

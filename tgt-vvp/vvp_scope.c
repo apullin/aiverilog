@@ -618,6 +618,7 @@ static void draw_net_in_scope(ivl_signal_t sig)
 	      /* Connect the pin of the signal to something. */
 	    ivl_nexus_t nex = ivl_signal_nex(sig, iword);
 	    const char*driver = draw_net_input(nex);
+	    char*variable_mask = nexus_variable_state_mask(nex);
 
 	    nex_data = (struct vvp_nexus_data*)ivl_nexus_get_private(nex);
 	    assert(nex_data);
@@ -631,6 +632,12 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			vec8 = "8";
 		  if (strength_aware_flag)
 			vec8 = "8";
+		  if (variable_mask && !strength_aware_flag)
+			vec8 = "";
+		  const char*mask_sep = variable_mask && !strength_aware_flag
+			? ", " : "";
+		  const char*mask_arg = variable_mask && !strength_aware_flag
+			? variable_mask : "";
 
 		  if (iword == 0 && dimensions > 0) {
 			unsigned swapped = ivl_signal_array_addr_swapped(sig);
@@ -643,10 +650,10 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  if (dimensions > 0) {
 			/* If this is a word of an array, then use an
 			   array reference in place of the net name. */
-			fprintf(vvp_out, "v%p_%u .net%s%s v%p %u, %d %d, %s;"
+			fprintf(vvp_out, "v%p_%u .net%s%s v%p %u, %d %d, %s%s%s;"
 				" %u drivers%s\n",
 				sig, iword, vec8, datatype_flag, sig,
-				iword, msb, lsb, driver,
+				iword, msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"" );
 
@@ -659,17 +666,18 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			assert(word_count == 1);
 			fprintf(vvp_out, "; Elide local net with no drivers, v%p_%u name=%s\n",
 				sig, iword, ivl_signal_basename(sig));
+			free(variable_mask);
 			continue;
 
 		  } else {
 			/* If this is an isolated word, it uses its
 			   own name. */
 			assert(word_count == 1);
-			fprintf(vvp_out, "v%p_%u .net%s%s %s\"%s\", %d %d, %s; "
+			fprintf(vvp_out, "v%p_%u .net%s%s %s\"%s\", %d %d, %s%s%s; "
 				" %u drivers%s\n",
 				sig, iword, vec8, datatype_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
-				msb, lsb, driver,
+				msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"" );
 		  }
@@ -691,6 +699,7 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			        sig, vvp_mangle_name(ivl_signal_basename(sig)),
 			        nex_data->net,
 			        ivl_signal_basename(nex_data->net));
+			free(variable_mask);
 			break;
 
 		    /* An alias for an individual word. */
@@ -725,15 +734,22 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			vec8 = "8";
 		  if (strength_aware_flag)
 			vec8 = "8";
+		  if (variable_mask && !strength_aware_flag)
+			vec8 = "";
+		  const char*mask_sep = variable_mask && !strength_aware_flag
+			? ", " : "";
+		  const char*mask_arg = variable_mask && !strength_aware_flag
+			? variable_mask : "";
 
-		  fprintf(vvp_out, "v%p_%u .net%s%s %s\"%s\", %d %d, %s; "
+		  fprintf(vvp_out, "v%p_%u .net%s%s %s\"%s\", %d %d, %s%s%s; "
 				" alias, %u drivers%s\n",
 				sig, iword, vec8, datatype_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
-				msb, lsb, driver,
+				msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"");
 	    }
+	    free(variable_mask);
       }
 }
 
