@@ -51,6 +51,27 @@ WORKLOADS = {
             (ROOT / "workloads/elaboration.sv",),
             ROOT / "gold/elaboration.stdout",
         ),
+        Workload(
+            "event_queue_heavy",
+            "event_queue scaled 8x for low-noise A/B timing",
+            "event_queue_bench",
+            (ROOT / "workloads/event_queue_heavy.sv",),
+            ROOT / "gold/event_queue_heavy.stdout",
+        ),
+        Workload(
+            "vector_arith_heavy",
+            "vector_arith scaled 16x for low-noise A/B timing",
+            "vector_arith_bench",
+            (ROOT / "workloads/vector_arith_heavy.sv",),
+            ROOT / "gold/vector_arith_heavy.stdout",
+        ),
+        Workload(
+            "elaboration_heavy",
+            "elaboration scaled 2x in instance count",
+            "elaboration_bench",
+            (ROOT / "workloads/elaboration_heavy.sv",),
+            ROOT / "gold/elaboration_heavy.stdout",
+        ),
     )
 }
 
