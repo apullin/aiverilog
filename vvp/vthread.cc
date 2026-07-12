@@ -119,7 +119,7 @@ struct vthread_s {
       inline vvp_vector4_t pop_vec4(void)
       {
 	    assert(! stack_vec4_.empty());
-	    vvp_vector4_t val = stack_vec4_.back();
+	    vvp_vector4_t val = std::move(stack_vec4_.back());
 	    stack_vec4_.pop_back();
 	    return val;
       }

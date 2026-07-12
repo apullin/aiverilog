@@ -264,6 +264,14 @@ class vvp_vector4_t {
       vvp_vector4_t(const vvp_vector4_t&that, bool invert_flag);
       vvp_vector4_t& operator= (const vvp_vector4_t&that);
 
+	// Move support steals the heap words of wide vectors instead
+	// of reallocating and copying them. The moved-from vector is
+	// left as a valid zero-width vector, the same state a
+	// default-constructed vector has. noexcept lets containers
+	// move rather than copy on reallocation.
+      vvp_vector4_t(vvp_vector4_t&&that) noexcept;
+      vvp_vector4_t& operator= (vvp_vector4_t&&that) noexcept;
+
       ~vvp_vector4_t();
 
       inline unsigned size() const { return size_; }
@@ -432,6 +440,40 @@ inline vvp_vector4_t& vvp_vector4_t::operator= (const vvp_vector4_t&that)
 	    delete[] abits_ptr_;
 
       copy_from_(that);
+
+      return *this;
+}
+
+inline vvp_vector4_t::vvp_vector4_t(vvp_vector4_t&&that) noexcept
+: size_(that.size_)
+{
+      if (size_ <= BITS_PER_WORD) {
+	    abits_val_ = that.abits_val_;
+	    bbits_val_ = that.bbits_val_;
+      } else {
+	    abits_ptr_ = that.abits_ptr_;
+	    bbits_ptr_ = that.bbits_ptr_;
+      }
+      that.size_ = 0;
+}
+
+inline vvp_vector4_t& vvp_vector4_t::operator= (vvp_vector4_t&&that) noexcept
+{
+      if (this == &that)
+	    return *this;
+
+      if (size_ > BITS_PER_WORD)
+	    delete[] abits_ptr_;
+
+      size_ = that.size_;
+      if (size_ <= BITS_PER_WORD) {
+	    abits_val_ = that.abits_val_;
+	    bbits_val_ = that.bbits_val_;
+      } else {
+	    abits_ptr_ = that.abits_ptr_;
+	    bbits_ptr_ = that.bbits_ptr_;
+      }
+      that.size_ = 0;
 
       return *this;
 }
