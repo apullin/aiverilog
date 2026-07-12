@@ -4525,6 +4525,79 @@ bool of_PARTI_U(vthread_t thr, vvp_code_t cp)
 }
 
 /*
+ * Fused %load/vec4 + %parti/s (or /u). The loader's peephole rewrites
+ * that adjacent pair into this operation, which reads only the
+ * selected part of the signal instead of copying the whole vector to
+ * the stack and cutting it down. Operands: net from the %load,
+ * number/bit_idx[0]/bit_idx[1] from the %parti.
+ */
+static bool of_LOAD_PARTI_base(vthread_t thr, vvp_code_t cp, bool signed_flag)
+{
+	// The net pointer shares a union with `number`, so the
+	// loader packed the part-select operands into bit_idx:
+	// bit_idx[0] is the base, bit_idx[1] is (wid << 6) | bwid.
+      unsigned wid = cp->bit_idx[1] >> 6;
+      uint32_t base = cp->bit_idx[0];
+      uint32_t bwid = cp->bit_idx[1] & 63;
+
+      vvp_net_t*net = cp->net;
+      vvp_signal_value*sig = net->fil? net->fil->as_signal_value() : 0;
+      if (sig == 0) {
+	    cerr << thr->get_fileline()
+	         << "%load/parti error: Net arg not a signal? "
+		 << (net->fil ? typeid(*net->fil).name() :
+	                        typeid(*net->fun).name())
+	         << endl;
+	    assert(sig);
+	    return true;
+      }
+
+      int32_t use_base = base;
+      if (signed_flag && bwid < 32 && (base&(1<<(bwid-1)))) {
+	    use_base |= -1UL << bwid;
+      }
+
+      unsigned sig_size = sig->value_size();
+
+	// Common case: the select lies entirely inside the signal
+	// (subvalue X-pads any excess exactly like the %parti result),
+	// so the part can be pushed directly.
+      if (use_base >= 0) {
+	    thr->push_vec4(sig->vec4_subvalue(use_base, wid));
+	    return true;
+      }
+
+	// Negative base: the low bits of the result stay X.
+      thr->push_vec4(vvp_vector4_t(wid, BIT4_X));
+      vvp_vector4_t&res = thr->peek_vec4();
+
+      if ((use_base+(int32_t)wid) <= 0)
+	    return true;
+
+      long vbase = -use_base;
+      wid -= vbase;
+      use_base = 0;
+
+      if ((use_base+wid) > sig_size) {
+	    wid = sig_size - use_base;
+      }
+
+      res.set_vec(vbase, sig->vec4_subvalue(use_base, wid));
+
+      return true;
+}
+
+bool of_LOAD_PARTI_S(vthread_t thr, vvp_code_t cp)
+{
+      return of_LOAD_PARTI_base(thr, cp, true);
+}
+
+bool of_LOAD_PARTI_U(vthread_t thr, vvp_code_t cp)
+{
+      return of_LOAD_PARTI_base(thr, cp, false);
+}
+
+/*
  * %mul
  */
 bool of_MUL(vthread_t thr, vvp_code_t)

@@ -102,6 +102,17 @@ class vvp_signal_value {
       virtual void vec4_value(vvp_vector4_t&) const =0;
       virtual double real_value() const;
 
+	// Read a part of the value without materializing the whole
+	// vector. Semantics match vec4_value followed by
+	// vvp_vector4_t::subvalue; concrete signals may implement a
+	// copy-eliding fast path.
+      virtual vvp_vector4_t vec4_subvalue(unsigned base, unsigned wid) const
+      {
+	    vvp_vector4_t tmp;
+	    vec4_value(tmp);
+	    return tmp.subvalue(base, wid);
+      }
+
       virtual void get_signal_value(struct t_vpi_value*vp);
 };
 
@@ -441,6 +452,7 @@ class vvp_wire_vec4 : public vvp_wire_base {
       vvp_bit4_t value(unsigned idx) const override;
       vvp_scalar_t scalar_value(unsigned idx) const override;
       void vec4_value(vvp_vector4_t&) const override;
+      vvp_vector4_t vec4_subvalue(unsigned base, unsigned wid) const override;
 
         // Support for $countdrivers
       vvp_bit4_t driven_value(unsigned idx) const override;

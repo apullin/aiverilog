@@ -1054,6 +1054,17 @@ void vvp_wire_vec4::vec4_value(vvp_vector4_t&val) const
 	    val.set_bit(idx, filtered_value_(idx));
 }
 
+vvp_vector4_t vvp_wire_vec4::vec4_subvalue(unsigned base, unsigned wid) const
+{
+      if (test_force_mask_is_zero())
+	    return bits4_.subvalue(base, wid);
+
+	// Some bits are forced: use the exact filtered full value.
+      vvp_vector4_t tmp;
+      vec4_value(tmp);
+      return tmp.subvalue(base, wid);
+}
+
 vvp_bit4_t vvp_wire_vec4::driven_value(unsigned idx) const
 {
       return bits4_.value(idx);

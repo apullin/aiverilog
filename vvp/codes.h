@@ -179,6 +179,8 @@ extern bool of_PAD_S(vthread_t thr, vvp_code_t code);
 extern bool of_PAD_U(vthread_t thr, vvp_code_t code);
 extern bool of_PART_S(vthread_t thr, vvp_code_t code);
 extern bool of_PART_U(vthread_t thr, vvp_code_t code);
+extern bool of_LOAD_PARTI_S(vthread_t thr, vvp_code_t code);
+extern bool of_LOAD_PARTI_U(vthread_t thr, vvp_code_t code);
 extern bool of_PARTI_S(vthread_t thr, vvp_code_t code);
 extern bool of_PARTI_U(vthread_t thr, vvp_code_t code);
 extern bool of_POP_OBJ(vthread_t thr, vvp_code_t code);
