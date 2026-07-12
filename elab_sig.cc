@@ -531,20 +531,17 @@ bool PGenerate::elaborate_sig(Design*des,  NetScope*container) const
 	    return flag;
       }
 
-      typedef list<NetScope*>::const_iterator scope_list_it_t;
-      for (scope_list_it_t cur = scope_list_.begin()
-		 ; cur != scope_list_.end() ; ++ cur ) {
+      typedef multimap<const NetScope*,NetScope*>::const_iterator scope_list_it_t;
+      pair<scope_list_it_t,scope_list_it_t> range = scope_list_.equal_range(container);
+      for (scope_list_it_t cur = range.first ; cur != range.second ; ++ cur ) {
 
-	    NetScope*scope = *cur;
-
-	    if (scope->parent() != container)
-		  continue;
+	    NetScope*scope = cur->second;
 
 	    if (debug_elaborate)
 		  cerr << get_fileline() << ": debug: Elaborate nets in "
-		       << "scope " << scope_path(*cur)
+		       << "scope " << scope_path(scope)
 		       << " in generate " << id_number << endl;
-	    flag &= elaborate_sig_(des, *cur) && flag;
+	    flag &= elaborate_sig_(des, scope) && flag;
       }
 
       return flag;

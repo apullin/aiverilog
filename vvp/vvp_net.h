@@ -264,10 +264,26 @@ class vvp_vector4_t {
       vvp_vector4_t(const vvp_vector4_t&that, bool invert_flag);
       vvp_vector4_t& operator= (const vvp_vector4_t&that);
 
+	// Move support steals the heap words of wide vectors instead
+	// of reallocating and copying them. The moved-from vector is
+	// left as a valid zero-width vector, the same state a
+	// default-constructed vector has. noexcept lets containers
+	// move rather than copy on reallocation.
+      vvp_vector4_t(vvp_vector4_t&&that) noexcept;
+      vvp_vector4_t& operator= (vvp_vector4_t&&that) noexcept;
+
       ~vvp_vector4_t();
 
       inline unsigned size() const { return size_; }
       void resize(unsigned new_size, vvp_bit4_t pad_bit = BIT4_X);
+
+	// Word-level access to the value planes, for converters that
+	// would otherwise walk the vector bit by bit. Bits at and
+	// above size() are undefined and must be masked by the caller.
+      unsigned long abits_word(unsigned wdx) const
+      { return (size_ <= BITS_PER_WORD)? abits_val_ : abits_ptr_[wdx]; }
+      unsigned long bbits_word(unsigned wdx) const
+      { return (size_ <= BITS_PER_WORD)? bbits_val_ : bbits_ptr_[wdx]; }
 
 	// Get the bit at the specified address
       vvp_bit4_t value(unsigned idx) const;
@@ -361,6 +377,36 @@ class vvp_vector4_t {
 
       void allocate_words_(unsigned long inita, unsigned long initb);
 
+	// Wide vectors churn through small word blocks at simulation
+	// time (stack loads, part selects, temporaries), so recycle
+	// freed blocks in per-word-count freelists instead of paying
+	// an allocator round trip each time. The freelist link is
+	// stored in the first bytes of the free block itself (every
+	// pooled block is at least two words per plane, which always
+	// holds a pointer). Blocks wider than POOL_MAX_WORDS words
+	// per plane stay with the heap allocator.
+      enum { POOL_MAX_WORDS = 16 };
+      static unsigned long*pool_[POOL_MAX_WORDS+1];
+
+      static unsigned long* alloc_block_(unsigned words)
+      {
+	    if (words <= POOL_MAX_WORDS && pool_[words]) {
+		  unsigned long*blk = pool_[words];
+		  memcpy(&pool_[words], blk, sizeof pool_[words]);
+		  return blk;
+	    }
+	    return new unsigned long[2*words];
+      }
+      static void free_block_(unsigned words, unsigned long*blk)
+      {
+	    if (words <= POOL_MAX_WORDS) {
+		  memcpy(blk, &pool_[words], sizeof pool_[words]);
+		  pool_[words] = blk;
+	    } else {
+		  delete[] blk;
+	    }
+      }
+
 	// Values in the vvp_vector4_t are stored split across two
 	// arrays. For each bit in the vector, there is an abit and a
 	// bbit. the encoding of a vvp_vector4_t is:
@@ -417,7 +463,7 @@ inline vvp_vector4_t::vvp_vector4_t(unsigned size__, vvp_bit4_t val)
 inline vvp_vector4_t::~vvp_vector4_t()
 {
       if (size_ > BITS_PER_WORD) {
-	    delete[] abits_ptr_;
+	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
 	      // bbits_ptr_ actually points half-way into a
 	      // double-length array started at abits_ptr_
       }
@@ -429,9 +475,43 @@ inline vvp_vector4_t& vvp_vector4_t::operator= (const vvp_vector4_t&that)
 	    return *this;
 
       if (size_ > BITS_PER_WORD)
-	    delete[] abits_ptr_;
+	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
 
       copy_from_(that);
+
+      return *this;
+}
+
+inline vvp_vector4_t::vvp_vector4_t(vvp_vector4_t&&that) noexcept
+: size_(that.size_)
+{
+      if (size_ <= BITS_PER_WORD) {
+	    abits_val_ = that.abits_val_;
+	    bbits_val_ = that.bbits_val_;
+      } else {
+	    abits_ptr_ = that.abits_ptr_;
+	    bbits_ptr_ = that.bbits_ptr_;
+      }
+      that.size_ = 0;
+}
+
+inline vvp_vector4_t& vvp_vector4_t::operator= (vvp_vector4_t&&that) noexcept
+{
+      if (this == &that)
+	    return *this;
+
+      if (size_ > BITS_PER_WORD)
+	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
+
+      size_ = that.size_;
+      if (size_ <= BITS_PER_WORD) {
+	    abits_val_ = that.abits_val_;
+	    bbits_val_ = that.bbits_val_;
+      } else {
+	    abits_ptr_ = that.abits_ptr_;
+	    bbits_ptr_ = that.bbits_ptr_;
+      }
+      that.size_ = 0;
 
       return *this;
 }
@@ -1247,6 +1327,13 @@ class vvp_net_fun_t {
 	// do something about it.
       virtual void force_flag(bool run_now);
 
+	// Waitable functors (event functors that the %wait
+	// instruction can block on) return their waitable_hooks_s
+	// interface here. This replaces a dynamic_cast cross-cast in
+	// the %wait opcode, which is far too expensive for that
+	// per-instruction path.
+      virtual struct waitable_hooks_s* as_waitable() { return 0; }
+
    protected:
       void recv_vec4_pv_(vvp_net_ptr_t p, const vvp_vector4_t&bit,
 			 unsigned base, unsigned vwid, vvp_context_t context);
@@ -1308,6 +1395,13 @@ class vvp_net_fil_t  : public vvp_vpi_callback {
 
       virtual void release(vvp_net_ptr_t ptr, bool net_flag) =0;
       virtual void release_pv(vvp_net_ptr_t ptr, unsigned base, unsigned wid, bool net_flag) =0;
+
+	// Every concrete filter also implements the vvp_signal_value
+	// interface, and hot opcodes need to reach it from the
+	// vvp_net_t::fil pointer. Return it here instead of making
+	// those per-instruction paths pay for a dynamic_cast
+	// cross-cast between the two base classes.
+      virtual class vvp_signal_value* as_signal_value() { return 0; }
 
 	// The %force/link instruction needs a place to write the
 	// source node of the force, so that subsequent %force and

@@ -102,6 +102,17 @@ class vvp_signal_value {
       virtual void vec4_value(vvp_vector4_t&) const =0;
       virtual double real_value() const;
 
+	// Read a part of the value without materializing the whole
+	// vector. Semantics match vec4_value followed by
+	// vvp_vector4_t::subvalue; concrete signals may implement a
+	// copy-eliding fast path.
+      virtual vvp_vector4_t vec4_subvalue(unsigned base, unsigned wid) const
+      {
+	    vvp_vector4_t tmp;
+	    vec4_value(tmp);
+	    return tmp.subvalue(base, wid);
+      }
+
       virtual void get_signal_value(struct t_vpi_value*vp);
 };
 
@@ -117,6 +128,7 @@ class vvp_fun_signal_vec : public vvp_fun_signal_base {
 class automatic_signal_base : public vvp_signal_value, public vvp_net_fil_t {
 
     public:
+      vvp_signal_value* as_signal_value() override { return this; }
 	// Automatic variables cannot be forced or released. Provide
 	// stubs that assert.
       virtual void release(vvp_net_ptr_t ptr, bool net_flag) override;
@@ -404,6 +416,8 @@ class vvp_wire_base  : public vvp_net_fil_t, public vvp_signal_value {
       vvp_wire_base();
       ~vvp_wire_base() override;
 
+      vvp_signal_value* as_signal_value() override { return this; }
+
         // Support for $countdrivers
       virtual vvp_bit4_t driven_value(unsigned idx) const;
       virtual bool is_forced(unsigned idx) const;
@@ -438,6 +452,7 @@ class vvp_wire_vec4 : public vvp_wire_base {
       vvp_bit4_t value(unsigned idx) const override;
       vvp_scalar_t scalar_value(unsigned idx) const override;
       void vec4_value(vvp_vector4_t&) const override;
+      vvp_vector4_t vec4_subvalue(unsigned base, unsigned wid) const override;
 
         // Support for $countdrivers
       vvp_bit4_t driven_value(unsigned idx) const override;

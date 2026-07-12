@@ -119,13 +119,17 @@ struct vthread_s {
       inline vvp_vector4_t pop_vec4(void)
       {
 	    assert(! stack_vec4_.empty());
-	    vvp_vector4_t val = stack_vec4_.back();
+	    vvp_vector4_t val = std::move(stack_vec4_.back());
 	    stack_vec4_.pop_back();
 	    return val;
       }
       inline void push_vec4(const vvp_vector4_t&val)
       {
 	    stack_vec4_.push_back(val);
+      }
+      inline void push_vec4(vvp_vector4_t&&val)
+      {
+	    stack_vec4_.push_back(std::move(val));
       }
       inline const vvp_vector4_t& peek_vec4(unsigned depth)
       {
@@ -1979,6 +1983,21 @@ static void do_CMPS(vthread_t thr, const vvp_vector4_t&lval, const vvp_vector4_t
 	    thr->flags[4] = BIT4_0; // eq;
 	    thr->flags[5] = BIT4_0; // lt;
 	    thr->flags[6] = BIT4_0; // eeq
+	    return;
+      }
+
+	// The values have the same sign and no X/Z bits, so
+	// same-width two's-complement values compare correctly as
+	// plain unsigned bit patterns. Compare narrow vectors with
+	// one masked word comparison instead of a bit scan.
+      if (wid <= 8*sizeof(unsigned long)) {
+	    unsigned long mask = (wid == 8*sizeof(unsigned long))
+		  ? -1UL : (1UL<<wid)-1UL;
+	    unsigned long la = lval.abits_word(0) & mask;
+	    unsigned long ra = rval.abits_word(0) & mask;
+	    thr->flags[4] = (la == ra)? BIT4_1 : BIT4_0; // eq
+	    thr->flags[5] = (la < ra)? BIT4_1 : BIT4_0;  // lt
+	    thr->flags[6] = thr->flags[4];               // eeq
 	    return;
       }
 
@@ -4032,7 +4051,7 @@ bool of_LOAD_VEC4(vthread_t thr, vvp_code_t cp)
 
 	// For the %load to work, the functor must actually be a
 	// signal functor. Only signals save their vector value.
-      vvp_signal_value*sig = dynamic_cast<vvp_signal_value*> (net->fil);
+      vvp_signal_value*sig = net->fil? net->fil->as_signal_value() : 0;
       if (sig == 0) {
 	    cerr << thr->get_fileline()
 	         << "%load/v error: Net arg not a signal? "
@@ -4503,6 +4522,123 @@ bool of_PARTI_S(vthread_t thr, vvp_code_t cp)
 bool of_PARTI_U(vthread_t thr, vvp_code_t cp)
 {
       return of_PARTI_base(thr, cp, false);
+}
+
+/*
+ * Fused %load/vec4 + %parti/s (or /u). The loader's peephole rewrites
+ * that adjacent pair into this operation, which reads only the
+ * selected part of the signal instead of copying the whole vector to
+ * the stack and cutting it down. Operands: net from the %load,
+ * number/bit_idx[0]/bit_idx[1] from the %parti.
+ */
+static bool of_LOAD_PARTI_base(vthread_t thr, vvp_code_t cp, bool signed_flag)
+{
+	// The net pointer shares a union with `number`, so the
+	// loader packed the part-select operands into bit_idx:
+	// bit_idx[0] is the base, bit_idx[1] is (wid << 6) | bwid.
+      unsigned wid = cp->bit_idx[1] >> 6;
+      uint32_t base = cp->bit_idx[0];
+      uint32_t bwid = cp->bit_idx[1] & 63;
+
+      vvp_net_t*net = cp->net;
+      vvp_signal_value*sig = net->fil? net->fil->as_signal_value() : 0;
+      if (sig == 0) {
+	    cerr << thr->get_fileline()
+	         << "%load/parti error: Net arg not a signal? "
+		 << (net->fil ? typeid(*net->fil).name() :
+	                        typeid(*net->fun).name())
+	         << endl;
+	    assert(sig);
+	    return true;
+      }
+
+      int32_t use_base = base;
+      if (signed_flag && bwid < 32 && (base&(1<<(bwid-1)))) {
+	    use_base |= -1UL << bwid;
+      }
+
+      unsigned sig_size = sig->value_size();
+
+	// Common case: the select lies entirely inside the signal
+	// (subvalue X-pads any excess exactly like the %parti result),
+	// so the part can be pushed directly.
+      if (use_base >= 0) {
+	    thr->push_vec4(sig->vec4_subvalue(use_base, wid));
+	    return true;
+      }
+
+	// Negative base: the low bits of the result stay X.
+      thr->push_vec4(vvp_vector4_t(wid, BIT4_X));
+      vvp_vector4_t&res = thr->peek_vec4();
+
+      if ((use_base+(int32_t)wid) <= 0)
+	    return true;
+
+      long vbase = -use_base;
+      wid -= vbase;
+      use_base = 0;
+
+      if ((use_base+wid) > sig_size) {
+	    wid = sig_size - use_base;
+      }
+
+      res.set_vec(vbase, sig->vec4_subvalue(use_base, wid));
+
+      return true;
+}
+
+bool of_LOAD_PARTI_S(vthread_t thr, vvp_code_t cp)
+{
+      return of_LOAD_PARTI_base(thr, cp, true);
+}
+
+bool of_LOAD_PARTI_U(vthread_t thr, vvp_code_t cp)
+{
+      return of_LOAD_PARTI_base(thr, cp, false);
+}
+
+/*
+ * Fused %load/vec4 + %flag_set/vec4. The loader's peephole rewrites
+ * the pair into this operation, which reads bit 0 of the signal
+ * directly into the flag with no value-stack traffic. The flag index
+ * lives in bit_idx[0] because the net pointer shares a union with
+ * the number field.
+ */
+bool of_LOAD_FLAG(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t*net = cp->net;
+      vvp_signal_value*sig = net->fil? net->fil->as_signal_value() : 0;
+      if (sig == 0) {
+	    cerr << thr->get_fileline()
+	         << "%load/flag error: Net arg not a signal? "
+		 << (net->fil ? typeid(*net->fil).name() :
+	                        typeid(*net->fun).name())
+	         << endl;
+	    assert(sig);
+	    return true;
+      }
+
+      int flag = cp->bit_idx[0];
+      assert(flag < vthread_s::FLAGS_COUNT);
+      thr->flags[flag] = sig->value(0);
+      return true;
+}
+
+/*
+ * Fused %flag_set/vec4 <f> + %flag_get/vec4 <f> (same flag). The
+ * value popped into the flag is immediately pushed back as a one-bit
+ * vector; do both in one operation. Operands are the %flag_set's.
+ */
+bool of_FLAG_SETGET_VEC4(vthread_t thr, vvp_code_t cp)
+{
+      int flag = cp->number;
+      assert(flag < vthread_s::FLAGS_COUNT);
+
+      vvp_bit4_t bit = thr->peek_vec4().value(0);
+      thr->flags[flag] = bit;
+      thr->pop_vec4(1);
+      thr->push_vec4(vvp_vector4_t(1, bit));
+      return true;
 }
 
 /*
@@ -5003,7 +5139,7 @@ bool of_PUSHI_VEC4(vthread_t thr, vvp_code_t cp)
       vvp_vector4_t val (wid, BIT4_0);
       get_immediate_rval (cp, val);
 
-      thr->push_vec4(val);
+      thr->push_vec4(std::move(val));
 
       return true;
 }
@@ -6211,7 +6347,7 @@ bool of_STORE_STRA(vthread_t thr, vvp_code_t cp)
 bool of_STORE_VEC4(vthread_t thr, vvp_code_t cp)
 {
       vvp_net_ptr_t ptr(cp->net, 0);
-      const vvp_signal_value*sig = dynamic_cast<vvp_signal_value*> (cp->net->fil);
+      const vvp_signal_value*sig = cp->net->fil? cp->net->fil->as_signal_value() : 0;
       unsigned off_index = cp->bit_idx[0];
       unsigned int wid = cp->bit_idx[1];
 
@@ -6504,7 +6640,7 @@ bool of_WAIT(vthread_t thr, vvp_code_t cp)
       thr->waiting_for_event = 1;
 
 	/* Add this thread to the list in the event. */
-      waitable_hooks_s*ep = dynamic_cast<waitable_hooks_s*> (cp->net->fun);
+      waitable_hooks_s*ep = cp->net->fun? cp->net->fun->as_waitable() : 0;
       assert(ep);
       thr->wait_next = ep->add_waiting_thread(thr);
 

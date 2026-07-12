@@ -2,6 +2,20 @@
 
 This is a fork of iverilog, accepting AI patches for correctness and performance.
 
+Bugfixes, feature enhancements, and speedups: ~90 commits beyond
+upstream. Ledger: `git log upstream/master..` (perf series:
+`git log --grep='^\[perf\]'`, measurements in each message).
+
+Merged speedups so far (in-tree oracle-checked benchmarks; includes
+the `scripts/perf-build.sh` clang+ThinLTO+PGO build):
+
+| workload | speedup |
+| --- | --- |
+| elaboration-heavy compile | **11.5x** |
+| wide-arithmetic simulation | **3.6x** |
+| event-heavy simulation | **3.2x** |
+| picorv32 ISA-test simulation | **2.5x** |
+
 ---
 
 # The ICARUS Verilog Compilation System

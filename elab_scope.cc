@@ -1372,7 +1372,7 @@ void PGenerate::elaborate_subscope_(Design*des, NetScope*scope)
 		 << " for generate block " << scope_name << endl;
 
 	// Save the scope that we created, for future use.
-      scope_list_.push_back(scope);
+      scope_list_.insert(make_pair(scope->parent(), scope));
 }
 
 class delayed_elaborate_scope_mod_instances : public elaborator_work_item_t {

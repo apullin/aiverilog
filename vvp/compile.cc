@@ -1776,6 +1776,14 @@ char **compile_udp_table(char **table, char *row)
  * table gives the operand structure that is acceptable, so I can
  * process the operands here as well.
  */
+/* Peephole state for opcode fusion: the previously emitted
+   instruction and the slot where the immediately following
+   instruction must land for the two to be adjacent. A code label
+   binding between them (or any other emitter allocating a slot)
+   suppresses fusion. */
+static vvp_code_t peep_prev_code_ = 0;
+static vvp_code_t peep_fuse_slot_ = 0;
+
 void compile_code(char*label, char*mnem, comp_operands_t opa)
 {
 	/* First, I can give the label a value that is the current
@@ -1910,6 +1918,66 @@ void compile_code(char*label, char*mnem, comp_operands_t opa)
 	    }
       }
 
+	/* Peephole: fuse an adjacent %load/vec4 + %parti/s|u pair
+	   into one operation that reads only the selected part of
+	   the signal. Requires the pair to occupy adjacent slots
+	   with no label bound to the second instruction, so nothing
+	   can jump between them. The second slot becomes a %noop so
+	   code addresses are unchanged. */
+      static int peep_disable = -1;
+      if (peep_disable < 0)
+	    peep_disable = (getenv("VVP_NO_FUSE") != 0);
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && peep_prev_code_->opcode == &of_LOAD_VEC4
+	  && code->opcode == &of_FLAG_SET_VEC4) {
+	      /* Fuse %load/vec4 + %flag_set/vec4: read the signal
+		 bit directly into the flag. Flag index moves to
+		 bit_idx[0] (the net pointer shares a union with
+		 number). */
+	    peep_prev_code_->opcode = &of_LOAD_FLAG;
+	    peep_prev_code_->bit_idx[0] = code->number;
+	    code->opcode = &of_NOOP;
+	    peep_prev_code_ = 0;
+	    peep_fuse_slot_ = codespace_next();
+	    free(opa);
+	    free(mnem);
+	    return;
+      }
+
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && peep_prev_code_->opcode == &of_FLAG_SET_VEC4
+	  && code->opcode == &of_FLAG_GET_VEC4
+	  && peep_prev_code_->number == code->number) {
+	      /* Fuse same-flag %flag_set/vec4 + %flag_get/vec4. */
+	    peep_prev_code_->opcode = &of_FLAG_SETGET_VEC4;
+	    code->opcode = &of_NOOP;
+	    peep_prev_code_ = 0;
+	    peep_fuse_slot_ = codespace_next();
+	    free(opa);
+	    free(mnem);
+	    return;
+      }
+
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && peep_prev_code_->opcode == &of_LOAD_VEC4
+	  && (code->opcode == &of_PARTI_S || code->opcode == &of_PARTI_U)
+	  && code->number < (1UL<<26) && code->bit_idx[1] < 64) {
+	    /* The %load's net pointer shares a union with `number`,
+	       so the fused operands live entirely in bit_idx:
+	       bit_idx[0] is the select base, bit_idx[1] packs
+	       (wid << 6) | base_wid. */
+	    peep_prev_code_->opcode = (code->opcode == &of_PARTI_S)
+		  ? &of_LOAD_PARTI_S : &of_LOAD_PARTI_U;
+	    peep_prev_code_->bit_idx[0] = code->bit_idx[0];
+	    peep_prev_code_->bit_idx[1] =
+		  (uint32_t)((code->number << 6) | code->bit_idx[1]);
+	    code->opcode = &of_NOOP;
+	    peep_prev_code_ = 0;
+      } else {
+	    peep_prev_code_ = code;
+      }
+      peep_fuse_slot_ = codespace_next();
+
       free(opa);
 
       free(mnem);
@@ -1917,6 +1985,7 @@ void compile_code(char*label, char*mnem, comp_operands_t opa)
 
 void compile_codelabel(char*label)
 {
+      peep_prev_code_ = 0;
       symbol_value_t val;
       vvp_code_t ptr = codespace_next();
 

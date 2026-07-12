@@ -61,6 +61,14 @@ CXXFLAGS = @WARNING_FLAGS@ @WARNING_FLAGS_CXX@ @CXXFLAGS@
 PICFLAGS = @PICFLAG@
 LDFLAGS = @rdynamic@ @LDFLAGS@
 
+# User VPI modules are compiled and linked outside this tree, against
+# whatever object format the user's toolchain produces. Build-tree
+# link-time-optimization flags must not leak into those builds: LTO
+# objects are compiler-specific bitcode that a plain system linker
+# cannot read.
+VPIU_CFLAGS = $(filter-out -flto%,$(CFLAGS))
+VPIU_CXXFLAGS = $(filter-out -flto%,$(CXXFLAGS))
+
 O = main.o res.o
 
 ifeq (@MINGW32@,yes)
@@ -110,8 +118,8 @@ iverilog-vpi: $(srcdir)/iverilog-vpi.sh ../config.status
 	    -e 's;@SUFFIX@;$(suffix);' \
 	    -e 's;@IVCC@;$(CC);' \
 	    -e 's;@IVCXX@;@CXX@;' \
-	    -e 's;@IVCFLAGS@;$(CFLAGS);' \
-	    -e 's;@IVCXXFLAGS@;$(CXXFLAGS);' \
+	    -e 's;@IVCFLAGS@;$(VPIU_CFLAGS);' \
+	    -e 's;@IVCXXFLAGS@;$(VPIU_CXXFLAGS);' \
 	    -e 's;@IVCTARGETFLAGS@;@CTARGETFLAGS@;' \
 	    -e 's;@INCLUDEDIR@;$(ivl_includedir);' \
 	    -e 's;@LIBDIR@;@libdir@;' $< > $@
@@ -125,8 +133,8 @@ main.o: $(srcdir)/main.c config.h
 config.h: $(srcdir)/config.h.in Makefile
 	sed -e 's;@IVLCC@;@CC@;' -e 's;@IVLCXX@;@CXX@;' \
 	    -e 's;@SUFFIX@;$(suffix);g' \
-	    -e 's;@IVLCFLAGS@;$(CFLAGS);' \
-	    -e 's;@IVLCXXFLAGS@;$(CXXFLAGS);' \
+	    -e 's;@IVLCFLAGS@;$(VPIU_CFLAGS);' \
+	    -e 's;@IVLCXXFLAGS@;$(VPIU_CXXFLAGS);' \
 	    -e 's;@SHARED@;@shared@;' $< > $@
 ifeq (@LIBVERIUSER@,yes)
 	sed -i 's;@VPILIBS@;-lveriuser$(suffix) -lvpi$(suffix);' $@

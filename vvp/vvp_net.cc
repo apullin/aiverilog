@@ -700,10 +700,12 @@ void vvp_vector4_t::copy_bits(const vvp_vector4_t&that)
  * This function should ONLY BE CALLED FROM vvp_vector4_t::copy_from_,
  * as it performs part of that functions tasks.
  */
+unsigned long* vvp_vector4_t::pool_[vvp_vector4_t::POOL_MAX_WORDS+1];
+
 void vvp_vector4_t::copy_from_big_(const vvp_vector4_t&that)
 {
       unsigned words = (size_+BITS_PER_WORD-1) / BITS_PER_WORD;
-      abits_ptr_ = new unsigned long[2*words];
+      abits_ptr_ = alloc_block_(words);
       bbits_ptr_ = abits_ptr_ + words;
 
       for (unsigned idx = 0 ;  idx < words ;  idx += 1)
@@ -722,7 +724,7 @@ void vvp_vector4_t::copy_inverted_from_(const vvp_vector4_t&that)
       size_ = that.size_;
       if (size_ > BITS_PER_WORD) {
 	    unsigned words = (size_+BITS_PER_WORD-1) / BITS_PER_WORD;
-	    abits_ptr_ = new unsigned long[2*words];
+	    abits_ptr_ = alloc_block_(words);
 	    bbits_ptr_ = abits_ptr_ + words;
 
 	    unsigned remaining = size_;
@@ -752,7 +754,7 @@ void vvp_vector4_t::allocate_words_(unsigned long inita, unsigned long initb)
 {
       if (size_ > BITS_PER_WORD) {
 	    unsigned cnt = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD;
-	    abits_ptr_ = new unsigned long[2*cnt];
+	    abits_ptr_ = alloc_block_(cnt);
 	    bbits_ptr_ = abits_ptr_ + cnt;
 	    for (unsigned idx = 0 ;  idx < cnt ;  idx += 1)
 		  abits_ptr_[idx] = inita;
@@ -1002,7 +1004,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
 		  return;
 	    }
 
-	    unsigned long*newbits = new unsigned long[2*newcnt];
+	    unsigned long*newbits = alloc_block_(newcnt);
 
 	    if (cnt > 1) {
 		  unsigned trans = cnt;
@@ -1014,7 +1016,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
 		  for (unsigned idx = 0 ;  idx < trans ;  idx += 1)
 			newbits[newcnt+idx] = bbits_ptr_[idx];
 
-		  delete[]abits_ptr_;
+		  free_block_(cnt, abits_ptr_);
 
 	    } else {
 		  newbits[0] = abits_val_;
@@ -1042,7 +1044,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
 	    if (cnt > 1) {
 		  unsigned long newvala = abits_ptr_[0];
 		  unsigned long newvalb = bbits_ptr_[0];
-		  delete[]abits_ptr_;
+		  free_block_(cnt, abits_ptr_);
 		  abits_val_ = newvala;
 		  bbits_val_ = newvalb;
 	    }
@@ -2135,26 +2137,31 @@ template <class INT>bool vector4_to_value(const vvp_vector4_t&vec, INT&val,
 {
       typedef typename std::make_unsigned<INT>::type UINT;
       UINT res = 0;
-      UINT msk = 1;
       bool rc_flag = true;
 
       unsigned size = vec.size();
       if (size > 8*sizeof(val)) size = 8*sizeof(val);
-      for (unsigned idx = 0 ;  idx < size ;  idx += 1) {
-	    switch (vec.value(idx)) {
-		case BIT4_0:
-		  break;
-		case BIT4_1:
-		  res |= msk;
-		  break;
-		default:
+
+	// Convert a plane word at a time instead of a bit at a time.
+	// The value contribution of a bit is abit&~bbit (X and Z bits
+	// contribute zero), and any set bbit is an X/Z bit.
+      const unsigned BPW = 8*sizeof(unsigned long);
+      for (unsigned base = 0 ;  base < size ;  base += BPW) {
+	    unsigned trans = size - base;
+	    if (trans > BPW) trans = BPW;
+	    unsigned long mask = (trans == BPW)? -1UL : (1UL<<trans)-1UL;
+
+	    unsigned long abits = vec.abits_word(base/BPW) & mask;
+	    unsigned long bbits = vec.bbits_word(base/BPW) & mask;
+
+	    if (bbits) {
 		  if (is_arithmetic)
 			return false;
-		  else
-			rc_flag = false;
+		  rc_flag = false;
+		  abits &= ~bbits;
 	    }
 
-	    msk <<= 1;
+	    res |= static_cast<UINT>(static_cast<UINT>(abits) << base);
       }
 
       if (is_signed && vec.value(vec.size()-1) == BIT4_1) {
@@ -2187,25 +2194,37 @@ template <class T> bool vector4_to_value(const vvp_vector4_t&vec,
                                          bool&overflow_flag, T&val)
 {
       T res = 0;
-      T msk = 1;
 
       overflow_flag = false;
       unsigned size = vec.size();
-      for (unsigned idx = 0 ;  idx < size ;  idx += 1) {
-	    switch (vec.value(idx)) {
-		case BIT4_0:
-		  break;
-		case BIT4_1:
-		  if (msk == 0)
-			overflow_flag = true;
-		  else
-			res |= msk;
-		  break;
-		default:
-		  return false;
-	    }
 
-	    msk <<= static_cast<T>(1);
+	// Convert a plane word at a time. Any set bbit is an X/Z bit
+	// and fails the conversion; value bits at and above the
+	// destination width only raise the overflow flag.
+      const unsigned BPW = 8*sizeof(unsigned long);
+      const unsigned CAP = 8*sizeof(T);
+      for (unsigned base = 0 ;  base < size ;  base += BPW) {
+	    unsigned trans = size - base;
+	    if (trans > BPW) trans = BPW;
+	    unsigned long mask = (trans == BPW)? -1UL : (1UL<<trans)-1UL;
+
+	    unsigned long abits = vec.abits_word(base/BPW) & mask;
+	    unsigned long bbits = vec.bbits_word(base/BPW) & mask;
+
+	    if (bbits)
+		  return false;
+
+	    if (base >= CAP) {
+		  if (abits)
+			overflow_flag = true;
+	    } else if (trans > CAP - base) {
+		  unsigned cap = CAP - base;
+		  if (abits >> cap)
+			overflow_flag = true;
+		  res |= static_cast<T>(abits & ((1UL<<cap)-1UL)) << base;
+	    } else {
+		  res |= static_cast<T>(abits) << base;
+	    }
       }
 
       val = res;

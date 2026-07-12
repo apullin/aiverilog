@@ -11,6 +11,8 @@
 # Virtual environments
 .conda/
 .venv/
+__pycache__/
+*.pyc
 
 # Top level generic files
 tags
@@ -120,3 +122,6 @@ dep
 # Check output
 /check.vvp
 /driver/top.vvp
+
+# Local performance benchmark artifacts
+/benchmarks/.work/
