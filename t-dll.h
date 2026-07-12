@@ -700,6 +700,7 @@ struct ivl_scope_s {
       unsigned func_width;
 
       unsigned is_cell;
+      unsigned is_disable_target;
 
       // Ports of Module scope (just introspection data for VPI) - actual connections
       // are nets defined in u_.net (may be > 1 per module port)
