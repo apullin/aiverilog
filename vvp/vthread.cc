@@ -1986,6 +1986,21 @@ static void do_CMPS(vthread_t thr, const vvp_vector4_t&lval, const vvp_vector4_t
 	    return;
       }
 
+	// The values have the same sign and no X/Z bits, so
+	// same-width two's-complement values compare correctly as
+	// plain unsigned bit patterns. Compare narrow vectors with
+	// one masked word comparison instead of a bit scan.
+      if (wid <= 8*sizeof(unsigned long)) {
+	    unsigned long mask = (wid == 8*sizeof(unsigned long))
+		  ? -1UL : (1UL<<wid)-1UL;
+	    unsigned long la = lval.abits_word(0) & mask;
+	    unsigned long ra = rval.abits_word(0) & mask;
+	    thr->flags[4] = (la == ra)? BIT4_1 : BIT4_0; // eq
+	    thr->flags[5] = (la < ra)? BIT4_1 : BIT4_0;  // lt
+	    thr->flags[6] = thr->flags[4];               // eeq
+	    return;
+      }
+
 	// The values have the same sign, so we have to look at the
 	// actual value. Scan from the MSB down. As soon as we find a
 	// bit that differs, we know the result.
