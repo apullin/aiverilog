@@ -509,10 +509,12 @@ void dll_target::proc_case(const NetCase*net)
 
       stmt_cur_->u_.case_.case_ex = new ivl_expr_t[ncase];
       stmt_cur_->u_.case_.case_st = new struct ivl_statement_s[ncase];
+      stmt_cur_->u_.case_.case_item = new unsigned[ncase];
 
       ivl_statement_t save_cur = stmt_cur_;
 
       for (unsigned idx = 0 ;  idx < ncase ;  idx += 1) {
+	    save_cur->u_.case_.case_item[idx] = net->source_item(idx);
 	    const NetExpr*ex = net->expr(idx);
 	    if (ex) {
 		  ex->expr_scan(this);

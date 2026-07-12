@@ -3209,7 +3209,8 @@ class NetCase  : public NetProc {
       NetCase(ivl_case_quality_t q, TYPE c, NetExpr*ex, unsigned cnt);
       ~NetCase() override;
 
-      void set_case(unsigned idx, NetExpr*ex, NetProc*st);
+      void set_case(unsigned idx, NetExpr*ex, NetProc*st,
+		    unsigned source_item);
 
       void prune();
 
@@ -3220,6 +3221,8 @@ class NetCase  : public NetProc {
 
       inline const NetExpr*expr(unsigned idx) const { return items_[idx].guard;}
       inline const NetProc*stat(unsigned idx) const { return items_[idx].statement; }
+      inline unsigned source_item(unsigned idx) const
+      { return items_[idx].source_item; }
 
       virtual NexusSet* nex_input(bool rem_out = true, bool always_sens = false,
                                   bool nested_func = false) const override;
@@ -3250,9 +3253,10 @@ class NetCase  : public NetProc {
       TYPE type_;
 
       struct Item {
-	    inline Item() : guard(0), statement(0) { }
+	    inline Item() : guard(0), statement(0), source_item(0) { }
 	    NetExpr*guard;
 	    NetProc*statement;
+	    unsigned source_item;
       };
 
       NetExpr* expr_;

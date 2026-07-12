@@ -1,0 +1,14 @@
+WARNING: ./ivltests/case_unique_overlap.v:6: value matches multiple items in unique/unique0 case statement
+         Time: 0  Scope: main
+unique first
+WARNING: ./ivltests/case_unique_overlap.v:18: value matches multiple items in unique/unique0 case statement
+         Time: 0  Scope: main
+casex first
+WARNING: ./ivltests/case_unique_overlap.v:23: value matches multiple items in unique/unique0 case statement
+         Time: 0  Scope: main
+casez first
+priority first
+WARNING: ./ivltests/case_unique_overlap.v:34: value is unhandled for priority or unique case statement
+         Time: 0  Scope: main
+comma-separated item
+PASSED

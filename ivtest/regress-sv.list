@@ -249,6 +249,7 @@ br_ml20191221		normal,-g2009		ivltests
 br_mw20200501		normal,-g2009		ivltests
 case_priority		normal,-g2005-sv	ivltests gold=case_priority.gold
 case_unique		normal,-g2005-sv	ivltests gold=case_unique.gold
+case_unique_overlap	normal,-g2009		ivltests gold=case_unique_overlap.gold
 cast_real		normal,-g2005-sv	ivltests
 cfunc_assign_op_mixed	normal,-g2009		ivltests
 cfunc_assign_op_pv	normal,-g2009		ivltests
