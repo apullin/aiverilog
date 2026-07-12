@@ -486,9 +486,11 @@ extern bool evaluate_index_prefix(Design*des, NetScope*scope,
 extern NetExpr*collapse_array_indices(Design*des, NetScope*scope, const NetNet*net,
 				      const std::list<index_component_t>&indices);
 
+// Set variable_prefix when an index before the final dimension is dynamic.
 extern NetExpr*collapse_array_exprs(Design*des, NetScope*scope,
 				    const LineInfo*loc, const NetNet*net,
-				    const std::list<index_component_t>&indices);
+				    const std::list<index_component_t>&indices,
+				    bool*variable_prefix = 0);
 
 extern void assign_unpacked_with_bufz(Design*des, NetScope*scope,
 				      const LineInfo*loc,
