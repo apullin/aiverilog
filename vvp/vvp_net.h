@@ -369,6 +369,36 @@ class vvp_vector4_t {
 
       void allocate_words_(unsigned long inita, unsigned long initb);
 
+	// Wide vectors churn through small word blocks at simulation
+	// time (stack loads, part selects, temporaries), so recycle
+	// freed blocks in per-word-count freelists instead of paying
+	// an allocator round trip each time. The freelist link is
+	// stored in the first bytes of the free block itself (every
+	// pooled block is at least two words per plane, which always
+	// holds a pointer). Blocks wider than POOL_MAX_WORDS words
+	// per plane stay with the heap allocator.
+      enum { POOL_MAX_WORDS = 16 };
+      static unsigned long*pool_[POOL_MAX_WORDS+1];
+
+      static unsigned long* alloc_block_(unsigned words)
+      {
+	    if (words <= POOL_MAX_WORDS && pool_[words]) {
+		  unsigned long*blk = pool_[words];
+		  memcpy(&pool_[words], blk, sizeof pool_[words]);
+		  return blk;
+	    }
+	    return new unsigned long[2*words];
+      }
+      static void free_block_(unsigned words, unsigned long*blk)
+      {
+	    if (words <= POOL_MAX_WORDS) {
+		  memcpy(blk, &pool_[words], sizeof pool_[words]);
+		  pool_[words] = blk;
+	    } else {
+		  delete[] blk;
+	    }
+      }
+
 	// Values in the vvp_vector4_t are stored split across two
 	// arrays. For each bit in the vector, there is an abit and a
 	// bbit. the encoding of a vvp_vector4_t is:
@@ -425,7 +455,7 @@ inline vvp_vector4_t::vvp_vector4_t(unsigned size__, vvp_bit4_t val)
 inline vvp_vector4_t::~vvp_vector4_t()
 {
       if (size_ > BITS_PER_WORD) {
-	    delete[] abits_ptr_;
+	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
 	      // bbits_ptr_ actually points half-way into a
 	      // double-length array started at abits_ptr_
       }
@@ -437,7 +467,7 @@ inline vvp_vector4_t& vvp_vector4_t::operator= (const vvp_vector4_t&that)
 	    return *this;
 
       if (size_ > BITS_PER_WORD)
-	    delete[] abits_ptr_;
+	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
 
       copy_from_(that);
 
@@ -463,7 +493,7 @@ inline vvp_vector4_t& vvp_vector4_t::operator= (vvp_vector4_t&&that) noexcept
 	    return *this;
 
       if (size_ > BITS_PER_WORD)
-	    delete[] abits_ptr_;
+	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
 
       size_ = that.size_;
       if (size_ <= BITS_PER_WORD) {

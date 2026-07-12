@@ -700,10 +700,12 @@ void vvp_vector4_t::copy_bits(const vvp_vector4_t&that)
  * This function should ONLY BE CALLED FROM vvp_vector4_t::copy_from_,
  * as it performs part of that functions tasks.
  */
+unsigned long* vvp_vector4_t::pool_[vvp_vector4_t::POOL_MAX_WORDS+1];
+
 void vvp_vector4_t::copy_from_big_(const vvp_vector4_t&that)
 {
       unsigned words = (size_+BITS_PER_WORD-1) / BITS_PER_WORD;
-      abits_ptr_ = new unsigned long[2*words];
+      abits_ptr_ = alloc_block_(words);
       bbits_ptr_ = abits_ptr_ + words;
 
       for (unsigned idx = 0 ;  idx < words ;  idx += 1)
@@ -722,7 +724,7 @@ void vvp_vector4_t::copy_inverted_from_(const vvp_vector4_t&that)
       size_ = that.size_;
       if (size_ > BITS_PER_WORD) {
 	    unsigned words = (size_+BITS_PER_WORD-1) / BITS_PER_WORD;
-	    abits_ptr_ = new unsigned long[2*words];
+	    abits_ptr_ = alloc_block_(words);
 	    bbits_ptr_ = abits_ptr_ + words;
 
 	    unsigned remaining = size_;
@@ -752,7 +754,7 @@ void vvp_vector4_t::allocate_words_(unsigned long inita, unsigned long initb)
 {
       if (size_ > BITS_PER_WORD) {
 	    unsigned cnt = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD;
-	    abits_ptr_ = new unsigned long[2*cnt];
+	    abits_ptr_ = alloc_block_(cnt);
 	    bbits_ptr_ = abits_ptr_ + cnt;
 	    for (unsigned idx = 0 ;  idx < cnt ;  idx += 1)
 		  abits_ptr_[idx] = inita;
@@ -1002,7 +1004,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
 		  return;
 	    }
 
-	    unsigned long*newbits = new unsigned long[2*newcnt];
+	    unsigned long*newbits = alloc_block_(newcnt);
 
 	    if (cnt > 1) {
 		  unsigned trans = cnt;
@@ -1014,7 +1016,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
 		  for (unsigned idx = 0 ;  idx < trans ;  idx += 1)
 			newbits[newcnt+idx] = bbits_ptr_[idx];
 
-		  delete[]abits_ptr_;
+		  free_block_(cnt, abits_ptr_);
 
 	    } else {
 		  newbits[0] = abits_val_;
@@ -1042,7 +1044,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
 	    if (cnt > 1) {
 		  unsigned long newvala = abits_ptr_[0];
 		  unsigned long newvalb = bbits_ptr_[0];
-		  delete[]abits_ptr_;
+		  free_block_(cnt, abits_ptr_);
 		  abits_val_ = newvala;
 		  bbits_val_ = newvalb;
 	    }
