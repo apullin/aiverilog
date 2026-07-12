@@ -1,5 +1,5 @@
 module top;
-    logic [9:0] pipe = 0;
+    logic [9:0] pipe = 10'd1;
     logic [4:0] i;
     logic clk = 0;
 
@@ -13,8 +13,6 @@ module top;
     end
 
     initial begin
-        pipe[0] = 1'b1;
-
         for (int j=0; j<10; j++) begin
             $display(pipe[9]);
             #2;

@@ -1540,8 +1540,13 @@ bool evaluate_index_prefix(Design*des, NetScope*scope,
  */
 NetExpr*collapse_array_exprs(Design*des, NetScope*scope,
 			     const LineInfo*loc, const NetNet*net,
-			     const list<index_component_t>&indices)
+			     const list<index_component_t>&indices,
+			     bool*variable_prefix)
 {
+	// Report whether any index except the final one remains dynamic.
+      if (variable_prefix)
+	    *variable_prefix = false;
+
 	// First elaborate all the expressions as far as possible.
       list<NetExpr*> exprs;
       list<long> exprs_const;
@@ -1550,6 +1555,23 @@ NetExpr*collapse_array_exprs(Design*des, NetScope*scope,
                              net->packed_dimensions(),
                              false, flags, exprs, exprs_const);
       ivl_assert(*loc, exprs.size() == net->packed_dimensions());
+
+      if (flags.invalid) {
+	    for (list<NetExpr*>::iterator cur = exprs.begin();
+		 cur != exprs.end(); ++cur)
+		  delete *cur;
+	    return 0;
+      }
+
+      if (variable_prefix) {
+	    list<NetExpr*>::const_iterator cur = exprs.begin();
+	    for (size_t idx = 1; idx < exprs.size(); ++idx, ++cur) {
+		  if (!dynamic_cast<const NetEConst*>(*cur)) {
+			*variable_prefix = true;
+			break;
+		  }
+	    }
+      }
 
 	// Special Case: there is only 1 packed dimension, so the
 	// single expression should already be naturally canonical.

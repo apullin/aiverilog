@@ -7721,6 +7721,70 @@ bool Design::check_proc_synth() const
       return result;
 }
 
+static bool is_variable_initializer_(const NetProcTop*proc)
+{
+      const perm_string key = perm_string::literal("_ivl_schedule_init");
+      for (unsigned idx = 0; idx < proc->attr_cnt(); idx += 1)
+	    if (proc->attr_key(idx) == key)
+		  return true;
+      return false;
+}
+
+bool Design::check_always_ff_drivers()
+{
+      bool has_always_ff = false;
+      for (NetProcTop*proc = procs_; proc; proc = proc->next_)
+	    if (proc->type() == IVL_PR_ALWAYS_FF) {
+		  has_always_ff = true;
+		  break;
+	    }
+      if (!has_always_ff)
+	    return false;
+
+      vector<pair<NetProcTop*, NexusSet*> > outputs;
+
+      for (NetProcTop*proc = procs_; proc; proc = proc->next_) {
+	    if (is_variable_initializer_(proc))
+		  continue;
+
+	    NexusSet*set = new NexusSet;
+	    proc->statement()->nex_output(*set);
+	    if (set->size())
+		  outputs.push_back(make_pair(proc, set));
+	    else
+		  delete set;
+      }
+
+      bool result = false;
+      for (size_t left = 0; left < outputs.size(); left += 1) {
+	    for (size_t right = left + 1; right < outputs.size(); right += 1) {
+		  NetProcTop*left_proc = outputs[left].first;
+		  NetProcTop*right_proc = outputs[right].first;
+		  if (left_proc->type() != IVL_PR_ALWAYS_FF &&
+		      right_proc->type() != IVL_PR_ALWAYS_FF)
+			continue;
+		  if (!outputs[left].second->intersect(*outputs[right].second))
+			continue;
+
+		  NetProcTop*ff_proc = left_proc->type() == IVL_PR_ALWAYS_FF
+					    ? left_proc : right_proc;
+		  NetProcTop*other_proc = ff_proc == left_proc
+					       ? right_proc : left_proc;
+		  cerr << ff_proc->get_fileline() << ": error: variable written by "
+		       << "an always_ff process is also written by another process."
+		       << endl;
+		  cerr << other_proc->get_fileline() << ":      : conflicting "
+		       << other_proc->type() << " process starts here." << endl;
+		  result = true;
+	    }
+      }
+
+      for (size_t idx = 0; idx < outputs.size(); idx += 1)
+	    delete outputs[idx].second;
+
+      return result;
+}
+
 /*
  * Check whether all design elements have an explicit timescale or all
  * design elements use the default timescale. If a mixture of explicit
@@ -8125,6 +8189,9 @@ Design* elaborate(list<perm_string>roots)
 	// Check to see if the always_comb/ff/latch processes only have
 	// synthesizable constructs
       has_failure |= des->check_proc_synth();
+
+	// Variables written by always_ff cannot be written by another process.
+      has_failure |= des->check_always_ff_drivers();
 
       if (debug_elaborate) {
                cerr << "<toplevel>" << ": debug: "

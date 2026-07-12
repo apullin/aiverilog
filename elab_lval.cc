@@ -539,10 +539,6 @@ bool PEIdent::elaborate_lval_net_bit_(Design*des,
 				      bool need_const_idx,
 				      bool is_force) const
 {
-      list<long>prefix_indices;
-      bool rc = calculate_packed_indices_(des, scope, lv->sig(), prefix_indices);
-      if (!rc) return false;
-
       const name_component_t&name_tail = path_.back();
       ivl_assert(*this, !name_tail.index.empty());
 
@@ -552,6 +548,58 @@ bool PEIdent::elaborate_lval_net_bit_(Design*des,
 
       NetNet*reg = lv->sig();
       ivl_assert(*this, reg);
+
+	// A fully indexed packed array can have variable indices in any
+	// dimension. Collapse those indices into one canonical bit offset.
+      list<index_component_t> packed_indices = name_tail.index;
+      for (size_t idx = 0; idx < reg->unpacked_dimensions(); ++idx)
+	    packed_indices.pop_front();
+
+      bool simple_indices = true;
+      for (list<index_component_t>::const_iterator cur = packed_indices.begin();
+	   cur != packed_indices.end(); ++cur) {
+	    if (cur->sel != index_component_t::SEL_BIT) {
+		  simple_indices = false;
+		  break;
+	    }
+      }
+
+      if (simple_indices && packed_indices.size() > 1 &&
+	  packed_indices.size() == reg->packed_dimensions()) {
+	    bool variable_prefix = false;
+	    NetExpr*base = collapse_array_exprs(des, scope, this, reg,
+					 packed_indices, &variable_prefix);
+	    if (!base)
+		  return false;
+
+	    if (variable_prefix) {
+		  if (need_const_idx) {
+			cerr << get_fileline() << ": error: '" << reg->name()
+			     << "' index must be a constant in this context."
+			     << endl;
+			des->errors += 1;
+			delete base;
+			return false;
+		  }
+
+		  if ((reg->type() == NetNet::UNRESOLVED_WIRE) && !is_force) {
+			ivl_assert(*this, reg->coerced_to_uwire());
+			report_mixed_assignment_conflict_("bit select");
+			des->errors += 1;
+			delete base;
+			return false;
+		  }
+
+		  lv->set_part(base, 1);
+		  return true;
+	    }
+
+	    delete base;
+      }
+
+      list<long>prefix_indices;
+      bool rc = calculate_packed_indices_(des, scope, reg, prefix_indices);
+      if (!rc) return false;
 
 	// Bit selects have a single select expression. Evaluate the
 	// constant value and treat it as a part select with a bit
