@@ -2048,8 +2048,15 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 
 	    } else if (ptype == NetNet::PINOUT) {
 
-		    // For now, do not support unpacked array outputs.
-		  ivl_assert(*this, prts[0]->unpacked_dimensions()==0);
+		    // For now, do not support unpacked array inout ports.
+		  if (prts[0]->unpacked_dimensions() > 0) {
+			cerr << pins[idx]->get_fileline() << ": error: Inout port "
+			     << (idx+1) << " (" << port_name << ") of module "
+			     << rmod->mod_name() << " has unpacked dimensions, "
+			        "which are not supported." << endl;
+			des->errors += 1;
+			continue;
+		  }
 
 		    /* Inout to/from module. This is a more
 		       complicated case, where the expression must be
