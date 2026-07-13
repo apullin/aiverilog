@@ -574,6 +574,12 @@ static struct event_time_s* sched_list = 0;
 static struct event_s* schedule_init_list = 0;
 
 /*
+ * This is a list of processes that must reach their first event wait after
+ * initialization, but before regular time-0 processes run.
+ */
+static struct event_s* schedule_prestart_list = 0;
+
+/*
  * This is the head of the list of final events.
  */
 static struct event_s* schedule_final_list = 0;
@@ -671,6 +677,20 @@ static void schedule_init_event(struct event_s*cur)
             schedule_init_list->next = cur;
       }
       schedule_init_list = cur;
+}
+
+/*
+ * This function puts an event on the end of the prestart event queue.
+ */
+static void schedule_prestart_event(struct event_s*cur)
+{
+      if (schedule_prestart_list == 0) {
+            cur->next = cur;
+      } else {
+            cur->next = schedule_prestart_list->next;
+            schedule_prestart_list->next = cur;
+      }
+      schedule_prestart_list = cur;
 }
 
 /*
@@ -862,6 +882,16 @@ void schedule_init_vthread(vthread_t thr)
       vthread_mark_scheduled(thr);
 
       schedule_init_event(cur);
+}
+
+void schedule_prestart_vthread(vthread_t thr)
+{
+      struct vthread_event_s*cur = new vthread_event_s;
+
+      cur->thr = thr;
+      vthread_mark_scheduled(thr);
+
+      schedule_prestart_event(cur);
 }
 
 void schedule_final_vthread(vthread_t thr)
@@ -1164,6 +1194,22 @@ void schedule_simulate(void)
 
       // Execute start of simulation callbacks
       vpiStartOfSim();
+
+      if (verbose_flag) {
+	    vpi_mcd_printf(1, " ...start event-controlled processes\n");
+      }
+
+	// Start edge-sensitive processes before regular time-0 processes.
+      while (schedule_prestart_list) {
+	    struct event_s*cur = schedule_prestart_list->next;
+	    if (cur->next == cur) {
+		  schedule_prestart_list = 0;
+	    } else {
+		  schedule_prestart_list->next = cur->next;
+	    }
+	    cur->run_run();
+	    delete cur;
+      }
 
       signals_capture();
 

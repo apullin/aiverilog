@@ -39,6 +39,9 @@ extern void schedule_inactive(vthread_t thr);
 
 extern void schedule_init_vthread(vthread_t thr);
 
+/* Run after initialization events and before regular scheduler threads. */
+extern void schedule_prestart_vthread(vthread_t thr);
+
 extern void schedule_final_vthread(vthread_t thr);
 
 /*

@@ -2511,6 +2511,7 @@ int draw_process(ivl_process_t net, void*x)
       ivl_statement_t stmt = ivl_process_stmt(net);
 
       int init_flag = 0;
+      int prestart_flag = 0;
       int push_flag = 0;
 
       (void)x; /* Parameter is not used. */
@@ -2522,6 +2523,10 @@ int draw_process(ivl_process_t net, void*x)
 	    if (strcmp(attr->key, "_ivl_schedule_init") == 0) {
 
 		  init_flag = 1;
+
+	    } else if (strcmp(attr->key, "_ivl_schedule_prestart") == 0) {
+
+		  prestart_flag = 1;
 
 	    }
 
@@ -2576,6 +2581,8 @@ int draw_process(ivl_process_t net, void*x)
 	  case IVL_PR_ALWAYS_LATCH:
 	    if (init_flag) {
 		  fprintf(vvp_out, "    .thread T_%u, $init;\n", thread_count);
+	    } else if (prestart_flag) {
+		  fprintf(vvp_out, "    .thread T_%u, $prestart;\n", thread_count);
 	    } else if (push_flag) {
 		  fprintf(vvp_out, "    .thread T_%u, $push;\n", thread_count);
 	    } else {
