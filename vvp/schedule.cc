@@ -24,6 +24,7 @@
 # include  "vvp_net_sig.h"
 # include  "slab.h"
 # include  "compile.h"
+# include  "event.h"
 # include  <new>
 # include  <typeinfo>
 # include  <csignal>
@@ -534,6 +535,48 @@ void generic_event_s::operator delete(void*ptr)
 }
 
 unsigned long count_gen_pool(void) { return generic_event_heap.pool; }
+
+struct deferred_functor_s : public vvp_gen_event_s {
+      deferred_functor_s(vvp_gen_event_t functor,
+			 vvp_event_defer_s*transaction)
+      : functor_(functor), transaction_(transaction)
+      {
+      }
+
+      void run_run(void) override
+      {
+	    vvp_event_defer_enter(transaction_);
+	    functor_->run_run();
+	    vvp_event_defer_leave(transaction_);
+      }
+
+      void single_step_display(void) override
+      {
+	    functor_->single_step_display();
+      }
+
+      vvp_gen_event_t functor_;
+      vvp_event_defer_s*transaction_;
+
+      static void* operator new(size_t);
+      static void operator delete(void*);
+};
+
+static const size_t DEFERRED_FUNCTOR_CHUNK_COUNT =
+      131072 / sizeof(struct deferred_functor_s);
+static slab_t<sizeof(deferred_functor_s),DEFERRED_FUNCTOR_CHUNK_COUNT>
+      deferred_functor_heap;
+
+inline void* deferred_functor_s::operator new(size_t size)
+{
+      assert(size == sizeof(deferred_functor_s));
+      return deferred_functor_heap.alloc_slab();
+}
+
+void deferred_functor_s::operator delete(void*ptr)
+{
+      deferred_functor_heap.free_slab(ptr);
+}
 
 /*
 ** These event_time_s will be required a lot, at high frequency.
@@ -1072,8 +1115,17 @@ void schedule_functor(vvp_gen_event_t obj)
 {
       struct generic_event_s*cur = new generic_event_s;
 
-      cur->obj = obj;
-      cur->delete_obj_when_done = false;
+      vvp_event_defer_s*transaction = 0;
+      if (vvp_event_defer_active())
+	    transaction = vvp_event_defer_capture();
+      if (transaction) {
+	    cur->obj = new deferred_functor_s(obj, transaction);
+	    cur->delete_obj_when_done = true;
+      } else {
+	    cur->obj = obj;
+	    cur->delete_obj_when_done = false;
+      }
+
       if (!sim_started) {
             schedule_init_event(cur);
       } else {

@@ -24,6 +24,41 @@
 # include  "vthread.h"
 # include  "config.h"
 
+/* Defer value-change detection until a procedural assignment settles. */
+struct vvp_event_defer_s;
+extern unsigned vvp_event_defer_depth;
+extern vvp_event_defer_s*vvp_current_event_defer;
+extern void vvp_event_defer_end_();
+
+inline bool vvp_event_defer_active()
+{
+      return vvp_event_defer_depth != 0 || vvp_current_event_defer;
+}
+
+inline void vvp_event_defer_begin()
+{
+      vvp_event_defer_depth += 1;
+}
+
+inline void vvp_event_defer_end()
+{
+      assert(vvp_event_defer_depth > 0);
+      vvp_event_defer_depth -= 1;
+      if (vvp_event_defer_depth == 0 && vvp_current_event_defer)
+	    vvp_event_defer_end_();
+}
+
+extern vvp_event_defer_s* vvp_event_defer_capture();
+extern void vvp_event_defer_enter(vvp_event_defer_s*transaction);
+extern void vvp_event_defer_leave(vvp_event_defer_s*transaction);
+extern bool vvp_event_defer_vec4(vvp_net_ptr_t port,
+				 const vvp_vector4_t&bit,
+				 vvp_context_t context);
+extern bool vvp_event_defer_vec4_pv(vvp_net_ptr_t port,
+				    const vvp_vector4_t&bit,
+				    unsigned base, unsigned vwid,
+				    vvp_context_t context);
+
 class evctl {
 
     public:
