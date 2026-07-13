@@ -156,6 +156,22 @@ These changes should be compared semantically against incoming upstream work;
 the absence of a matching upstream issue number is not evidence that they can
 be discarded.
 
+## Pull Request Boundaries
+
+Keep upstream-compatible work easy to inspect and easy to exchange:
+
+- If a fix maps one-to-one, or nearly one-to-one, to an upstream issue or
+  commit, land it as its own minimal fork PR. Preserve original authorship and
+  identify the upstream source when importing an existing patch.
+- Combine reports only when they demonstrably share one cause and one code
+  path, and splitting the implementation would be artificial.
+- Keep fork organization, harness work, broad cleanups, and structural
+  refactors out of those fix PRs. Such work belongs in a separate, explicitly
+  scoped major PR with its own validation and review story.
+
+This separation keeps small fixes candidates for upstream exchange even when
+the larger Aiverilog organization or architecture intentionally diverges.
+
 ## Reconciliation Procedure
 
 For new upstream-derived work:
