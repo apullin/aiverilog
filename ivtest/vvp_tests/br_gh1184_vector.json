@@ -1,5 +1,5 @@
 {
     "type" : "normal",
-    "source" : "br_gh1184.v",
+    "source" : "br_gh1184_vector.v",
     "iverilog-args" : [ "-gspecify" ]
 }

@@ -161,9 +161,10 @@ class vvp_fun_delay  : public vvp_net_fun_t, private vvp_gen_event_s {
 * paths are active.
 */
 class vvp_fun_modpath;
+class vvp_fun_modpath_event;
 class vvp_fun_modpath_src;
 
-class vvp_fun_modpath  : public vvp_net_fun_t, private vvp_gen_event_s {
+class vvp_fun_modpath  : public vvp_net_fun_t {
 
     public:
       vvp_fun_modpath(vvp_net_t*net, unsigned width);
@@ -175,12 +176,20 @@ class vvp_fun_modpath  : public vvp_net_fun_t, private vvp_gen_event_s {
                      vvp_context_t) override;
 
     private:
-      virtual void run_run() override;
+      friend class vvp_fun_modpath_event;
 
-    private:
+      void cancel_bit_(unsigned idx);
+      void schedule_bit_(unsigned idx, vvp_bit4_t value,
+                         vvp_time64_t delay);
+      void run_event_(vvp_fun_modpath_event*event);
+
       vvp_net_t*net_;
 
-      vvp_vector4_t cur_vec4_;
+      vvp_vector4_t input_vec4_;
+      vvp_vector4_t output_vec4_;
+
+      struct state_t;
+      state_t*state_;
 
       vvp_fun_modpath_src*src_list_;
       vvp_fun_modpath_src*ifnone_list_;
