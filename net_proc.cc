@@ -105,11 +105,13 @@ NetCase::TYPE NetCase::type() const
       return type_;
 }
 
-void NetCase::set_case(unsigned idx, NetExpr*e, NetProc*p)
+void NetCase::set_case(unsigned idx, NetExpr*e, NetProc*p,
+		       unsigned source_item)
 {
       ivl_assert(*this, idx < items_.size());
       items_[idx].guard = e;
       items_[idx].statement = p;
+      items_[idx].source_item = source_item;
 }
 
 void NetCase::prune()

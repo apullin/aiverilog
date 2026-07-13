@@ -631,6 +631,32 @@ static int show_stmt_block_named(ivl_statement_t net, ivl_scope_t scope)
 }
 
 
+static void draw_case_compare_jump(ivl_statement_t net, unsigned label)
+{
+      switch (ivl_statement_type(net)) {
+	  case IVL_ST_CASE:
+	    fprintf(vvp_out, "    %%cmp/e;\n");
+	    fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 6;\n",
+		    thread_count, label);
+	    break;
+
+	  case IVL_ST_CASEX:
+	    fprintf(vvp_out, "    %%cmp/x;\n");
+	    fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 4;\n",
+		    thread_count, label);
+	    break;
+
+	  case IVL_ST_CASEZ:
+	    fprintf(vvp_out, "    %%cmp/z;\n");
+	    fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 4;\n",
+		    thread_count, label);
+	    break;
+
+	  default:
+	    assert(0);
+      }
+}
+
 static int show_stmt_case(ivl_statement_t net, ivl_scope_t sscope)
 {
       int rc = 0;
@@ -639,18 +665,16 @@ static int show_stmt_case(ivl_statement_t net, ivl_scope_t sscope)
       unsigned count = ivl_stmt_case_count(net);
 
       unsigned local_base = local_count;
+      unsigned check_base = local_base + count + 1;
+      unsigned warn_base = check_base + count;
+      bool check_unique = (qual == IVL_CASE_QUALITY_UNIQUE) ||
+	                  (qual == IVL_CASE_QUALITY_UNIQUE0);
 
       unsigned idx, default_case;
 
-      if (qual != IVL_CASE_QUALITY_BASIC && qual != IVL_CASE_QUALITY_PRIORITY) {
-	    fprintf(stderr, "%s:%u: vvp.tgt sorry: "
-		    "Case unique/unique0 qualities are ignored.\n",
-		    ivl_stmt_file(net), ivl_stmt_lineno(net));
-      }
-
       show_stmt_file_line(net, "Case statement.");
 
-      local_count += count + 1;
+      local_count += check_unique ? 3*count + 1 : count + 1;
 
 	/* Evaluate the case condition to the top of the vec4
 	   stack. This expression will be compared multiple times to
@@ -675,30 +699,8 @@ static int show_stmt_case(ivl_statement_t net, ivl_scope_t sscope)
 		 value. Do this in front of each compare. */
 	    fprintf(vvp_out, "    %%dup/vec4;\n");
 	    draw_eval_vec4(cex);
-
-	    switch (ivl_statement_type(net)) {
-
-		case IVL_ST_CASE:
-		  fprintf(vvp_out, "    %%cmp/e;\n");
-		  fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 6;\n",
-			  thread_count, local_base+idx);
-		  break;
-
-		case IVL_ST_CASEX:
-		  fprintf(vvp_out, "    %%cmp/x;\n");
-		  fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 4;\n",
-			  thread_count, local_base+idx);
-		  break;
-
-		case IVL_ST_CASEZ:
-		  fprintf(vvp_out, "    %%cmp/z;\n");
-		  fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 4;\n",
-			  thread_count, local_base+idx);
-		  break;
-
-		default:
-		  assert(0);
-	    }
+	    unsigned label = check_unique ? check_base+idx : local_base+idx;
+	    draw_case_compare_jump(net, label);
       }
 
 	/* Emit code for the default case. */
@@ -733,6 +735,31 @@ static int show_stmt_case(ivl_statement_t net, ivl_scope_t sscope)
 
 	    if (idx == default_case)
 		  continue;
+
+	    if (check_unique) {
+		  unsigned source_item = ivl_stmt_case_item(net, idx);
+		  fprintf(vvp_out, "T_%u.%u ;\n", thread_count,
+		          check_base+idx);
+		  for (unsigned jdx = idx + 1 ; jdx < count ; jdx += 1) {
+			ivl_expr_t cex = ivl_stmt_case_expr(net, jdx);
+			if (cex == 0 ||
+			    ivl_stmt_case_item(net, jdx) == source_item)
+			      continue;
+			fprintf(vvp_out, "    %%dup/vec4;\n");
+			draw_eval_vec4(cex);
+			draw_case_compare_jump(net, warn_base+idx);
+		  }
+		  fprintf(vvp_out, "    %%jmp T_%u.%u;\n", thread_count,
+		          local_base+idx);
+
+		  fprintf(vvp_out, "T_%u.%u ;\n", thread_count,
+		          warn_base+idx);
+		  fprintf(vvp_out, "    %%vpi_call/w %u %u \"$warning\", "
+		          "\"value matches multiple items in unique/unique0 "
+		          "case statement\" {0 0 0};\n",
+		          ivl_file_table_index(ivl_stmt_file(net)),
+		          ivl_stmt_lineno(net));
+	    }
 
 	    fprintf(vvp_out, "T_%u.%u ;\n", thread_count, local_base+idx);
 	    rc += show_statement(cst, sscope);

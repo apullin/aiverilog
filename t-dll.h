@@ -813,6 +813,7 @@ struct ivl_statement_s {
 		  unsigned ncase;
 		  ivl_expr_t*case_ex;
 		  struct ivl_statement_s*case_st;
+		  unsigned*case_item;
 	    } case_;
 
 	    struct { /* IVL_ST_CONDIT */
