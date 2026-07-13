@@ -27,6 +27,8 @@
 #include <iostream>
 #include <cstdlib>
 #include <list>
+#include <map>
+#include <vector>
 #include <cassert>
 #include <cmath>
 #include "ivl_alloc.h"
@@ -507,15 +509,66 @@ void vvp_fun_delay::run_run_real_(const struct vvp_fun_delay::event_*cur)
       net_->send_real(cur_real_, 0);
 }
 
+class vvp_fun_modpath_event : public vvp_gen_event_s {
+      friend class vvp_fun_modpath;
+
+    public:
+      vvp_fun_modpath_event(vvp_fun_modpath*owner, vvp_time64_t time,
+                            unsigned width)
+      : owner_(owner), time_(time), values_(width, BIT4_X),
+        active_(width, false)
+      { }
+
+      void run_run() override
+      {
+            owner_->run_event_(this);
+      }
+
+      void single_step_display() override
+      {
+            cerr << "modpath_event: Propagate selected vector bits" << endl;
+      }
+
+      void set_bit(unsigned idx, vvp_bit4_t value)
+      {
+            active_[idx] = true;
+            values_.set_bit(idx, value);
+      }
+
+      void clear_bit(unsigned idx)
+      {
+            active_[idx] = false;
+      }
+
+    private:
+      vvp_fun_modpath*owner_;
+      vvp_time64_t time_;
+      vvp_vector4_t values_;
+      vector<bool> active_;
+};
+
+struct vvp_fun_modpath::state_t {
+      explicit state_t(unsigned width) : pending(width, 0) { }
+
+      vector<vvp_fun_modpath_event*> pending;
+      map<vvp_time64_t, vvp_fun_modpath_event*> events;
+};
+
 vvp_fun_modpath::vvp_fun_modpath(vvp_net_t*net, unsigned width)
-: net_(net), src_list_(0), ifnone_list_(0)
+: net_(net), input_vec4_(width, BIT4_X), output_vec4_(width, BIT4_X),
+  state_(new state_t(width)), src_list_(0), ifnone_list_(0)
 {
-      cur_vec4_ = vvp_vector4_t(width, BIT4_X);
-      schedule_init_propagate(net_, cur_vec4_);
+      schedule_init_propagate(net_, output_vec4_);
 }
 
 vvp_fun_modpath::~vvp_fun_modpath()
 {
+	// Release event payloads left behind when simulation stops early.
+      for (map<vvp_time64_t, vvp_fun_modpath_event*>::iterator cur
+             = state_->events.begin(); cur != state_->events.end(); ++cur)
+            delete cur->second;
+      delete state_;
+
 	// Delete the source probes.
       while (src_list_) {
 	    vvp_fun_modpath_src*tmp = src_list_;
@@ -527,6 +580,62 @@ vvp_fun_modpath::~vvp_fun_modpath()
 	    ifnone_list_ = tmp->next_;
 	    delete tmp;
       }
+}
+
+void vvp_fun_modpath::cancel_bit_(unsigned idx)
+{
+      vvp_fun_modpath_event*event = state_->pending[idx];
+      if (event == 0)
+            return;
+
+      event->clear_bit(idx);
+      state_->pending[idx] = 0;
+}
+
+void vvp_fun_modpath::schedule_bit_(unsigned idx, vvp_bit4_t value,
+                                    vvp_time64_t delay)
+{
+      vvp_time64_t event_time = schedule_simtime() + delay;
+      map<vvp_time64_t, vvp_fun_modpath_event*>::iterator pos
+            = state_->events.find(event_time);
+
+      vvp_fun_modpath_event*event;
+      if (pos == state_->events.end()) {
+            event = new vvp_fun_modpath_event(this, event_time,
+                                              output_vec4_.size());
+            state_->events[event_time] = event;
+            schedule_generic(event, delay, false, true, true);
+      } else {
+            event = pos->second;
+      }
+
+      event->set_bit(idx, value);
+      state_->pending[idx] = event;
+}
+
+void vvp_fun_modpath::run_event_(vvp_fun_modpath_event*event)
+{
+      map<vvp_time64_t, vvp_fun_modpath_event*>::iterator pos
+            = state_->events.find(event->time_);
+      assert(pos != state_->events.end());
+      assert(pos->second == event);
+      state_->events.erase(pos);
+
+      bool changed = false;
+      for (unsigned idx = 0; idx < event->active_.size(); idx += 1) {
+            if (!event->active_[idx] || state_->pending[idx] != event)
+                  continue;
+
+            state_->pending[idx] = 0;
+            vvp_bit4_t value = event->values_.value(idx);
+            if (output_vec4_.value(idx) != value) {
+                  output_vec4_.set_bit(idx, value);
+                  changed = true;
+            }
+      }
+
+      if (changed)
+            net_->send_vec4(output_vec4_, 0);
 }
 
 void vvp_fun_modpath::add_modpath_src(vvp_fun_modpath_src*that, bool ifnone)
@@ -562,7 +671,8 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
       if (port.port() > 0)
 	    return;
 
-      if (cur_vec4_.eeq(bit))
+      assert(input_vec4_.size() == bit.size());
+      if (input_vec4_.eeq(bit))
 	    return;
 
 	/* Select a time delay source that applies. Notice that there
@@ -611,8 +721,14 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 	   conditional delays is incomplete, leaving some cases
 	   uncovered. In that case, just pass the data without delay */
       if (candidate_list.empty()) {
-	    cur_vec4_ = bit;
-	    schedule_generic(this, 0, false);
+	    for (unsigned idx = 0; idx < bit.size(); idx += 1) {
+		  if (input_vec4_.value(idx) == bit.value(idx))
+			continue;
+		  cancel_bit_(idx);
+		  if (output_vec4_.value(idx) != bit.value(idx))
+			schedule_bit_(idx, bit.value(idx), 0);
+	    }
+	    input_vec4_ = bit;
 	    return;
       }
 
@@ -649,36 +765,22 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 	    }
       }
 
-	/* Given the scheduled output time, create an output event. */
-      vvp_time64_t use_delay = delay_from_edge(cur_vec4_.value(0),
-					       bit.value(0),
-					       out_at);
-
-	/* FIXME: This bases the edge delay on only the least
-	   bit. This is WRONG! I need to find all the possible delays,
-	   and schedule an event for each partial change. Hard! */
-      for (unsigned idx = 1 ;  idx < bit.size() ;  idx += 1) {
-	    vvp_time64_t tmp = delay_from_edge(cur_vec4_.value(idx),
-					       bit.value(idx),
-					       out_at);
-	      /* If the current and new bit values match then no delay
-	       * is needed for this bit. */
-	    if (cur_vec4_.value(idx) == bit.value(idx)) continue;
-	    if (tmp != use_delay) {
-		  fprintf(stderr, "sorry: multi-bit module path delays are "
-		                  "currently not fully supported.\n");
-		  fprintf(stderr, "     : using the LSB delay for all bits.\n");
+	/* Schedule each changed bit using its own transition delay. Bits that
+	   arrive together share one event and propagate atomically. */
+      for (unsigned idx = 0; idx < bit.size(); idx += 1) {
+	    vvp_bit4_t old_value = input_vec4_.value(idx);
+	    vvp_bit4_t new_value = bit.value(idx);
+	    if (old_value == new_value)
 		  continue;
-            }
+
+	    vvp_time64_t use_delay = delay_from_edge(old_value, new_value,
+						       out_at);
+	    cancel_bit_(idx);
+	    if (output_vec4_.value(idx) != new_value)
+		  schedule_bit_(idx, new_value, use_delay);
       }
 
-      cur_vec4_ = bit;
-      schedule_generic(this, use_delay, false);
-}
-
-void vvp_fun_modpath::run_run()
-{
-      net_->send_vec4(cur_vec4_, 0);
+      input_vec4_ = bit;
 }
 
 vvp_fun_modpath_src::vvp_fun_modpath_src(vvp_time64_t const del[12])
