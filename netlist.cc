@@ -1444,6 +1444,9 @@ NetArrayDq::~NetArrayDq()
 
 unsigned NetArrayDq::width() const
 {
+      if (const netdarray_t*darray = mem_->darray_type())
+	    return darray->element_width();
+
       return mem_->vector_width();
 }
 

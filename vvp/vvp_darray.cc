@@ -17,11 +17,140 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+# include  "compile.h"
 # include  "vvp_darray.h"
+# include  <cstdio>
+# include  <cstdlib>
+# include  <cstring>
 # include  <iostream>
 # include  <typeinfo>
 
 using namespace std;
+
+namespace {
+
+enum darray_port_type_t {
+      DARRAY_PORT_VEC4,
+      DARRAY_PORT_REAL,
+      DARRAY_PORT_STRING
+};
+
+class vvp_fun_darray_port : public vvp_net_fun_t {
+
+    public:
+      vvp_fun_darray_port(darray_port_type_t type, unsigned width,
+                          bool fixed_addr, long addr)
+      : type_(type), width_(width), addr_(static_cast<unsigned long>(addr)),
+        addr_valid_(fixed_addr)
+      {
+      }
+
+      void recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&value,
+                     vvp_context_t context) override
+      {
+	    assert(port.port() == 1);
+
+	    unsigned long addr = 0;
+	    addr_valid_ = vector4_to_value(value, addr);
+	    addr_ = addr;
+	    send_value_(port.ptr(), context);
+      }
+
+      void recv_object(vvp_net_ptr_t port, vvp_object_t value,
+                       vvp_context_t context) override
+      {
+	    assert(port.port() == 0);
+	    array_ = value;
+	    send_value_(port.ptr(), context);
+      }
+
+    private:
+      void send_value_(vvp_net_t*net, vvp_context_t context)
+      {
+	    vvp_darray*array = array_.peek<vvp_darray>();
+	    bool valid = array && addr_valid_ &&
+	                 addr_ < array->get_size();
+
+	    switch (type_) {
+		case DARRAY_PORT_VEC4: {
+		      vvp_vector4_t value(width_, BIT4_X);
+		      if (valid)
+			    array->get_word(addr_, value);
+		      net->send_vec4(value, context);
+		      break;
+		}
+		case DARRAY_PORT_REAL: {
+		      double value = 0.0;
+		      if (valid)
+			    array->get_word(addr_, value);
+		      net->send_real(value, context);
+		      break;
+		}
+		case DARRAY_PORT_STRING: {
+		      string value;
+		      if (valid)
+			    array->get_word(addr_, value);
+		      net->send_string(value, context);
+		      break;
+		}
+	    }
+      }
+
+    private:
+      darray_port_type_t type_;
+      unsigned width_;
+      vvp_object_t array_;
+      unsigned long addr_;
+      bool addr_valid_;
+};
+
+vvp_fun_darray_port*make_darray_port(const char*type, bool fixed_addr,
+                                     long addr)
+{
+      darray_port_type_t port_type = DARRAY_PORT_VEC4;
+      unsigned width = 0;
+      int consumed = 0;
+
+      if (strcmp(type, "r") == 0) {
+	    port_type = DARRAY_PORT_REAL;
+      } else if (strcmp(type, "S") == 0) {
+	    port_type = DARRAY_PORT_STRING;
+      } else if (sscanf(type, "v%u%n", &width, &consumed) != 1 ||
+		 consumed != static_cast<int>(strlen(type)) || width == 0) {
+	    cerr << "Invalid dynamic array port type: " << type << "." << endl;
+	    compile_errors += 1;
+	    width = 1;
+      }
+
+      return new vvp_fun_darray_port(port_type, width, fixed_addr, addr);
+}
+
+} // namespace
+
+void compile_darray_port(char*label, char*name, char*addr, char*type)
+{
+      vvp_net_t*net = new vvp_net_t;
+      net->fun = make_darray_port(type, false, 0);
+
+      define_functor_symbol(label, net);
+      free(label);
+      free(type);
+
+      input_connect(net, 0, name);
+      input_connect(net, 1, addr);
+}
+
+void compile_darray_port(char*label, char*name, long addr, char*type)
+{
+      vvp_net_t*net = new vvp_net_t;
+      net->fun = make_darray_port(type, addr >= 0, addr);
+
+      define_functor_symbol(label, net);
+      free(label);
+      free(type);
+
+      input_connect(net, 0, name);
+}
 
 vvp_darray::~vvp_darray()
 {

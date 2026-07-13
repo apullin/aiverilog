@@ -154,6 +154,7 @@ inline uint64_t strtouint64(const char*str, char**endptr, int base)
 ".array/s"      { return K_ARRAY_S; }
 ".array/str"    { return K_ARRAY_STR; }
 ".array/port"   { return K_ARRAY_PORT; }
+".darray/port"  { return K_DARRAY_PORT; }
 ".cast/2"       { return K_CAST_2; }
 ".cast/int"     { return K_CAST_INT; }
 ".cast/real"    { return K_CAST_REAL; }
