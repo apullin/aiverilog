@@ -590,12 +590,16 @@ static void draw_net_in_scope(ivl_signal_t sig)
 	    break;
       }
 
+      ivl_variable_type_t data_type = ivl_signal_data_type(sig);
       const char*datatype_flag = ivl_signal_signed(sig)? "/s" : "";
       const char *local_flag = local_flag_str(sig);
+      const char *variable_flag = ivl_signal_coerced_to_uwire(sig) &&
+	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL)
+	    ? "$var " : "";
 
       unsigned iword;
 
-      switch (ivl_signal_data_type(sig)) {
+      switch (data_type) {
 	  case IVL_VT_BOOL:
 	    if (ivl_signal_signed(sig))
 		  datatype_flag = "/2s";
@@ -650,9 +654,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  if (dimensions > 0) {
 			/* If this is a word of an array, then use an
 			   array reference in place of the net name. */
-			fprintf(vvp_out, "v%p_%u .net%s%s v%p %u, %d %d, %s%s%s;"
+			fprintf(vvp_out, "v%p_%u .net%s%s %sv%p %u, %d %d, %s%s%s;"
 				" %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, sig,
+				sig, iword, vec8, datatype_flag, variable_flag, sig,
 				iword, msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"" );
@@ -673,9 +677,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			/* If this is an isolated word, it uses its
 			   own name. */
 			assert(word_count == 1);
-			fprintf(vvp_out, "v%p_%u .net%s%s %s\"%s\", %d %d, %s%s%s; "
+			fprintf(vvp_out, "v%p_%u .net%s%s %s%s\"%s\", %d %d, %s%s%s; "
 				" %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, local_flag,
+				sig, iword, vec8, datatype_flag, variable_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
 				msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
@@ -715,9 +719,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 				      swapped ? last : first );
 			}
 
-			fprintf(vvp_out, "v%p_%u .net%s v%p %u, %d %d, "
+			fprintf(vvp_out, "v%p_%u .net%s %sv%p %u, %d %d, "
 			        "v%p_%u; Alias to %s[%u]\n", sig, iword,
-			        datatype_flag, sig, iword, msb, lsb,
+			        datatype_flag, variable_flag, sig, iword, msb, lsb,
 			        nex_data->net, nex_data->net_word,
 			        ivl_signal_basename(nex_data->net),
 				nex_data->net_word);
@@ -741,9 +745,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  const char*mask_arg = variable_mask && !strength_aware_flag
 			? variable_mask : "";
 
-		  fprintf(vvp_out, "v%p_%u .net%s%s %s\"%s\", %d %d, %s%s%s; "
+		  fprintf(vvp_out, "v%p_%u .net%s%s %s%s\"%s\", %d %d, %s%s%s; "
 				" alias, %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, local_flag,
+				sig, iword, vec8, datatype_flag, variable_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
 				msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,

@@ -207,6 +207,7 @@ inline uint64_t strtouint64(const char*str, char**endptr, int base)
 ".net8/s"       { return K_NET8_S; }
 ".net/real"     { return K_NET_R; }
 ".net/s"        { return K_NET_S; }
+"$var"          { return K_NET_VAR; }
 ".param/l"      { return K_PARAM_L; }
 ".param/str"    { return K_PARAM_STR; }
 ".param/real"   { return K_PARAM_REAL; }

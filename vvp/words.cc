@@ -290,13 +290,14 @@ class __compile_net_resolv : public base_net_resolv {
 				    char*my_label, char*name,
 				    int msb, int lsb, unsigned array_addr,
 				    int vpi_type_code, bool signed_flag,
-				    bool local_flag,
+				    bool local_flag, bool variable_flag,
 				    const vvp_vector4_t&variable_mask)
       : base_net_resolv(ref_label, array, scope, my_label, name, array_addr, local_flag)
       { msb_ = msb;
 	lsb_ = lsb;
 	vpi_type_code_ = vpi_type_code;
 	signed_flag_ = signed_flag;
+	variable_flag_ = variable_flag;
 	variable_mask_ = variable_mask;
       }
 
@@ -307,7 +308,7 @@ class __compile_net_resolv : public base_net_resolv {
     private:
       int msb_, lsb_;
       int vpi_type_code_;
-      bool signed_flag_;
+      bool signed_flag_, variable_flag_;
       vvp_vector4_t variable_mask_;
 };
 
@@ -318,6 +319,9 @@ class __compile_net_resolv : public base_net_resolv {
  *    .net/s <name>, <msb>, <lsb>, <input> ;
  *    .net8   <name>, <msb>, <lsb>, <input> ;
  *    .net8/s <name>, <msb>, <lsb>, <input> ;
+ *
+ * The optional $var flag records that the source declaration was a variable
+ * before elaboration coerced it into a net for its structural driver.
  *
  * A second input describes a variable coerced into a net. Bits set to 1
  * identify structural drivers; X and 0 encode the other bits' initial state.
@@ -331,6 +335,7 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 			   char*my_label, char*name,
 			   int msb, int lsb, unsigned array_addr,
 			   int vpi_type_code, bool signed_flag, bool local_flag,
+			   bool variable_flag,
 			   const vvp_vector4_t&variable_mask)
 {
       unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
@@ -366,8 +371,10 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 
       vpiHandle obj = 0;
       if (! local_flag) {
-	      /* Make the vpiHandle for the reg. */
-	    obj = vpip_make_net4(scope, name, msb, lsb, signed_flag, node);
+	      /* Make the VPI handle using the source declaration type. */
+	    int reported_type = variable_flag? vpi_type_code : vpiNet;
+	    obj = vpip_make_net4(scope, name, msb, lsb, signed_flag, node,
+				 reported_type);
 	      /* This attaches the label to the vpiHandle */
 	    compile_vpi_symbol(my_label, obj);
       }
@@ -394,6 +401,7 @@ static void __compile_net(char*label,
 			  char*name, char*array_label, unsigned long array_addr,
 			  int msb, int lsb,
 			  int vpi_type_code, bool signed_flag, bool local_flag,
+			  bool variable_flag,
 			  unsigned argc, struct symb_s*argv)
 {
       vvp_array_t array = array_label? array_find(array_label) : NULL;
@@ -429,6 +437,7 @@ static void __compile_net(char*label,
 					     array, scope, label, name,
 					     msb, lsb, array_addr,
 					     vpi_type_code, signed_flag, local_flag,
+					     variable_flag,
 					     variable_mask);
 	    resolv_submit(res);
 	    free(argv);
@@ -438,7 +447,8 @@ static void __compile_net(char*label,
 
       __vpiScope*scope = vpip_peek_current_scope();
       do_compile_net(node, array, scope, label, name, msb, lsb, array_addr,
-		     vpi_type_code, signed_flag, local_flag, variable_mask);
+		     vpi_type_code, signed_flag, local_flag, variable_flag,
+		     variable_mask);
 
       free(argv[0].text);
       free(argv);
@@ -455,25 +465,28 @@ bool __compile_net_resolv::resolve(bool msg_flag)
 
       do_compile_net(node, array_, scope_, my_label_, name_, msb_, lsb_,
 		     array_addr_, vpi_type_code_, signed_flag_, local_flag_,
+		     variable_flag_,
 		     variable_mask_);
       return true;
 }
 
 void compile_net(char*label, char*name, int msb, int lsb,
 		 int vpi_type_code, bool signed_flag, bool local_flag,
+		 bool variable_flag,
 		 unsigned argc, struct symb_s*argv)
 {
       __compile_net(label, name, 0, 0, msb, lsb,
-		    vpi_type_code, signed_flag, local_flag,
+		    vpi_type_code, signed_flag, local_flag, variable_flag,
 		    argc, argv);
 }
 
 void compile_netw(char*label, char*array_label, unsigned long array_addr,
 		  int msb, int lsb, int vpi_type_code, bool signed_flag,
+		  bool variable_flag,
 		  unsigned argc, struct symb_s*argv)
 {
       __compile_net(label, 0, array_label, array_addr,
-		    msb, lsb, vpi_type_code, signed_flag, false,
+		    msb, lsb, vpi_type_code, signed_flag, false, variable_flag,
 		    argc, argv);
 }
 
