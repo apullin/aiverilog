@@ -44,7 +44,7 @@ end
 wire [15:0] read_bus;
 ram ram(clk, we, addr, data, read_bus);
 
-always @(negedge clk) if (~we) begin
+always @(negedge clk) if (($time > 0) && ~we) begin
 	$display("%d %d", addr, read_bus);
 	if (read_bus !== addr[3:0]*addr[3:0]) fail=1;
 end

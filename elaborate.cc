@@ -6711,11 +6711,8 @@ bool PProcess::elaborate(Design*des, NetScope*scope) const
       top->set_line(*this);
       des->add_process(top);
 
-	/* Detect the special case that this is a combinational
-	always block. We want to attach an _ivl_schedule_push
-	attribute to this process so that it starts up and
-	gets into its wait statement before non-combinational
-	code is executed. */
+	/* Start event-controlled always processes before initial processes so
+	   they reach their wait statements before time-zero signal changes. */
       do {
 	    if ((top->type() != IVL_PR_ALWAYS) &&
 	        (top->type() != IVL_PR_ALWAYS_COMB) &&
@@ -6736,17 +6733,17 @@ bool PProcess::elaborate(Design*des, NetScope*scope) const
 		  break;
 
 	    bool anyedge_test = true;
-	    for (unsigned idx = 0 ;  anyedge_test && (idx<ev->nprobe())
-		       ; idx += 1) {
+	    for (unsigned idx = 0 ; anyedge_test && (idx < ev->nprobe());
+		 idx += 1) {
 		  const NetEvProbe*pr = ev->probe(idx);
 		  if (pr->edge() != NetEvProbe::ANYEDGE)
 			anyedge_test = false;
 	    }
 
-	    if (! anyedge_test)
-		  break;
-
-	    top->attribute(perm_string::literal("_ivl_schedule_push"),
+	    // The prestart queue preserves source order for edge-sensitive waits.
+	    top->attribute(perm_string::literal(anyedge_test
+						? "_ivl_schedule_push"
+						: "_ivl_schedule_prestart"),
 			   verinum(1));
       } while (0);
 

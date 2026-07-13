@@ -1,5 +1,5 @@
-CLK 0 RST 1 Reg1 x Reg2 x
-CLK 1 RST 1 Reg1 0 Reg2 x
+CLK 0 RST 1 Reg1 0 Reg2 0
+CLK 1 RST 1 Reg1 0 Reg2 0
 CLK 0 RST 1 Reg1 0 Reg2 0
 CLK 1 RST 1 Reg1 0 Reg2 0
 CLK 0 RST 0 Reg1 0 Reg2 0
