@@ -432,6 +432,12 @@ class PEIdent : public PExpr {
       bool calculate_packed_indices_(Design*des, NetScope*scope, const NetNet*net,
 				     std::list<long>&prefix_indices) const;
 
+	// Collapse simple packed indices when a prefix remains dynamic.
+      NetExpr* collapse_packed_prefix_indices_(Design*, NetScope*,
+					       const NetNet*, bool need_const,
+					       unsigned long&width,
+					       bool&handled) const;
+
     private:
 
       void report_mixed_assignment_conflict_(const char*category) const;

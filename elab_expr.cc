@@ -4437,6 +4437,62 @@ bool PEIdent::calculate_packed_indices_(Design*des, NetScope*scope, const NetNet
       return evaluate_index_prefix(des, scope, prefix_indices, index);
 }
 
+NetExpr* PEIdent::collapse_packed_prefix_indices_(Design*des, NetScope*scope,
+						  const NetNet*net,
+						  bool need_const,
+						  unsigned long&width,
+						  bool&handled) const
+{
+      handled = false;
+      width = 0;
+
+      if (net->data_type() == IVL_VT_STRING ||
+	  net->data_type() == IVL_VT_DARRAY ||
+	  net->data_type() == IVL_VT_QUEUE)
+	    return 0;
+
+      list<index_component_t> packed_indices = path_.back().index;
+      if (packed_indices.size() < net->unpacked_dimensions())
+	    return 0;
+      for (size_t idx = 0; idx < net->unpacked_dimensions(); ++idx)
+	    packed_indices.pop_front();
+
+      if (packed_indices.size() <= 1 ||
+	  packed_indices.size() > net->packed_dimensions())
+	    return 0;
+
+      for (list<index_component_t>::const_iterator cur = packed_indices.begin();
+	   cur != packed_indices.end(); ++cur) {
+	    if (cur->sel != index_component_t::SEL_BIT)
+		  return 0;
+      }
+
+      bool variable_prefix = false;
+      NetExpr*base = collapse_array_exprs(des, scope, this, net,
+					 packed_indices, &variable_prefix);
+      if (!base) {
+	    handled = true;
+	    return 0;
+      }
+
+      if (!variable_prefix) {
+	    delete base;
+	    return 0;
+      }
+
+      handled = true;
+      if (need_const) {
+	    cerr << get_fileline() << ": error: '" << net->name()
+		 << "' index must be a constant in this context." << endl;
+	    des->errors += 1;
+	    delete base;
+	    return 0;
+      }
+
+      width = net->slice_width(packed_indices.size());
+      return base;
+}
+
 
 bool PEIdent::calculate_bits_(Design*des, NetScope*scope,
 			      long&msb, bool&defined) const
@@ -6412,13 +6468,26 @@ NetExpr* PEIdent::elaborate_expr_net_bit_(Design*des, NetScope*scope,
 				          NetESignal*net, NetScope*,
                                           bool need_const) const
 {
+      const name_component_t&name_tail = path_.back();
+      ivl_assert(*this, !name_tail.index.empty());
+
+      unsigned long collapsed_width;
+      bool collapsed;
+      NetExpr*collapsed_base = collapse_packed_prefix_indices_(
+	  des, scope, net->sig(), need_const, collapsed_width, collapsed);
+      if (collapsed) {
+	    if (!collapsed_base)
+		  return 0;
+	    NetESelect*res = new NetESelect(net, collapsed_base,
+					     collapsed_width);
+	    res->set_line(*net);
+	    return res;
+      }
+
       list<long>prefix_indices;
       bool rc = calculate_packed_indices_(des, scope, net->sig(), prefix_indices);
       if (!rc)
 	    return 0;
-
-      const name_component_t&name_tail = path_.back();
-      ivl_assert(*this, !name_tail.index.empty());
 
       const index_component_t&index_tail = name_tail.index.back();
       ivl_assert(*this, index_tail.msb != 0);
@@ -6702,10 +6771,6 @@ NetExpr* PEIdent::elaborate_expr_net(Design*des, NetScope*scope,
 	    des->errors += 1;
 	    return 0;
       }
-
-      list<long> prefix_indices;
-      bool rc = evaluate_index_prefix(des, scope, prefix_indices, path_.back().index);
-      if (!rc) return 0;
 
 	// If this is a part select of a signal, then make a new
 	// temporary signal that is connected to just the

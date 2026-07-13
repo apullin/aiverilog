@@ -549,52 +549,23 @@ bool PEIdent::elaborate_lval_net_bit_(Design*des,
       NetNet*reg = lv->sig();
       ivl_assert(*this, reg);
 
-	// A fully indexed packed array can have variable indices in any
-	// dimension. Collapse those indices into one canonical bit offset.
-      list<index_component_t> packed_indices = name_tail.index;
-      for (size_t idx = 0; idx < reg->unpacked_dimensions(); ++idx)
-	    packed_indices.pop_front();
-
-      bool simple_indices = true;
-      for (list<index_component_t>::const_iterator cur = packed_indices.begin();
-	   cur != packed_indices.end(); ++cur) {
-	    if (cur->sel != index_component_t::SEL_BIT) {
-		  simple_indices = false;
-		  break;
-	    }
-      }
-
-      if (simple_indices && packed_indices.size() > 1 &&
-	  packed_indices.size() == reg->packed_dimensions()) {
-	    bool variable_prefix = false;
-	    NetExpr*base = collapse_array_exprs(des, scope, this, reg,
-					 packed_indices, &variable_prefix);
-	    if (!base)
+      unsigned long collapsed_width;
+      bool collapsed;
+      NetExpr*collapsed_base = collapse_packed_prefix_indices_(
+	  des, scope, reg, need_const_idx, collapsed_width, collapsed);
+      if (collapsed) {
+	    if (!collapsed_base)
 		  return false;
-
-	    if (variable_prefix) {
-		  if (need_const_idx) {
-			cerr << get_fileline() << ": error: '" << reg->name()
-			     << "' index must be a constant in this context."
-			     << endl;
-			des->errors += 1;
-			delete base;
-			return false;
-		  }
-
-		  if ((reg->type() == NetNet::UNRESOLVED_WIRE) && !is_force) {
-			ivl_assert(*this, reg->coerced_to_uwire());
-			report_mixed_assignment_conflict_("bit select");
-			des->errors += 1;
-			delete base;
-			return false;
-		  }
-
-		  lv->set_part(base, 1);
-		  return true;
+	    if ((reg->type() == NetNet::UNRESOLVED_WIRE) && !is_force) {
+		  ivl_assert(*this, reg->coerced_to_uwire());
+		  report_mixed_assignment_conflict_(collapsed_width == 1
+						? "bit select" : "slice");
+		  des->errors += 1;
+		  delete collapsed_base;
+		  return false;
 	    }
-
-	    delete base;
+	    lv->set_part(collapsed_base, collapsed_width);
+	    return true;
       }
 
       list<long>prefix_indices;
