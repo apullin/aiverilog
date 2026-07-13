@@ -402,6 +402,8 @@ extern void compile_array_alias(char*label, char*name, char*src);
 extern void compile_array_port(char*label, char*name, char*addr);
   /* Index is a constant address */
 extern void compile_array_port(char*label, char*name, long addr);
+extern void compile_darray_port(char*label, char*name, char*addr, char*type);
+extern void compile_darray_port(char*label, char*name, long addr, char*type);
 
 extern void compile_array_cleanup(void);
 

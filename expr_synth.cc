@@ -24,6 +24,7 @@
 # include  <iostream>
 
 # include  "netlist.h"
+# include  "netdarray.h"
 # include  "netvector.h"
 # include  "netparray.h"
 # include  "netmisc.h"
@@ -1132,6 +1133,55 @@ NetNet* NetECast::synthesize(Design*des, NetScope*scope, NetExpr*root)
  */
 NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 {
+
+      if (expr_->expr_type() == IVL_VT_DARRAY) {
+	    NetESignal*darray_expr = dynamic_cast<NetESignal*>(expr_);
+	    const netdarray_t*darray_type = darray_expr
+	          ? darray_expr->sig()->darray_type() : 0;
+
+	    if (!darray_type || scope->is_auto()) {
+		  cerr << get_fileline() << ": sorry: dynamic array selects in "
+		          "automatic or compound net expressions are not "
+		          "currently supported." << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
+
+	    switch (darray_type->element_base_type()) {
+		case IVL_VT_BOOL:
+		case IVL_VT_LOGIC:
+		case IVL_VT_REAL:
+		case IVL_VT_STRING:
+		  break;
+		default:
+		  cerr << get_fileline() << ": sorry: dynamic array selects of "
+		          "this element type cannot be used in net expressions."
+		       << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
+
+	    ivl_assert(*this, base_);
+	    NetNet*index = base_->synthesize(des, scope, root);
+	    if (!index)
+		  return 0;
+
+	    NetArrayDq*select = new NetArrayDq(scope, scope->local_symbol(),
+	                                        darray_expr->sig(),
+	                                        index->vector_width());
+	    select->set_line(*this);
+	    des->add_node(select);
+
+	    NetNet*result = new NetNet(scope, scope->local_symbol(),
+	                                NetNet::IMPLICIT,
+	                                darray_type->element_type());
+	    result->set_line(*this);
+	    result->local_flag(true);
+
+	    connect(select->pin_Address(), index->pin(0));
+	    connect(select->pin_Result(), result->pin(0));
+	    return result;
+      }
 
       NetNet*sub = expr_->synthesize(des, scope, root);
 

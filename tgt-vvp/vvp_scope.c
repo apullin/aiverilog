@@ -1570,7 +1570,31 @@ static void draw_lpm_array(ivl_lpm_t net)
       nex = ivl_lpm_select(net);
       tmp = draw_net_input(nex);
 
-      fprintf(vvp_out, "L_%p .array/port v%p, %s;\n", net, mem, tmp);
+      if (ivl_signal_data_type(mem) == IVL_VT_DARRAY) {
+	    ivl_type_t array_type = ivl_signal_net_type(mem);
+	    ivl_type_t element_type = ivl_type_element(array_type);
+
+	    switch (ivl_type_base(element_type)) {
+		case IVL_VT_BOOL:
+		case IVL_VT_LOGIC:
+		  fprintf(vvp_out, "L_%p .darray/port v%p_0, %s, \"v%u\";\n",
+		          net, mem, tmp, ivl_type_packed_width(element_type));
+		  break;
+		case IVL_VT_REAL:
+		  fprintf(vvp_out, "L_%p .darray/port v%p_0, %s, \"r\";\n",
+		          net, mem, tmp);
+		  break;
+		case IVL_VT_STRING:
+		  fprintf(vvp_out, "L_%p .darray/port v%p_0, %s, \"S\";\n",
+		          net, mem, tmp);
+		  break;
+		default:
+		  assert(0);
+		  break;
+	    }
+      } else {
+	    fprintf(vvp_out, "L_%p .array/port v%p, %s;\n", net, mem, tmp);
+      }
 }
 
 static void draw_lpm_cmp(ivl_lpm_t net)

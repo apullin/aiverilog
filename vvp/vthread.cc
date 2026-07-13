@@ -5947,6 +5947,18 @@ inline static void dar_pop_value(vthread_t thr, vvp_vector4_t&value)
 }
 
 template <typename ELEM>
+static bool dar_values_equal(const ELEM&left, const ELEM&right)
+{
+      return left == right;
+}
+
+static bool dar_values_equal(const vvp_vector4_t&left,
+                             const vvp_vector4_t&right)
+{
+      return left.eeq(right);
+}
+
+template <typename ELEM>
 static bool store_dar(vthread_t thr, vvp_code_t cp)
 {
       int64_t adr = thr->words[3].w_int;
@@ -5971,8 +5983,17 @@ static bool store_dar(vthread_t thr, vvp_code_t cp)
 	    cerr << thr->get_fileline()
 	         << "Warning: cannot write to an undefined " << get_darray_type(value)
 	         << " index." << endl;
-      else if (darray)
+      else if (darray) {
+	    bool changed = false;
+	    if (static_cast<uint64_t>(adr) < darray->get_size()) {
+		  ELEM old_value;
+		  darray->get_word(adr, old_value);
+		  changed = !dar_values_equal(old_value, value);
+	    }
 	    darray->set_word(adr, value);
+	    if (changed)
+		  net->send_object(obj->get_object(), thr->wt_context);
+      }
       else
 	    cerr << thr->get_fileline()
 	         << "Warning: cannot write to an undefined " << get_darray_type(value)

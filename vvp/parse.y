@@ -86,7 +86,7 @@ static struct __vpiModPath*modpath_dst = 0;
 %token K_CMP_EEQ K_CMP_EQ K_CMP_EQX K_CMP_EQZ K_CMP_WEQ K_CMP_WNE
 %token K_CMP_EQ_R K_CMP_NEE K_CMP_NE K_CMP_NE_R
 %token K_CMP_GE K_CMP_GE_R K_CMP_GE_S K_CMP_GT K_CMP_GT_R K_CMP_GT_S
-%token K_CONCAT K_CONCAT8 K_DEBUG K_DELAY K_DFF_N K_DFF_N_ACLR
+%token K_CONCAT K_CONCAT8 K_DARRAY_PORT K_DEBUG K_DELAY K_DFF_N K_DFF_N_ACLR
 %token K_DFF_N_ASET K_DFF_P K_DFF_P_ACLR K_DFF_P_ASET
 %token K_ENUM2 K_ENUM2_S K_ENUM4 K_ENUM4_S K_EVENT K_EVENT_OR
 %token K_EXPORT K_EXTEND_S K_FUNCTOR K_IMPORT K_ISLAND K_LATCH K_MODPATH
@@ -252,6 +252,12 @@ statement
 
         | T_LABEL K_ARRAY_PORT T_SYMBOL ',' T_NUMBER ';'
 		{ compile_array_port($1, $3, $5); }
+
+        | T_LABEL K_DARRAY_PORT T_SYMBOL ',' T_SYMBOL ',' T_STRING ';'
+		{ compile_darray_port($1, $3, $5, $7); }
+
+        | T_LABEL K_DARRAY_PORT T_SYMBOL ',' T_NUMBER ',' T_STRING ';'
+		{ compile_darray_port($1, $3, $5, $7); }
 
         | T_LABEL K_ARRAY T_STRING ',' T_SYMBOL ';'
                 { compile_array_alias($1, $3, $5); }
