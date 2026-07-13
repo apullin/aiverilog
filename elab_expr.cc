@@ -2594,7 +2594,7 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
 			  // Evaluate all but the last index expression, into prefix_indices.
 			list<long>prefix_indices;
 			bool rc = evaluate_index_prefix(des, scope, prefix_indices, member_comp.index);
-			ivl_assert(*li, rc);
+			if (!rc) return 0;
 
 			if (debug_elaborate) {
 			      cerr << li->get_fileline() << ": check_for_struct_members: "
@@ -2674,7 +2674,7 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
 		    // Evaluate all but the last index expression, into prefix_indices.
 		  list<long>prefix_indices;
 		  bool rc = evaluate_index_prefix(des, scope, prefix_indices, member_comp.index);
-		  ivl_assert(*li, rc);
+		  if (!rc) return 0;
 
 		    // Evaluate the last index expression into a constant long.
 		  NetExpr*texpr = elab_and_eval(des, scope, member_comp.index.back().msb, -1, true);
@@ -2751,7 +2751,8 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
 	    member_select.msb = new PENumber(new verinum(off));
 	    tmp_index.push_back(member_select);
 	    packed_base = collapse_array_exprs(des, scope, li, net, tmp_index);
-	    ivl_assert(*li, packed_base);
+	    if (!packed_base)
+		  return 0;
 	    if (debug_elaborate) {
 		  cerr << li->get_fileline() << ": debug: check_for_struct_members: "
 		       << "Got collapsed array expr: " << *packed_base << endl;
