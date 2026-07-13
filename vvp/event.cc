@@ -26,8 +26,198 @@
 # include  <cstring>
 # include  <cassert>
 # include  <cstdlib>
+# include  <vector>
 
 # include <iostream>
+
+struct deferred_vec4_event_s {
+      vvp_net_ptr_t port;
+      vvp_context_t context;
+      vvp_vector4_t value;
+      unsigned base;
+      unsigned vwid;
+      bool partial;
+};
+
+/*
+ * A procedural store updates its signal immediately, but expression
+ * functors reached from that signal may be scheduled for later in the same
+ * time step. Keep the transaction alive across those schedule_functor()
+ * callbacks so event controls see only the value after the complete
+ * assignment and its zero-delay propagation have settled.
+ */
+struct vvp_event_defer_s {
+      vvp_event_defer_s()
+      : pending_functors(0), source_done(false), next_free(0)
+      {
+      }
+
+      unsigned pending_functors;
+      bool source_done;
+      std::vector<deferred_vec4_event_s> events;
+      vvp_event_defer_s*next_free;
+};
+
+unsigned vvp_event_defer_depth = 0;
+vvp_event_defer_s*vvp_current_event_defer = 0;
+static vvp_event_defer_s*free_event_defer = 0;
+
+static vvp_event_defer_s* alloc_event_defer()
+{
+      vvp_event_defer_s*transaction = free_event_defer;
+      if (transaction)
+	    free_event_defer = transaction->next_free;
+      else
+	    transaction = new vvp_event_defer_s;
+
+      transaction->pending_functors = 0;
+      transaction->source_done = false;
+      transaction->events.clear();
+      transaction->next_free = 0;
+      return transaction;
+}
+
+static vvp_event_defer_s* active_event_defer()
+{
+      if (!vvp_current_event_defer && vvp_event_defer_depth != 0)
+	    vvp_current_event_defer = alloc_event_defer();
+      return vvp_current_event_defer;
+}
+
+static void finish_event_defer(vvp_event_defer_s*transaction)
+{
+      if (!transaction->source_done || transaction->pending_functors != 0)
+	    return;
+
+      std::vector<deferred_vec4_event_s> events;
+      events.swap(transaction->events);
+
+      for (std::vector<deferred_vec4_event_s>::iterator cur = events.begin();
+	   cur != events.end(); ++cur) {
+	    vvp_net_fun_t*fun = cur->port.ptr()->fun;
+	    assert(fun);
+	    if (cur->partial)
+		  fun->recv_vec4_pv(cur->port, cur->value, cur->base,
+				    cur->vwid, cur->context);
+	    else
+		  fun->recv_vec4(cur->port, cur->value, cur->context);
+      }
+
+      transaction->events.clear();
+      transaction->next_free = free_event_defer;
+      free_event_defer = transaction;
+}
+
+vvp_event_defer_s* vvp_event_defer_capture()
+{
+      vvp_event_defer_s*transaction = active_event_defer();
+      if (!transaction)
+	    return 0;
+
+      transaction->pending_functors += 1;
+      return transaction;
+}
+
+void vvp_event_defer_enter(vvp_event_defer_s*transaction)
+{
+      assert(transaction);
+      assert(vvp_current_event_defer == 0);
+      assert(vvp_event_defer_depth == 0);
+      vvp_current_event_defer = transaction;
+}
+
+void vvp_event_defer_leave(vvp_event_defer_s*transaction)
+{
+      assert(vvp_current_event_defer == transaction);
+      assert(transaction->pending_functors > 0);
+      vvp_current_event_defer = 0;
+      transaction->pending_functors -= 1;
+      finish_event_defer(transaction);
+}
+
+static bool same_event_input(const deferred_vec4_event_s&event,
+			     vvp_net_ptr_t port, vvp_context_t context)
+{
+      return event.port == port && event.context == context;
+}
+
+bool vvp_event_defer_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
+			  vvp_context_t context)
+{
+      vvp_event_defer_s*transaction = active_event_defer();
+      if (!transaction)
+	    return false;
+
+      bool found = false;
+      for (std::vector<deferred_vec4_event_s>::iterator cur
+		 = transaction->events.begin();
+	   cur != transaction->events.end();) {
+	    if (!same_event_input(*cur, port, context))
+		  ++cur;
+	    else if (!found) {
+		  cur->value = bit;
+		  cur->base = 0;
+		  cur->vwid = bit.size();
+		  cur->partial = false;
+		  found = true;
+		  ++cur;
+	    } else {
+		  cur = transaction->events.erase(cur);
+	    }
+      }
+
+      if (found)
+	    return true;
+
+      deferred_vec4_event_s event = {port, context, bit, 0, bit.size(), false};
+      transaction->events.push_back(event);
+      return true;
+}
+
+bool vvp_event_defer_vec4_pv(vvp_net_ptr_t port,
+			     const vvp_vector4_t&bit,
+			     unsigned base, unsigned vwid,
+			     vvp_context_t context)
+{
+      vvp_event_defer_s*transaction = active_event_defer();
+      if (!transaction)
+	    return false;
+
+      for (std::vector<deferred_vec4_event_s>::reverse_iterator cur
+		 = transaction->events.rbegin();
+	   cur != transaction->events.rend(); ++cur) {
+	    if (!same_event_input(*cur, port, context))
+		  continue;
+
+	    if (!cur->partial && cur->value.size() == vwid &&
+		base + bit.size() <= vwid) {
+		  cur->value.set_vec(base, bit);
+		  return true;
+	    }
+
+	    if (cur->partial && cur->base == base && cur->vwid == vwid) {
+		  cur->value = bit;
+		  return true;
+	    }
+      }
+
+      deferred_vec4_event_s event = {port, context, bit, base, vwid, true};
+      transaction->events.push_back(event);
+      return true;
+}
+
+void vvp_event_defer_end_()
+{
+      assert(vvp_event_defer_depth == 0);
+      assert(vvp_current_event_defer);
+      if (vvp_current_event_defer->source_done)
+	    return;
+
+      vvp_event_defer_s*transaction = vvp_current_event_defer;
+      vvp_current_event_defer = 0;
+      transaction->source_done = true;
+      finish_event_defer(transaction);
+}
 
 void waitable_hooks_s::run_waiting_threads_(vthread_t&threads)
 {
@@ -271,6 +461,9 @@ vthread_t vvp_fun_edge_sa::add_waiting_thread(vthread_t thread)
 void vvp_fun_edge_sa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                 vvp_context_t)
 {
+      if (vvp_event_defer_active() && vvp_event_defer_vec4(port, bit, 0))
+	    return;
+
       if (recv_vec4_(bit, bits_[port.port()], threads_)) {
 	    vvp_net_t*net = port.ptr();
 	    net->send_vec4(bit, 0);
@@ -280,6 +473,10 @@ void vvp_fun_edge_sa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 void vvp_fun_edge_sa::recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 				   unsigned base, unsigned vwid, vvp_context_t)
 {
+      if (vvp_event_defer_active() &&
+	  vvp_event_defer_vec4_pv(port, bit, base, vwid, 0))
+	    return;
+
       assert(base == 0);
       if (recv_vec4_(bit, bits_[port.port()], threads_)) {
 	    vvp_net_t*net = port.ptr();
@@ -337,6 +534,10 @@ vthread_t vvp_fun_edge_aa::add_waiting_thread(vthread_t thread)
 void vvp_fun_edge_aa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                 vvp_context_t context)
 {
+      if (vvp_event_defer_active() &&
+	  vvp_event_defer_vec4(port, bit, context))
+	    return;
+
       if (context) {
             vvp_fun_edge_state_s*state = static_cast<vvp_fun_edge_state_s*>
                   (vvp_get_context_item(context, context_idx_));
@@ -589,6 +790,9 @@ vthread_t vvp_fun_anyedge_sa::add_waiting_thread(vthread_t thread)
 void vvp_fun_anyedge_sa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                    vvp_context_t)
 {
+      if (vvp_event_defer_active() && vvp_event_defer_vec4(port, bit, 0))
+	    return;
+
       anyedge_vec4_value*value = get_vec4_value(last_value_[port.port()]);
       assert(value);
       if (value->recv_vec4(bit)) {
@@ -601,6 +805,10 @@ void vvp_fun_anyedge_sa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 void vvp_fun_anyedge_sa::recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 				      unsigned base, unsigned vwid, vvp_context_t)
 {
+      if (vvp_event_defer_active() &&
+	  vvp_event_defer_vec4_pv(port, bit, base, vwid, 0))
+	    return;
+
       anyedge_vec4_value*value = get_vec4_value(last_value_[port.port()]);
       assert(value);
       if (value->recv_vec4_pv(bit, base, vwid)) {
@@ -699,6 +907,10 @@ vthread_t vvp_fun_anyedge_aa::add_waiting_thread(vthread_t thread)
 void vvp_fun_anyedge_aa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                    vvp_context_t context)
 {
+      if (vvp_event_defer_active() &&
+	  vvp_event_defer_vec4(port, bit, context))
+	    return;
+
       if (context) {
             vvp_fun_anyedge_state_s*state = static_cast<vvp_fun_anyedge_state_s*>
                   (vvp_get_context_item(context, context_idx_));
@@ -800,9 +1012,12 @@ vthread_t vvp_fun_event_or_sa::add_waiting_thread(vthread_t thread)
       return tmp;
 }
 
-void vvp_fun_event_or_sa::recv_vec4(vvp_net_ptr_t, const vvp_vector4_t&bit,
+void vvp_fun_event_or_sa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                     vvp_context_t)
 {
+      if (vvp_event_defer_active() && vvp_event_defer_vec4(port, bit, 0))
+	    return;
+
       run_waiting_threads_(threads_);
       base_net_->send_vec4(bit, 0);
 }
@@ -854,6 +1069,10 @@ vthread_t vvp_fun_event_or_aa::add_waiting_thread(vthread_t thread)
 void vvp_fun_event_or_aa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                     vvp_context_t context)
 {
+      if (vvp_event_defer_active() &&
+	  vvp_event_defer_vec4(port, bit, context))
+	    return;
+
       if (context) {
             waitable_state_s*state = static_cast<waitable_state_s*>
                   (vvp_get_context_item(context, context_idx_));

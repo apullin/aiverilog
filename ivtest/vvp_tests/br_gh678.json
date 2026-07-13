@@ -1,0 +1,5 @@
+{
+    "type" : "normal",
+    "source" : "br_gh678.v",
+    "iverilog-args" : [ "-g2012", "-gstrict-expr-width" ]
+}

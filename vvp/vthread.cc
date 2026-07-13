@@ -3195,6 +3195,18 @@ bool of_EVENT(vthread_t thr, vvp_code_t cp)
       return true;
 }
 
+bool of_EVENT_DEFER_BEGIN(vthread_t, vvp_code_t)
+{
+      vvp_event_defer_begin();
+      return true;
+}
+
+bool of_EVENT_DEFER_END(vthread_t, vvp_code_t)
+{
+      vvp_event_defer_end();
+      return true;
+}
+
 /*
  * %event/nb <var-label>, <delay>
  */
@@ -6751,6 +6763,17 @@ bool of_STORE_VEC4(vthread_t thr, vvp_code_t cp)
 
       thr->pop_vec4(1);
       return true;
+}
+
+bool of_STORE_VEC4_EVENT(vthread_t thr, vvp_code_t cp)
+{
+      if (vvp_event_defer_active())
+	    return of_STORE_VEC4(thr, cp);
+
+      vvp_event_defer_begin();
+      bool res = of_STORE_VEC4(thr, cp);
+      vvp_event_defer_end();
+      return res;
 }
 
 /*

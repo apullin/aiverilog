@@ -266,12 +266,74 @@ static void put_vec_to_ret_slice(ivl_signal_t sig, struct vec_slice_info*slice,
       }
 }
 
+static bool nexuses_share_consumer(ivl_nexus_t left, ivl_nexus_t right)
+{
+      unsigned left_ptrs = ivl_nexus_ptrs(left);
+      unsigned right_ptrs = ivl_nexus_ptrs(right);
+
+      for (unsigned lidx = 0; lidx < left_ptrs; lidx += 1) {
+	    ivl_nexus_ptr_t lptr = ivl_nexus_ptr(left, lidx);
+	    ivl_lpm_t llpm = ivl_nexus_ptr_lpm(lptr);
+	    ivl_net_logic_t llog = ivl_nexus_ptr_log(lptr);
+
+	    if (!llpm && !llog)
+		  continue;
+
+	    for (unsigned ridx = 0; ridx < right_ptrs; ridx += 1) {
+		  ivl_nexus_ptr_t rptr = ivl_nexus_ptr(right, ridx);
+		  if ((llpm && llpm == ivl_nexus_ptr_lpm(rptr)) ||
+		      (llog && llog == ivl_nexus_ptr_log(rptr)))
+			return true;
+	    }
+      }
+
+      return false;
+}
+
+static const char* event_aware_store_op(ivl_signal_t sig)
+{
+      ivl_nexus_t nex = ivl_signal_nex(sig, 0);
+      unsigned nptrs = nex ? ivl_nexus_ptrs(nex) : 0;
+
+	/* Part-select functors can propagate slices of one vector separately.
+	   Use an event transaction only when two slices immediately reconverge;
+	   ordinary signal and bit-slice fanout must retain the fast store. */
+      if (nptrs > 2) {
+	    for (unsigned idx = 0; idx < nptrs; idx += 1) {
+		  ivl_lpm_t left = ivl_nexus_ptr_lpm(ivl_nexus_ptr(nex, idx));
+		  if (!left || ivl_lpm_type(left) != IVL_LPM_PART_VP ||
+		      ivl_lpm_data(left, 0) != nex)
+			continue;
+
+		  for (unsigned jdx = idx + 1; jdx < nptrs;
+		       jdx += 1) {
+			ivl_lpm_t right =
+			      ivl_nexus_ptr_lpm(ivl_nexus_ptr(nex, jdx));
+			if (!right || right == left ||
+			    ivl_lpm_type(right) != IVL_LPM_PART_VP ||
+			    ivl_lpm_data(right, 0) != nex)
+			      continue;
+
+			ivl_nexus_t left_q = ivl_lpm_q(left);
+			ivl_nexus_t right_q = ivl_lpm_q(right);
+			if (left_q && right_q &&
+			    nexuses_share_consumer(left_q, right_q))
+			      return "%store/vec4/event";
+		  }
+	    }
+      }
+
+      return "%store/vec4";
+}
+
 static void put_vec_to_lval_slice(ivl_lval_t lval, struct vec_slice_info*slice,
 				  unsigned wid)
 {
 	//unsigned skip_set = transient_id++;
       ivl_signal_t sig = ivl_lval_sig(lval);
       int part_off_idx;
+
+      const char*store_op = event_aware_store_op(sig);
 
 
 	/* Special Case: If the l-value signal is named after its scope,
@@ -295,8 +357,8 @@ static void put_vec_to_lval_slice(ivl_lval_t lval, struct vec_slice_info*slice,
 	    break;
 
 	  case SLICE_SIMPLE_VECTOR:
-	    fprintf(vvp_out, "    %%store/vec4 v%p_%lu, 0, %u;\n",
-		    sig, slice->u_.simple_vector.use_word, wid);
+	    fprintf(vvp_out, "    %s v%p_%lu, 0, %u;\n", store_op, sig,
+		    slice->u_.simple_vector.use_word, wid);
 	    break;
 
 	  case SLICE_PART_SELECT_STATIC:
@@ -304,16 +366,16 @@ static void put_vec_to_lval_slice(ivl_lval_t lval, struct vec_slice_info*slice,
 	    fprintf(vvp_out, "    %%ix/load %d, %lu, 0;\n",
 		    part_off_idx, slice->u_.part_select_static.part_off);
 	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-	    fprintf(vvp_out, "    %%store/vec4 v%p_0, %d, %u;\n",
-		    sig, part_off_idx, wid);
+	    fprintf(vvp_out, "    %s v%p_0, %d, %u;\n", store_op, sig,
+		    part_off_idx, wid);
 	    clr_word(part_off_idx);
 	    break;
 
 	  case SLICE_PART_SELECT_DYNAMIC:
 	    fprintf(vvp_out, "    %%flag_mov 4, %u;\n",
 		    slice->u_.part_select_dynamic.x_flag);
-	    fprintf(vvp_out, "    %%store/vec4 v%p_0, %d, %u;\n",
-		    sig, slice->u_.part_select_dynamic.word_idx_reg, wid);
+	    fprintf(vvp_out, "    %s v%p_0, %d, %u;\n", store_op, sig,
+		    slice->u_.part_select_dynamic.word_idx_reg, wid);
 	    clr_word(slice->u_.part_select_dynamic.word_idx_reg);
 	    clr_flag(slice->u_.part_select_dynamic.x_flag);
 	    break;
@@ -409,6 +471,7 @@ static void store_vec4_to_lval(ivl_statement_t net)
       for (unsigned lidx = 0 ; lidx < ivl_stmt_lvals(net) ; lidx += 1) {
 	    ivl_lval_t lval = ivl_stmt_lval(net,lidx);
 	    ivl_signal_t lsig = ivl_lval_sig(lval);
+	    const char*store_op = event_aware_store_op(lsig);
 	    unsigned lwid = ivl_lval_width(lval);
 
 
@@ -457,8 +520,8 @@ static void store_vec4_to_lval(ivl_statement_t net)
 			fprintf(vvp_out, "    %%force/vec4/off v%p_0, %d;\n",
 				lsig, offset_index);
 		  } else {
-			fprintf(vvp_out, "    %%store/vec4 v%p_0, %d, %u;\n",
-				lsig, offset_index, lwid);
+			fprintf(vvp_out, "    %s v%p_0, %d, %u;\n",
+				store_op, lsig, offset_index, lwid);
 		  }
 		  clr_word(offset_index);
 
@@ -470,8 +533,8 @@ static void store_vec4_to_lval(ivl_statement_t net)
 			fprintf(vvp_out, "    %%ret/vec4 0, 0, %u;  Assign to %s (store_vec4_to_lval)\n",
 				lwid, ivl_signal_basename(lsig));
 		  } else {
-			fprintf(vvp_out, "    %%store/vec4 v%p_0, 0, %u;\n",
-				lsig, lwid);
+		    fprintf(vvp_out, "    %s v%p_0, 0, %u;\n",
+			    store_op, lsig, lwid);
 		  }
 	    }
       }
@@ -609,6 +672,7 @@ static int show_stmt_assign_vector(ivl_statement_t net)
       }
 
       unsigned wid = ivl_stmt_lwidth(net);
+      bool defer_events = ivl_stmt_lvals(net) > 1;
 
 	/* If this is a compressed assignment, then get the contents
 	   of the l-value. We need these values as part of the r-value
@@ -624,13 +688,20 @@ static int show_stmt_assign_vector(ivl_statement_t net)
 	    resize_vec4_wid(rval, wid);
 	    draw_stmt_assign_vector_opcode(ivl_stmt_opcode(net),
 					   ivl_expr_signed(rval));
+	    if (defer_events)
+		  fprintf(vvp_out, "    %%event/defer/begin;\n");
 	    put_vec_to_lval(net, slices);
 	    free(slices);
       } else {
 	    draw_eval_vec4(rval);
 	    resize_vec4_wid(rval, wid);
+	    if (defer_events)
+		  fprintf(vvp_out, "    %%event/defer/begin;\n");
 	    store_vec4_to_lval(net);
       }
+
+      if (defer_events)
+	    fprintf(vvp_out, "    %%event/defer/end;\n");
 
       return 0;
 }
