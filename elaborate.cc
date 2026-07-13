@@ -4838,6 +4838,16 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    if (lv == 0)
 		  continue;
 
+	    if (dynamic_cast<const netuarray_t*>(lv->net_type())) {
+		  cerr << get_fileline() << ": error: "
+		       << "Type of task port " << (idx+1)
+		       << " is not compatible with the argument type."
+		       << endl;
+		  des->errors += 1;
+		  delete lv;
+		  continue;
+	    }
+
 	    NetExpr*rv = new NetESignal(port);
 
 	      /* Handle any implicit cast. */
