@@ -1,0 +1,3 @@
+ivltests/br_gh1231.v:7: warning: input port i1 is coerced to inout.
+ivltests/br_gh1231.v:7: error: Inout port 1 (i1) of module a has unpacked dimensions, which are not supported.
+1 error(s) during elaboration.
