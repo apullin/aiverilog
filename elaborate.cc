@@ -4637,8 +4637,6 @@ NetProc* PCallTask::elaborate_void_function_(Design*des, NetScope*scope,
       }
 
 	// If we haven't already elaborated the function, do so now.
-	// This allows elaborate_build_call_ to elide the function call
-	// if the function body is empty.
       if (dscope->elab_stage() < 3) {
 	    const PFunction*pfunc = dscope->func_pform();
 	    ivl_assert(*this, pfunc);
@@ -4695,20 +4693,6 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 
       NetBlock*block = new NetBlock(NetBlock::SEQU, 0);
       block->set_line(*this);
-
-	/* Detect the case where the definition of the task is known
-	   empty. In this case, we need not bother with calls to the
-	   task, all the assignments, etc. Just return a no-op. */
-
-      if (const NetBlock*tp = dynamic_cast<const NetBlock*>(def->proc())) {
-	    if (tp->proc_first() == 0) {
-		  if (debug_elaborate) {
-			cerr << get_fileline() << ": PCallTask::elaborate_build_call_: "
-			     << "Eliding call to empty task " << task->basename() << endl;
-		  }
-		  return block;
-	    }
-      }
 
         /* If this is an automatic task, generate a statement to
            allocate the local storage. */
