@@ -2,8 +2,11 @@
 
 This is a fork of iverilog, accepting AI patches for correctness and performance.
 
-Bugfixes, feature enhancements, and speedups: ~90 commits beyond
-upstream. Ledger: `git log upstream/master..` (perf series:
+Bugfixes, feature enhancements, and speedups: about 100 commits beyond
+upstream. Tracking of work on and around upstream issues is reflected in
+[UPSTREAM_TRACKING.md](UPSTREAM_TRACKING.md). The complete commit ledger is
+available with `git log upstream/master..HEAD` after configuring an `upstream`
+remote (perf series:
 `git log --grep='^\[perf\]'`, measurements in each message).
 
 Merged speedups so far (in-tree oracle-checked benchmarks; includes
