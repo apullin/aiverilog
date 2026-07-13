@@ -1422,7 +1422,7 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 			  // Evaluate all but the last index expression, into prefix_indices.
 			list<long>prefix_indices;
 			bool rc = evaluate_index_prefix(des, scope, prefix_indices, member_comp.index);
-			ivl_assert(*this, rc);
+			if (!rc) return false;
 
 			if (debug_elaborate) {
 			      cerr << get_fileline() << ": PEIdent::elaborate_lval_net_packed_member_: "
@@ -1435,7 +1435,7 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 			long tail_off = 0;
 			unsigned long tail_wid = 0;
 			rc = calculate_part(this, des, scope, member_comp.index.back(), tail_off, tail_wid);
-			ivl_assert(*this, rc);
+			if (!rc) return false;
 
 			if (debug_elaborate) {
 			      cerr << get_fileline() << ": PEIdent::elaborate_lval_net_packed_member_: "
@@ -1496,7 +1496,7 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 		    // Evaluate all but the last index expression, into prefix_indices.
 		  list<long>prefix_indices;
 		  bool rc = evaluate_index_prefix(des, scope, prefix_indices, member_comp.index);
-		  ivl_assert(*this, rc);
+		  if (!rc) return false;
 
 		  if (debug_elaborate) {
 			cerr << get_fileline() << ": PEIdent::elaborate_lval_net_packed_member_: "
@@ -1608,7 +1608,9 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 	    member_select.sel = index_component_t::SEL_BIT;
 	    member_select.msb = new PENumber(new verinum(off));
 	    tmp_index.push_back(member_select);
-	    packed_base = collapse_array_indices(des, scope, reg, tmp_index);
+	    packed_base = collapse_array_exprs(des, scope, this, reg, tmp_index);
+	    if (!packed_base)
+		  return false;
       }
 
       long tmp;
@@ -1634,12 +1636,11 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 	    return true;
       }
 
-	// Oops, packed_base is not fully evaluated, so I don't know
-	// yet what to do with it.
-      cerr << get_fileline() << ": internal error: "
-	   << "I don't know how to handle this index expression? " << *packed_base << endl;
-      ivl_assert(*this, 0);
-      return false;
+      if (member_type)
+	    lv->set_part(packed_base, member_type);
+      else
+	    lv->set_part(packed_base, use_width);
+      return true;
 }
 
 NetAssign_* PENumber::elaborate_lval(Design*des, NetScope*, bool, bool, bool) const
