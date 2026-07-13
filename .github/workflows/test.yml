@@ -23,7 +23,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        brew install bison
+        brew install bison llvm@21
 
     - name: Build, check and install
       run: |
@@ -37,6 +37,8 @@ jobs:
         fi
         autoconf
         ./configure $CONFIG_OPTS
+        grep -E '^CC = .*/llvm@21/bin/clang( |$)' Makefile
+        grep -E '^CXX = .*/llvm@21/bin/clang\+\+( |$)' Makefile
         make -j$(nproc) check
         sudo make install
 
@@ -62,6 +64,9 @@ jobs:
       run: |
         sudo apt update -qq
         sudo apt install -y make g++ git bison flex gperf libreadline-dev libbz2-dev autoconf python3-venv
+        wget -q https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 21
         python3 -m venv .venv
         . .venv/bin/activate
         pip install --upgrade pip
@@ -78,6 +83,8 @@ jobs:
         fi
         autoconf
         ./configure $CONFIG_OPTS
+        grep -E '^CC = .*/clang-21( |$)' Makefile
+        grep -E '^CXX = .*/clang\+\+-21( |$)' Makefile
         make -j$(nproc) check
         sudo make install
 
