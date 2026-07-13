@@ -814,7 +814,7 @@ vpiHandle __vpiSignal::put_bit_value(struct __vpiBit*bit, p_vpi_value vp, int fl
 	    return NULL;
       }
 
-      if ((get_type_code() == vpiNet) &&
+      if (net_semantics &&
           !dynamic_cast<vvp_island_port*>(node->fun)) {
 	    vvp_wire_vec4*wire = dynamic_cast<vvp_wire_vec4*>(node->fil);
 	    if (wire && wire->has_variable_mask())
@@ -970,7 +970,7 @@ static vpiHandle signal_put_value(vpiHandle ref, s_vpi_value*vp, int flags)
       assert(rfp);
       vvp_net_ptr_t dest(rfp->node, 0);
 
-      bool net_flag = ref->get_type_code()==vpiNet;
+      bool net_flag = rfp->net_semantics;
 
 	/* If this is a release, then we are not really putting a
 	   value. Instead, issue a release "command" to the signal
@@ -1151,8 +1151,7 @@ vpiHandle vpip_make_int4(const char*name, int msb, int lsb, vvp_net_t*vec)
 /*
  * Construct the two-state SystemVerilog variables.
  */
-vpiHandle vpip_make_int2(const char*name, int msb, int lsb, bool signed_flag,
-                         vvp_net_t*vec)
+static __vpiSignal* make_int2_signal(int msb, int lsb, bool signed_flag)
 {
       __vpiSignal*obj;
 
@@ -1183,7 +1182,13 @@ vpiHandle vpip_make_int2(const char*name, int msb, int lsb, bool signed_flag,
 		  break;
 	    }
       }
+      return obj;
+}
 
+vpiHandle vpip_make_int2(const char*name, int msb, int lsb, bool signed_flag,
+                         vvp_net_t*vec)
+{
+      __vpiSignal*obj = make_int2_signal(msb, lsb, signed_flag);
       return fill_in_var4(obj, name, msb, lsb, signed_flag, vec);
 }
 
@@ -1320,9 +1325,25 @@ static vpiHandle fill_in_net4(struct __vpiSignal*obj, __vpiScope*scope,
 
 vpiHandle vpip_make_net4(__vpiScope*scope,
 			 const char*name, int msb, int lsb,
-			 bool signed_flag, vvp_net_t*node)
+			 bool signed_flag, vvp_net_t*node,
+			 int reported_type_code)
 {
-      struct __vpiSignal*obj = new signal_net;
+      struct __vpiSignal*obj;
+      switch (reported_type_code) {
+	  case vpiNet:
+	    obj = new signal_net;
+	    break;
+	  case vpiIntVar:
+	    obj = make_int2_signal(msb, lsb, signed_flag);
+	    break;
+	  case vpiLogicVar:
+	  case -vpiLogicVar:
+	    obj = new signal_reg;
+	    break;
+	  default:
+	    assert(0);
+      }
+      obj->net_semantics = 1;
       return fill_in_net4(obj, scope, name, msb, lsb, signed_flag, node);
 }
 
@@ -1521,7 +1542,9 @@ static vpiHandle PV_put_value(vpiHandle ref, p_vpi_value vp, int flags)
       }
 
       assert(rfp->parent);
-      bool net_flag = rfp->parent->get_type_code()==vpiNet;
+      __vpiSignal*parent = dynamic_cast<__vpiSignal*>(rfp->parent);
+      bool net_flag = parent? parent->net_semantics
+			     : rfp->parent->get_type_code()==vpiNet;
       bool full_sig = base == 0 && width == sig_size;
 
       vvp_net_ptr_t dest(rfp->net, 0);
