@@ -1055,6 +1055,27 @@ NetExpr* elab_sys_task_arg(Design*des, NetScope*scope, perm_string name,
       return tmp;
 }
 
+static bool check_range_expr_defined(Design*des, const PExpr*pexpr,
+				     const NetExpr*nexpr, const char*position)
+{
+      const NetEConst*value = dynamic_cast<const NetEConst*>(nexpr);
+      if (!value || value->value().is_defined())
+	    return true;
+
+      const bool is_error = gn_system_verilog();
+      cerr << pexpr->get_fileline() << (is_error ? ": error: " : ": warning: ")
+	   << "Dimension value contains undefined (x/z) bits";
+      if (!is_error)
+	    cerr << " and will be treated as zero";
+      cerr << "." << endl;
+      cerr << pexpr->get_fileline() << "       : This " << position
+	   << " expression violates the rule: " << *pexpr << endl;
+
+      if (is_error)
+	    des->errors += 1;
+      return !is_error;
+}
+
 bool evaluate_range(Design*des, NetScope*scope, const LineInfo*li,
 		    const pform_range_t&range, long&index_l, long&index_r)
 {
@@ -1075,6 +1096,8 @@ bool evaluate_range(Design*des, NetScope*scope, const LineInfo*li,
             des->errors += 1;
       } else {
             NetExpr*texpr = elab_and_eval(des, scope, range.first, -1, true);
+            dimension_ok &= check_range_expr_defined(des, range.first, texpr,
+                                                      range.second ? "MSB" : "size");
             if (! eval_as_long(index_l, texpr)) {
                   cerr << range.first->get_fileline() << ": error: "
                           "Dimensions must be constant." << endl;
@@ -1107,6 +1130,8 @@ bool evaluate_range(Design*des, NetScope*scope, const LineInfo*li,
                   }
             } else {
                   texpr = elab_and_eval(des, scope, range.second, -1, true);
+                  dimension_ok &= check_range_expr_defined(des, range.second,
+                                                           texpr, "LSB");
                   if (! eval_as_long(index_r, texpr)) {
                         cerr << range.second->get_fileline() << ": error: "
                                 "Dimensions must be constant." << endl;
