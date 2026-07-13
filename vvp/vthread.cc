@@ -864,7 +864,7 @@ void vthread_delay_delete()
  */
 void vthread_run(vthread_t thr)
 {
-      while (thr != 0) {
+      while (thr != 0 && !schedule_finished()) {
 	    vthread_t tmp = thr->wait_next;
 	    thr->wait_next = 0;
 

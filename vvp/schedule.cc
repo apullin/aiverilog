@@ -1175,7 +1175,7 @@ void schedule_simulate(void)
       // process events and when done run the final blocks.
       run_finals = schedule_runnable;
 
-      if (schedule_runnable) while (sched_list) {
+      while (schedule_runnable && sched_list) {
 
 	    if (schedule_stopped_flag) {
 		  schedule_stopped_flag = false;
