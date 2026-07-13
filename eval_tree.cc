@@ -1384,7 +1384,11 @@ NetExpr*NetETernary::blended_arguments_(const NetExpr*te, const NetExpr*fe) cons
 		 << val << endl;
       }
 
-      NetEConst*rc = new NetEConst(val);
+      NetEConst*rc;
+      if (const netenum_t*enum_type = enumeration())
+	    rc = new NetEConstEnum(perm_string(), enum_type, val);
+      else
+	    rc = new NetEConst(val);
       rc->set_line(*this);
       return rc;
 }
