@@ -84,6 +84,7 @@ br_gh1256a			vvp_tests/br_gh1256a.json
 br_gh1256b			vvp_tests/br_gh1256b.json
 br_gh1258a			vvp_tests/br_gh1258a.json
 br_gh1258b			vvp_tests/br_gh1258b.json
+br_gh1277			vvp_tests/br_gh1277.json
 br_gh1286			vvp_tests/br_gh1286.json
 br_gh1323			vvp_tests/br_gh1323.json
 br_gh1325			vvp_tests/br_gh1325.json

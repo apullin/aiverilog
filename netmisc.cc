@@ -1552,9 +1552,9 @@ NetExpr*collapse_array_exprs(Design*des, NetScope*scope,
       list<long> exprs_const;
       indices_flags flags;
       indices_to_expressions(des, scope, loc, indices,
-                             net->packed_dimensions(),
+                             indices.size(),
                              false, flags, exprs, exprs_const);
-      ivl_assert(*loc, exprs.size() == net->packed_dimensions());
+      ivl_assert(*loc, exprs.size() == indices.size());
 
       if (flags.invalid) {
 	    for (list<NetExpr*>::iterator cur = exprs.begin();
@@ -1575,7 +1575,7 @@ NetExpr*collapse_array_exprs(Design*des, NetScope*scope,
 
 	// Special Case: there is only 1 packed dimension, so the
 	// single expression should already be naturally canonical.
-      if (net->slice_width(1) == 1) {
+      if (net->packed_dimensions() == 1) {
 	    return *exprs.begin();
       }
 
@@ -1584,7 +1584,7 @@ NetExpr*collapse_array_exprs(Design*des, NetScope*scope,
 
       list<NetExpr*>::iterator ecur = exprs.begin();
       NetExpr* base = 0;
-      for (size_t idx = 0 ; idx < net->packed_dimensions() ; idx += 1, ++pcur, ++ecur) {
+      for (size_t idx = 0 ; idx < indices.size() ; idx += 1, ++pcur, ++ecur) {
 	    unsigned cur_slice_width = net->slice_width(idx+1);
 	    long lsb = pcur->get_lsb();
 	    long msb = pcur->get_msb();
