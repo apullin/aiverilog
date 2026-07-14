@@ -1342,6 +1342,7 @@ vpiHandle vpip_make_net4(__vpiScope*scope,
 	    break;
 	  default:
 	    assert(0);
+	    std::abort();
       }
       obj->net_semantics = 1;
       return fill_in_net4(obj, scope, name, msb, lsb, signed_flag, node);
