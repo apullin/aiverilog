@@ -42,6 +42,59 @@ AC_CONFIG_HEADERS([tgt-pcb/pcb_config.h])
 
 AC_CANONICAL_HOST
 dnl Checks for programs.
+
+dnl Clang 21 is the recommended native compiler for this fork. The
+dnl performance build is substantially faster with the LLVM toolchain, so
+dnl prefer a matched C/C++ pair unless the caller selected a compiler or is
+dnl configuring a cross build. Homebrew keeps versioned LLVM installations
+dnl out of PATH, hence the small set of conventional search locations.
+ivl_preferred_compiler=no
+if test -z "$CC" && test -z "$CXX" && test "x$build" = "x$host"
+then
+  AC_MSG_CHECKING([for the recommended Clang 21 toolchain])
+
+  for ivl_clang21_location in path-versioned \
+      /usr/lib/llvm-21/bin /usr/local/llvm-21/bin /opt/llvm-21/bin \
+      /opt/homebrew/opt/llvm@21/bin /usr/local/opt/llvm@21/bin \
+      /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin path-unversioned
+  do
+    case "$ivl_clang21_location" in
+      path-versioned)
+        ivl_cc_candidate=`command -v clang-21 2>/dev/null`
+        ivl_cxx_candidate=`command -v clang++-21 2>/dev/null`
+        ;;
+      path-unversioned)
+        ivl_cc_candidate=`command -v clang 2>/dev/null`
+        ivl_cxx_candidate=`command -v clang++ 2>/dev/null`
+        ;;
+      *)
+        ivl_cc_candidate="$ivl_clang21_location/clang"
+        ivl_cxx_candidate="$ivl_clang21_location/clang++"
+        ;;
+    esac
+
+    test -x "$ivl_cc_candidate" && test -x "$ivl_cxx_candidate" || continue
+    ivl_cc_major=`"$ivl_cc_candidate" -dumpversion 2>/dev/null | sed 's/\..*//'`
+    ivl_cxx_major=`"$ivl_cxx_candidate" -dumpversion 2>/dev/null | sed 's/\..*//'`
+    if test "x$ivl_cc_major" = x21 && test "x$ivl_cxx_major" = x21
+    then
+      CC="$ivl_cc_candidate"
+      CXX="$ivl_cxx_candidate"
+      test -n "$CC_FOR_BUILD" || CC_FOR_BUILD="$ivl_cc_candidate"
+      ivl_preferred_compiler=yes
+      break
+    fi
+  done
+
+  if test "$ivl_preferred_compiler" = yes
+  then
+    AC_MSG_RESULT([$CC and $CXX])
+  else
+    AC_MSG_RESULT([not found])
+    AC_MSG_WARN([Clang 21 was not found; falling back to GCC or the platform compiler. Install Clang 21 for the recommended and fastest build. You may also select it explicitly with CC=clang-21 CXX=clang++-21.])
+  fi
+fi
+
 AC_PROG_CC
 AX_PROG_CC_FOR_BUILD
 AC_PREREQ([2.62])
