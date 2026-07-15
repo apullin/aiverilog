@@ -2779,6 +2779,13 @@ vvp_vector2_t& vvp_vector2_t::operator -= (const vvp_vector2_t&that)
       return *this;
 }
 
+vvp_vector2_t operator + (const vvp_vector2_t&a, const vvp_vector2_t&b)
+{
+      vvp_vector2_t result(a);
+      result += b;
+      return result;
+}
+
 void vvp_vector2_t::trim()
 {
       while (value(wid_-1) == 0 && wid_ > 1) wid_ -= 1;
