@@ -2513,6 +2513,11 @@ vvp_vector2_t::vvp_vector2_t(unsigned long v, unsigned wid)
       const unsigned bits_per_word = 8 * sizeof(vec_[0]);
       const unsigned words = (wid_ + bits_per_word-1) / bits_per_word;
 
+      if (words == 0) {
+	    vec_ = 0;
+	    return;
+      }
+
       vec_ = new unsigned long[words];
       vec_[0] = v;
       for (unsigned idx = 1 ;  idx < words ;  idx += 1)
@@ -2535,7 +2540,7 @@ vvp_vector2_t::vvp_vector2_t(const vvp_vector2_t&that, unsigned base, unsigned w
       wid_ = wid;
       const unsigned words = (wid_ + BITS_PER_WORD-1) / BITS_PER_WORD;
 
-      vec_ = new unsigned long[words];
+      vec_ = words? new unsigned long[words]() : 0;
 
       for (unsigned idx = 0 ; idx < wid ; idx += 1) {
 	    int bit = that.value(base+idx);
