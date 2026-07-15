@@ -2785,6 +2785,11 @@ vvp_vector2_t& vvp_vector2_t::operator -= (const vvp_vector2_t&that)
 	    vec_[idx] = add_carry(vec_[idx], ~that.vec_[idx], carry);
       }
 
+	// Discard the carry bits above the declared vector width.
+      const unsigned tail_bits = wid_ % BITS_PER_WORD;
+      if (tail_bits != 0)
+	    vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
+
       return *this;
 }
 
