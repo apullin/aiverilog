@@ -2510,6 +2510,19 @@ vvp_vector2_t::vvp_vector2_t()
       wid_ = 0;
 }
 
+void vvp_vector2_t::clear_unused_bits_()
+{
+      if (wid_ == 0)
+	    return;
+
+      const unsigned tail_bits = wid_ % BITS_PER_WORD;
+      if (tail_bits == 0)
+	    return;
+
+      const unsigned words = (wid_ + BITS_PER_WORD-1) / BITS_PER_WORD;
+      vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
+}
+
 vvp_vector2_t::vvp_vector2_t(unsigned long v, unsigned wid)
 {
       wid_ = wid;
@@ -2525,6 +2538,7 @@ vvp_vector2_t::vvp_vector2_t(unsigned long v, unsigned wid)
       vec_[0] = v;
       for (unsigned idx = 1 ;  idx < words ;  idx += 1)
 	    vec_[idx] = 0;
+      clear_unused_bits_();
 }
 
 vvp_vector2_t::vvp_vector2_t(vvp_vector2_t::fill_t fill, unsigned wid)
@@ -2536,6 +2550,7 @@ vvp_vector2_t::vvp_vector2_t(vvp_vector2_t::fill_t fill, unsigned wid)
       vec_ = new unsigned long[words];
       for (unsigned idx = 0 ;  idx < words ;  idx += 1)
 	    vec_[idx] = fill? -1 : 0;
+      clear_unused_bits_();
 }
 
 vvp_vector2_t::vvp_vector2_t(const vvp_vector2_t&that, unsigned base, unsigned wid)
@@ -2553,6 +2568,7 @@ vvp_vector2_t::vvp_vector2_t(const vvp_vector2_t&that, unsigned base, unsigned w
 	    unsigned long mask = 1UL << (idx % BITS_PER_WORD);
 	    vec_[word] |= mask;
       }
+      clear_unused_bits_();
 }
 
 void vvp_vector2_t::copy_from_that_(const vvp_vector4_t&that)
@@ -2569,6 +2585,7 @@ void vvp_vector2_t::copy_from_that_(const vvp_vector4_t&that)
 	// Use the subarray method with the xz_to_0 flag set so that
 	// we get values even when there are xz bits.
       vec_ = that.subarray(0, wid_, true);
+      clear_unused_bits_();
 }
 
 void vvp_vector2_t::copy_from_that_(const vvp_vector2_t&that)
@@ -2585,6 +2602,7 @@ void vvp_vector2_t::copy_from_that_(const vvp_vector2_t&that)
       vec_ = new unsigned long[words];
       for (unsigned idx = 0 ;  idx < words ;  idx += 1)
 	    vec_[idx] = that.vec_[idx];
+      clear_unused_bits_();
 }
 
 vvp_vector2_t::vvp_vector2_t(const vvp_vector2_t&that, unsigned newsize)
@@ -2605,6 +2623,7 @@ vvp_vector2_t::vvp_vector2_t(const vvp_vector2_t&that, unsigned newsize)
 	    else
 		  vec_[idx] = 0;
       }
+      clear_unused_bits_();
 }
 
 vvp_vector2_t& vvp_vector2_t::operator= (const vvp_vector2_t&that)
@@ -2633,19 +2652,16 @@ vvp_vector2_t& vvp_vector2_t::operator <<= (unsigned int shift)
 	    return *this;
 
       const unsigned words = (wid_ + BITS_PER_WORD-1) / BITS_PER_WORD;
+      if (shift >= wid_) {
+	    for (unsigned idx = 0 ; idx < words ; idx += 1)
+		  vec_[idx] = 0;
+	    return *this;
+      }
 
 	// Number of words to shift
       const unsigned wshift = shift / BITS_PER_WORD;
 	// bits to shift within each word.
       const unsigned long oshift = shift % BITS_PER_WORD;
-
-	// If shifting the entire value away, then return zeros.
-      if (wshift >= words) {
-	    for (unsigned idx = 0 ;  idx < words ;  idx += 1)
-		  vec_[idx] = 0;
-
-	    return *this;
-      }
 
 	// Do the word shift first.
       if (wshift > 0) {
@@ -2666,12 +2682,9 @@ vvp_vector2_t& vvp_vector2_t::operator <<= (unsigned int shift)
 		  vec_[idx] = (vec_[idx] << oshift) | pad;
 		  pad = next_pad;
 	    }
-
-	      // Cleanup the tail bits when the top word is partial.
-	    const unsigned tail_bits = wid_ % BITS_PER_WORD;
-	    if (tail_bits != 0)
-		  vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
       }
+
+      clear_unused_bits_();
 
       return *this;
 }
@@ -2682,19 +2695,16 @@ vvp_vector2_t& vvp_vector2_t::operator >>= (unsigned shift)
 	    return *this;
 
       const unsigned words = (wid_ + BITS_PER_WORD-1) / BITS_PER_WORD;
+      if (shift >= wid_) {
+	    for (unsigned idx = 0 ; idx < words ; idx += 1)
+		  vec_[idx] = 0;
+	    return *this;
+      }
 
 	// Number of words to shift
       const unsigned wshift = shift / BITS_PER_WORD;
 	// bits to shift within each word.
       const unsigned long oshift = shift % BITS_PER_WORD;
-
-	// If shifting the entire value away, then return zeros.
-      if (wshift >= words) {
-	    for (unsigned idx = 0 ;  idx < words ;  idx += 1)
-		  vec_[idx] = 0;
-
-	    return *this;
-      }
 
       if (wshift > 0) {
 	    for (unsigned idx = 0 ;  idx < words-wshift ;  idx += 1)
@@ -2711,29 +2721,9 @@ vvp_vector2_t& vvp_vector2_t::operator >>= (unsigned shift)
 		  vec_[idx-1] = pad | (vec_[idx-1] >> oshift);
 		  pad = new_pad;
 	    }
-
-	      // Cleanup the tail bits.
-
-	    unsigned use_words = words;
-	      // Mask_shift is the number of high bits of the top word
-	      // that are to be masked off. We start with the number
-	      // of bits that are not included even in the original,
-	      // then we include the bits of the shift, that are to be
-	      // masked to zero.
-	    unsigned long mask_shift = BITS_PER_WORD - wid_%BITS_PER_WORD;
-	    mask_shift %= BITS_PER_WORD;
-	    mask_shift += oshift;
-	    while (mask_shift >= BITS_PER_WORD) {
-		  vec_[use_words-1] = 0;
-		  use_words -= 1;
-		  mask_shift -= BITS_PER_WORD;
-	    }
-	    if (mask_shift > 0) {
-		  assert(use_words > 0);
-		  unsigned long mask = -1UL >> mask_shift;
-		  vec_[use_words-1] &= mask;
-	    }
       }
+
+      clear_unused_bits_();
 
       return *this;
 }
@@ -2767,12 +2757,7 @@ vvp_vector2_t& vvp_vector2_t::operator += (const vvp_vector2_t&that)
       for (unsigned idx = 0 ;  idx < words ;  idx += 1) {
 	    vec_[idx] = add_carry(vec_[idx], that.vec_[idx], carry);
       }
-
-
-	// Cleanup the tail bits when the top word is partial.
-      const unsigned tail_bits = wid_ % BITS_PER_WORD;
-      if (tail_bits != 0)
-	    vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
+      clear_unused_bits_();
 
       return *this;
 }
@@ -2789,11 +2774,7 @@ vvp_vector2_t& vvp_vector2_t::operator -= (const vvp_vector2_t&that)
       for (unsigned idx = 0 ;  idx < words ;  idx += 1) {
 	    vec_[idx] = add_carry(vec_[idx], ~that.vec_[idx], carry);
       }
-
-	// Discard the carry bits above the declared vector width.
-      const unsigned tail_bits = wid_ % BITS_PER_WORD;
-      if (tail_bits != 0)
-	    vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
+      clear_unused_bits_();
 
       return *this;
 }
@@ -2801,6 +2782,7 @@ vvp_vector2_t& vvp_vector2_t::operator -= (const vvp_vector2_t&that)
 void vvp_vector2_t::trim()
 {
       while (value(wid_-1) == 0 && wid_ > 1) wid_ -= 1;
+      clear_unused_bits_();
 }
 
 /* This is a special trim that is used on numbers we know represent a
@@ -2810,6 +2792,7 @@ void vvp_vector2_t::trim_neg()
       if (value(wid_-1) == 1 && wid_ > 32) {
 	    while (value(wid_-2) == 1 && wid_ > 32) wid_ -= 1;
       }
+      clear_unused_bits_();
 }
 
 int vvp_vector2_t::value(unsigned idx) const
@@ -2964,6 +2947,8 @@ vvp_vector2_t operator * (const vvp_vector2_t&a, const vvp_vector2_t&b)
 		  }
 	    }
       }
+
+      r.clear_unused_bits_();
 
       return r;
 }
