@@ -253,12 +253,10 @@ struct vthread_s {
       inline void pop_object(unsigned cnt, unsigned skip =0)
       {
 	    assert((cnt+skip) <= stack_obj_size_);
-	    for (size_t idx = stack_obj_size_-skip-cnt ; idx < stack_obj_size_-skip ; idx += 1)
-		  stack_obj_[idx].reset(0);
 	    stack_obj_size_ -= cnt;
 	    for (size_t idx = stack_obj_size_-skip ; idx < stack_obj_size_ ; idx += 1)
-		  stack_obj_[idx] = stack_obj_[idx+skip];
-	    for (size_t idx = stack_obj_size_ ; idx < stack_obj_size_+skip ; idx += 1)
+		  stack_obj_[idx] = stack_obj_[idx+cnt];
+	    for (size_t idx = stack_obj_size_ ; idx < stack_obj_size_+cnt ; idx += 1)
 		  stack_obj_[idx].reset(0);
       }
       inline void push_object(const vvp_object_t&obj)
