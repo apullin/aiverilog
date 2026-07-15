@@ -1788,6 +1788,9 @@ bool vvp_vector4_t::eq_xz(const vvp_vector4_t&that) const
 
 bool vvp_vector4_t::has_xz() const
 {
+      if (size_ == 0)
+	    return false;
+
       if (size_ < BITS_PER_WORD) {
 	    unsigned long mask = -1UL >> (BITS_PER_WORD - size_);
 	    return bbits_val_&mask;
@@ -2664,9 +2667,10 @@ vvp_vector2_t& vvp_vector2_t::operator <<= (unsigned int shift)
 		  pad = next_pad;
 	    }
 
-	      // Cleanup the tail bits.
-	    unsigned long mask = -1UL >> (BITS_PER_WORD - wid_%BITS_PER_WORD);
-	    vec_[words-1] &= mask;
+	      // Cleanup the tail bits when the top word is partial.
+	    const unsigned tail_bits = wid_ % BITS_PER_WORD;
+	    if (tail_bits != 0)
+		  vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
       }
 
       return *this;
@@ -2765,9 +2769,10 @@ vvp_vector2_t& vvp_vector2_t::operator += (const vvp_vector2_t&that)
       }
 
 
-	// Cleanup the tail bits.
-      unsigned long mask = -1UL >> (BITS_PER_WORD - wid_%BITS_PER_WORD);
-      vec_[words-1] &= mask;
+	// Cleanup the tail bits when the top word is partial.
+      const unsigned tail_bits = wid_ % BITS_PER_WORD;
+      if (tail_bits != 0)
+	    vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
 
       return *this;
 }
