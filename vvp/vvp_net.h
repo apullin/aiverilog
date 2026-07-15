@@ -808,6 +808,7 @@ class vvp_vector2_t {
     private:
       void copy_from_that_(const vvp_vector2_t&that);
       void copy_from_that_(const vvp_vector4_t&that);
+      void clear_unused_bits_();
 };
 
 extern bool operator >  (const vvp_vector2_t&, const vvp_vector2_t&);
