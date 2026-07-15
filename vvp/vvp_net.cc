@@ -2470,6 +2470,10 @@ void vvp_vector4array_aa::free_instance(vvp_context_t context)
 {
       v4cell*cell = static_cast<v4cell*>
             (vvp_get_context_item(context, context_idx_));
+      if (width_ > vvp_vector4_t::BITS_PER_WORD) {
+	    for (unsigned idx = 0 ; idx < words_ ; idx += 1)
+		  delete [] cell[idx].abits_ptr_;
+      }
       delete [] cell;
 }
 #endif

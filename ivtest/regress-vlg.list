@@ -199,6 +199,7 @@ automatic_events3	normal			ivltests gold=automatic_events3.gold
 automatic_task		normal			ivltests gold=automatic_task.gold
 automatic_task2		normal			ivltests gold=automatic_task2.gold
 automatic_task3		normal			ivltests gold=automatic_task3.gold
+automatic_wide_array	normal			ivltests gold=automatic_wide_array.gold
 bitwidth		normal			ivltests
 bitwidth2		normal			ivltests
 blankport		normal			ivltests main # PR 204 Stephan Boettcher -
