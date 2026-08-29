@@ -1,0 +1,5 @@
+./ivltests/br_gh1449.v:11: error: the type of the variable 't' doesn't match the context type.
+./ivltests/br_gh1449.v:11:      : variable type=netvector_t:logic unsigned[9:0]
+./ivltests/br_gh1449.v:11:      : context type=11netuarray_t
+./ivltests/br_gh1449.v:14: error: Unable to evaluate parameter EXP value: top.build_exp()
+2 error(s) during elaboration.
