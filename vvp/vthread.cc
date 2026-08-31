@@ -973,11 +973,12 @@ bool of_CHUNK_LINK(vthread_t thr, vvp_code_t code)
 void vthread_schedule_list(vthread_t thr)
 {
       for (vthread_t cur = thr ;  cur ;  cur = cur->wait_next) {
-	    assert(cur->waiting_for_event);
+	    assert(cur->waiting_for_event && !cur->is_scheduled);
 	    cur->waiting_for_event = 0;
+	    cur->is_scheduled = 1;
       }
 
-      schedule_vthread(thr, 0);
+      schedule_vthread_list_ready(thr);
 }
 
 vvp_context_t vthread_get_wt_context()

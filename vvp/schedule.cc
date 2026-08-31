@@ -900,6 +900,13 @@ void schedule_vthread(vthread_t thr, vvp_time64_t delay, bool push_flag)
       }
 }
 
+void schedule_vthread_list_ready(vthread_t thr)
+{
+      struct vthread_event_s*cur = new vthread_event_s;
+      cur->thr = thr;
+      schedule_event_(cur, 0, SEQ_ACTIVE);
+}
+
 void schedule_t0_trigger(vvp_net_ptr_t ptr)
 {
       vvp_vector4_t bit (1, BIT4_X);
