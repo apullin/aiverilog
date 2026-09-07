@@ -2157,6 +2157,28 @@ void compile_code(char*label, char*mnem, comp_operands_t opa)
 	    }
       }
 
+	/* Fuse %load/vec4 + %parti/s|u (single bit) + %replicate, the
+	   sign-extension idiom. Unlike the fusions above, the fused
+	   operation lives in the last (%replicate) slot, so no runtime
+	   skip is needed: the dead %load/%parti slots run as %noop and
+	   control falls through. The load operands stay two slots back
+	   and the replicate count is the fused slot's own number. */
+      if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
+	  && code == peep_prev_code_ + 2
+	  && (peep_prev_code_->opcode == &of_LOAD_PARTI_S
+	      || peep_prev_code_->opcode == &of_LOAD_PARTI_U)
+	  && static_cast<int32_t>(peep_prev_code_->bit_idx[0]) >= 0
+	  && peep_prev_code_->bit_idx[1] == 1
+	  && code->opcode == &of_REPLICATE) {
+	    peep_prev_code_->opcode = &of_NOOP;
+	    code->opcode = &of_LOAD_PARTI_REPLICATE;
+	    peep_prev_code_ = 0;
+	    peep_fuse_slot_ = codespace_next();
+	    free(opa);
+	    free(mnem);
+	    return;
+      }
+
       if (!peep_disable && peep_prev_code_ && code == peep_fuse_slot_
 	  && peep_prev_code_->opcode == &of_PUSHI_VEC4
 	  && code->opcode == &of_ASSIGN_VEC4

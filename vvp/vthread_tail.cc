@@ -21,6 +21,7 @@
 # include "codes.h"
 # include "vthread.h"
 # include "vvp_net.h"
+# include "vvp_net_sig.h"
 
 /* Append new handlers without shifting the established hot opcode layout. */
 #if defined(__ELF__)
@@ -39,5 +40,26 @@ bool of_XORI(vthread_t thr, vvp_code_t cp)
       vvp_vector4_t&val = const_cast<vvp_vector4_t&>(top);
 
       val.xor_immediate(cp->bit_idx[0], cp->bit_idx[1], cp->number);
+      return true;
+}
+
+/* Loader-fused %load/vec4 + %parti/s|u (single bit) + %replicate, the
+ * sign-extension idiom. The selected bit fills the result directly:
+ * the fill constructor sets every word, so one construction replaces
+ * the %parti temporary plus rept set_vec stamps exactly (the per-bit
+ * read X-pads out-of-range exactly like %parti). The fused slot keeps
+ * the load operands; the replicate count lives on in the dead
+ * %replicate slot's number field (cp+2). */
+VVP_TEXT_TAIL
+bool of_LOAD_PARTI_REPLICATE(vthread_t thr, vvp_code_t cp)
+{
+      /* The fused operation lives in the %replicate slot, so the dead
+       * %load/%parti slots execute as %noop first and control arrives
+       * here with no skip needed. The load operands live two slots
+       * back; the replicate count is this slot's own number. */
+      vvp_code_t load = cp - 2;
+      unsigned use_base = (unsigned)(int32_t)load->bit_idx[0];
+      vvp_vector4_t fill(cp->number, load->signal->value(use_base));
+      vthread_push(thr, fill);
       return true;
 }
