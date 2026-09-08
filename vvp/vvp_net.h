@@ -281,6 +281,10 @@ class vvp_vector4_t {
       friend class vvp_vector4array_t;
       friend class vvp_vector4array_sa;
       friend class vvp_vector4array_aa;
+	// Strength-free reduce4 fast path (defined with the tail
+	// handlers so hot layout is undisturbed). Declaration-only;
+	// emits no code and changes no layout.
+      friend bool reduce4_plain_(const vvp_vector8_t&that, vvp_vector4_t&out);
 
     public:
       static const vvp_vector4_t nil;
@@ -1253,6 +1257,10 @@ extern std::ostream& operator<< (std::ostream&, vvp_scalar_t);
 class vvp_vector8_t {
 
       friend vvp_vector8_t part_expand(const vvp_vector8_t&, unsigned, unsigned);
+	// Strength-free reduce4 fast path (defined with the tail
+	// handlers so hot layout is undisturbed). Declaration-only;
+	// emits no code and changes no layout.
+      friend bool reduce4_plain_(const vvp_vector8_t&that, vvp_vector4_t&out);
 
     public:
       explicit vvp_vector8_t(unsigned size =0);

@@ -21,6 +21,8 @@
 # include "codes.h"
 # include "vthread.h"
 # include "vvp_net.h"
+# include <cassert>
+# include <cstring>
 # include "vvp_net_sig.h"
 
 /* Append new handlers without shifting the established hot opcode layout. */
@@ -41,6 +43,72 @@ bool of_XORI(vthread_t thr, vvp_code_t cp)
 
       val.xor_immediate(cp->bit_idx[0], cp->bit_idx[1], cp->number);
       return true;
+}
+
+/* Slow reduce4 loop (renamed from reduce4 in vvp_net.cc so the fast
+ * path below interposes under the original mangled name). */
+extern vvp_vector4_t reduce4_slow_(const vvp_vector8_t&that);
+
+/* Strength-free reduce4 fast path, interposing under reduce4's own
+ * symbol so every existing caller benefits with no changes at call
+ * sites and no .text growth in vvp_net.o. Gate outputs are almost
+ * always plain 0/1, so decode the strength bytes directly into the
+ * out words instead of per-bit value()/set_bit() calls. Any byte
+ * needing strength, HiZ, or X handling falls back to the exact slow
+ * loop (which fully overwrites out, so partial fills here are
+ * harmless). Bit mapping mirrors vvp_scalar_t::value: hiz (low 7
+ * bits clear) is excluded, 0x00 is 0, 0x88 is 1, anything else falls
+ * back. */
+VVP_TEXT_TAIL
+bool reduce4_plain_(const vvp_vector8_t&that, vvp_vector4_t&out)
+{
+      const unsigned BPW = 8 * sizeof(unsigned long);
+      unsigned n = that.size_;
+      const unsigned char*bytes
+	    = (n <= sizeof(that.val_)) ? that.val_ : that.ptr_;
+      assert(out.size_ == n);
+      if (n <= BPW) {
+	    unsigned long ab = 0;
+	    for (unsigned idx = 0 ; idx < n ; idx += 1) {
+		  unsigned b = bytes[idx];
+		  if ((b & 0x77) == 0)
+			return false;
+		  unsigned v = b & 0x88;
+		  if (v == 0x88)
+			ab |= 1UL << idx;
+		  else if (v != 0x00)
+			return false;
+	    }
+	    out.abits_val_ = ab;
+	    out.bbits_val_ = 0;
+	    return true;
+      }
+      unsigned words = (n + BPW - 1) / BPW;
+      memset(out.abits_ptr_, 0, words * sizeof(unsigned long));
+      memset(out.bbits_ptr_, 0, words * sizeof(unsigned long));
+      for (unsigned idx = 0 ; idx < n ; idx += 1) {
+	    unsigned b = bytes[idx];
+	    if ((b & 0x77) == 0)
+		  return false;
+	    unsigned v = b & 0x88;
+	    if (v == 0x88)
+		  out.abits_ptr_[idx / BPW] |= 1UL << (idx % BPW);
+	    else if (v != 0x00)
+		  return false;
+      }
+      return true;
+}
+
+/* Interpose under reduce4's symbol: fast path first, exact slow loop
+ * on fallback. Same signature as the original, so the mangled name
+ * matches what existing callers reference. */
+VVP_TEXT_TAIL
+vvp_vector4_t reduce4(const vvp_vector8_t&that)
+{
+      vvp_vector4_t out (that.size());
+      if (reduce4_plain_(that, out))
+	    return out;
+      return reduce4_slow_(that);
 }
 
 /* Loader-fused %load/vec4 + %parti/s|u (single bit) + %replicate, the

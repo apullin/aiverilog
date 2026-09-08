@@ -4039,7 +4039,7 @@ unsigned vvp_switch_strength_map[2][8] = {
       }
 };
 
-vvp_vector4_t reduce4(const vvp_vector8_t&that)
+vvp_vector4_t reduce4_slow_(const vvp_vector8_t&that)
 {
       vvp_vector4_t out (that.size());
       for (unsigned idx = 0 ;  idx < out.size() ;  idx += 1)
