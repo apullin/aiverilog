@@ -133,12 +133,31 @@ static int eval_darray_new(ivl_expr_t ex)
 		case IVL_VT_BOOL:
 		case IVL_VT_LOGIC:
 		  wid = ivl_type_packed_width(element_type);
-		  for (idx = 0 ; idx < cnt ; idx += 1) {
+		  if (cnt <= 0) {
 			draw_eval_vec4(init_expr);
-			fprintf(vvp_out, "    %%parti/%c %u, %ld, 6;\n",
-                                ivl_expr_signed(init_expr) ? 's' : 'u', wid, idx * wid);
-			fprintf(vvp_out, "    %%ix/load 3, %ld, 0;\n", cnt - idx - 1);
-			fprintf(vvp_out, "    %%set/dar/obj/vec4 3;\n");
+			fprintf(vvp_out, "    %%pop/vec4 1;\n");
+		  } else if (cnt > 1 && ivl_expr_width(init_expr) == (unsigned)cnt * wid) {
+			draw_eval_vec4(init_expr);
+			if (ivl_type_base(element_type) == IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+			for (idx = 0 ; idx < cnt ; idx += 1) {
+			      fprintf(vvp_out, "    %%dup/vec4;\n");
+			      fprintf(vvp_out, "    %%parti/u %u, %lu, 32;\n",
+				      wid, (unsigned long)(idx * wid));
+			      fprintf(vvp_out, "    %%ix/load 3, %ld, 0;\n", cnt - idx - 1);
+			      fprintf(vvp_out, "    %%set/dar/obj/vec4 3;\n");
+			      fprintf(vvp_out, "    %%pop/vec4 1;\n");
+			}
+			fprintf(vvp_out, "    %%pop/vec4 1;\n");
+		  } else {
+			draw_eval_vec4(init_expr);
+			resize_vec4_wid(init_expr, wid);
+			if (ivl_type_base(element_type) == IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+			for (idx = 0 ; idx < cnt ; idx += 1) {
+			      fprintf(vvp_out, "    %%ix/load 3, %ld, 0;\n", idx);
+			      fprintf(vvp_out, "    %%set/dar/obj/vec4 3;\n");
+			}
 			fprintf(vvp_out, "    %%pop/vec4 1;\n");
 		  }
 		  break;

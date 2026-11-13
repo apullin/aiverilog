@@ -6673,7 +6673,7 @@ NetExpr* PEIdent::elaborate_expr(Design*des, NetScope*scope,
 	    des->errors += 1;
 	    return 0;
       }
-      ivl_assert(*this, ntype->type_compatible(net_ctype));
+      ivl_assert(*this, check_type->type_compatible(net_ctype));
 
       if (debug_elaborate) {
 	    cerr << get_fileline() << ": PEIdent::elaborate_expr: "

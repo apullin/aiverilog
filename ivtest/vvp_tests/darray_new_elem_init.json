@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "darray_new_elem_init.v",
+    "iverilog-args" : [ "-g2012" ]
+}
