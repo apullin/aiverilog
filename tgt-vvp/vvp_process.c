@@ -1946,12 +1946,14 @@ static int show_insert_method(ivl_statement_t net)
 		    fprintf(vvp_out, "    %%qinsert/prop/str %u, %d;\n",
 		            pidx, idx);
 		    break;
-		  default:
+		  default: {
+		    unsigned wid = ivl_type_packed_width(element_type);
 		    draw_eval_vec4(parm2);
+		    resize_vec4_wid(parm2, wid);
 		    fprintf(vvp_out, "    %%qinsert/prop/v %u, %d, %u;\n",
-		            pidx, idx,
-		            ivl_type_packed_width(element_type));
+		            pidx, idx, wid);
 		    break;
+		  }
 	    }
 	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
 	    clr_word(idx);
@@ -1985,12 +1987,14 @@ static int show_insert_method(ivl_statement_t net)
 	    fprintf(vvp_out, "    %%qinsert/str v%p_0, %d;\n",
 	            var, idx);
 	    break;
-	  default:
+	  default: {
+	    unsigned wid = ivl_type_packed_width(element_type);
 	    draw_eval_vec4(parm2);
+	    resize_vec4_wid(parm2, wid);
 	    fprintf(vvp_out, "    %%qinsert/v v%p_0, %d, %u;\n",
-	            var, idx,
-	            ivl_type_packed_width(element_type));
+	            var, idx, wid);
 	    break;
+	  }
       }
       clr_word(idx);
       return 0;
@@ -2039,12 +2043,14 @@ static int show_push_frontback_method(ivl_statement_t net, bool is_front)
 		    fprintf(vvp_out, "    %%store/prop/%s/str %u, %d;\n",
 		            type_code, pidx, idx);
 		    break;
-		  default:
+		  default: {
+		    unsigned wid = ivl_type_packed_width(element_type);
 		    draw_eval_vec4(parm1);
+		    resize_vec4_wid(parm1, wid);
 		    fprintf(vvp_out, "    %%store/prop/%s/v %u, %d, %u;\n",
-		            type_code, pidx, idx,
-		            ivl_type_packed_width(element_type));
+		            type_code, pidx, idx, wid);
 		    break;
+		  }
 	    }
 	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
 	    clr_word(idx);
@@ -2075,12 +2081,14 @@ static int show_push_frontback_method(ivl_statement_t net, bool is_front)
 	    fprintf(vvp_out, "    %%store/%s/str v%p_0, %d;\n",
 	            type_code, var, idx);
 	    break;
-	  default:
+	  default: {
+	    unsigned wid = ivl_type_packed_width(element_type);
 	    draw_eval_vec4(parm1);
+	    resize_vec4_wid(parm1, wid);
 	    fprintf(vvp_out, "    %%store/%s/v v%p_0, %d, %u;\n",
-	            type_code, var, idx,
-	            ivl_type_packed_width(element_type));
+	            type_code, var, idx, wid);
 	    break;
+	  }
       }
       clr_word(idx);
 
