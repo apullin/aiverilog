@@ -1,7 +1,7 @@
 #ifndef IVL_codes_H
 #define IVL_codes_H
 /*
- * Copyright (c) 2001-2021 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2001-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -52,6 +52,7 @@ extern bool of_ASSIGN_WR(vthread_t thr, vvp_code_t code);
 extern bool of_ASSIGN_WRD(vthread_t thr, vvp_code_t code);
 extern bool of_ASSIGN_WRE(vthread_t thr, vvp_code_t code);
 extern bool of_BLEND(vthread_t thr, vvp_code_t code);
+extern bool of_BLEND_STR(vthread_t thr, vvp_code_t code);
 extern bool of_BLEND_WR(vthread_t thr, vvp_code_t code);
 extern bool of_BREAKPOINT(vthread_t thr, vvp_code_t code);
 extern bool of_CALLF_OBJ(vthread_t thr, vvp_code_t code);
@@ -64,6 +65,7 @@ extern bool of_CASSIGN_VEC4(vthread_t thr, vvp_code_t code);
 extern bool of_CASSIGN_VEC4_OFF(vthread_t thr, vvp_code_t code);
 extern bool of_CASSIGN_WR(vthread_t thr, vvp_code_t code);
 extern bool of_CAST2(vthread_t thr, vvp_code_t code);
+extern bool of_CAST_CLASS(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_VEC2_DAR(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_VEC4_DAR(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_VEC4_STR(vthread_t thr, vvp_code_t code);
@@ -103,11 +105,13 @@ extern bool of_DELETE_TAIL(vthread_t thr, vvp_code_t code);
 extern bool of_DISABLE(vthread_t thr, vvp_code_t code);
 extern bool of_DISABLE_FLOW(vthread_t thr, vvp_code_t code);
 extern bool of_DISABLE_FORK(vthread_t thr, vvp_code_t code);
+extern bool of_DISPATCH_VIRT(vthread_t thr, vvp_code_t code);
 extern bool of_DIV(vthread_t thr, vvp_code_t code);
 extern bool of_DIV_S(vthread_t thr, vvp_code_t code);
 extern bool of_DIV_WR(vthread_t thr, vvp_code_t code);
 extern bool of_DUP_OBJ(vthread_t thr, vvp_code_t code);
 extern bool of_DUP_REAL(vthread_t thr, vvp_code_t code);
+extern bool of_DUP_STR(vthread_t thr, vvp_code_t code);
 extern bool of_DUP_VEC4(vthread_t thr, vvp_code_t code);
 extern bool of_END(vthread_t thr, vvp_code_t code);
 extern bool of_EVENT(vthread_t thr, vvp_code_t code);
@@ -132,6 +136,7 @@ extern bool of_FORCE_VEC4_OFF_D(vthread_t thr, vvp_code_t code);
 extern bool of_FORCE_WR(vthread_t thr, vvp_code_t code);
 extern bool of_FORK(vthread_t thr, vvp_code_t code);
 extern bool of_FREE(vthread_t thr, vvp_code_t code);
+extern bool of_GETC(vthread_t thr, vvp_code_t code);
 extern bool of_INV(vthread_t thr, vvp_code_t code);
 extern bool of_IX_ADD(vthread_t thr, vvp_code_t code);
 extern bool of_IX_GETV(vthread_t thr, vvp_code_t code);
@@ -280,13 +285,7 @@ extern bool of_QPOP_PROP_F_V(vthread_t thr, vvp_code_t code);
 extern bool of_PROP_QUEUE_SIZE(vthread_t thr, vvp_code_t code);
 extern bool of_QUEUE_APPEND_WORD_V(vthread_t thr, vvp_code_t code);
 extern bool of_QUEUE_NEW_EMPTY_V(vthread_t thr, vvp_code_t code);
-extern bool of_QUEUE_PRODUCT_PROP_V(vthread_t thr, vvp_code_t code);
-extern bool of_QUEUE_PRODUCT_OBJ_V(vthread_t thr, vvp_code_t code);
-extern bool of_QUEUE_PRODUCT_V(vthread_t thr, vvp_code_t code);
 extern bool of_QUEUE_SIZE_V(vthread_t thr, vvp_code_t code);
-extern bool of_QUEUE_SUM_OBJ_V(vthread_t thr, vvp_code_t code);
-extern bool of_QUEUE_SUM_PROP_V(vthread_t thr, vvp_code_t code);
-extern bool of_QUEUE_SUM_V(vthread_t thr, vvp_code_t code);
 extern bool of_QUEUE_WORD_PROP_V(vthread_t thr, vvp_code_t code);
 extern bool of_QUEUE_WORD_V(vthread_t thr, vvp_code_t code);
 extern bool of_CMPIX_LTU(vthread_t thr, vvp_code_t code);
@@ -348,6 +347,17 @@ extern bool of_TEST_NUL(vthread_t thr, vvp_code_t code);
 extern bool of_TEST_NUL_A(vthread_t thr, vvp_code_t code);
 extern bool of_TEST_NUL_OBJ(vthread_t thr, vvp_code_t code);
 extern bool of_TEST_NUL_PROP(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_AND_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_OR_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_PRODUCT_OBJ_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_PRODUCT_PROP_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_PRODUCT_REAL(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_PRODUCT_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_SUM_OBJ_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_SUM_PROP_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_SUM_REAL(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_SUM_V(vthread_t thr, vvp_code_t code);
+extern bool of_UPARR_XOR_V(vthread_t thr, vvp_code_t code);
 extern bool of_VPI_CALL(vthread_t thr, vvp_code_t code);
 extern bool of_WAIT(vthread_t thr, vvp_code_t code);
 extern bool of_WAIT_FORK(vthread_t thr, vvp_code_t code);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2000-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -91,14 +91,7 @@ NetCase::NetCase(ivl_case_quality_t q, NetCase::TYPE c, NetExpr*ex, unsigned cnt
       ivl_assert(*this, expr_);
 }
 
-NetCase::~NetCase()
-{
-      delete expr_;
-      for (size_t idx = 0 ;  idx < items_.size() ;  idx += 1) {
-	    delete items_[idx].guard;
-	    if (items_[idx].statement) delete items_[idx].statement;
-      }
-}
+NetCase::~NetCase() = default;
 
 NetCase::TYPE NetCase::type() const
 {
@@ -109,15 +102,15 @@ void NetCase::set_case(unsigned idx, NetExpr*e, NetProc*p,
 		       unsigned source_item)
 {
       ivl_assert(*this, idx < items_.size());
-      items_[idx].guard = e;
-      items_[idx].statement = p;
+      items_[idx].guard.reset(e);
+      items_[idx].statement.reset(p);
       items_[idx].source_item = source_item;
 }
 
 void NetCase::prune()
 {
 	// Test whether the case expression has been padded out
-      NetESelect*padded_expr = dynamic_cast<NetESelect*>(expr_);
+      const NetESelect*padded_expr = dynamic_cast<NetESelect*>(expr_.get());
       if ((padded_expr == 0) || (padded_expr->select() != 0))
 	    return;
 
@@ -135,7 +128,7 @@ void NetCase::prune()
 
 	      // If the guard expression is not constant, assume
 	      // all bits are needed, so no pruning can be done.
-	    const NetEConst*gc = dynamic_cast<NetEConst*>(items_[idx].guard);
+	    const NetEConst*gc = dynamic_cast<NetEConst*>(items_[idx].guard.get());
 	    if (gc == 0)
 		  return;
 
@@ -156,24 +149,21 @@ void NetCase::prune()
       }
 
 	// Prune the case expression
-      expr_ = pad_to_width(unpadded_expr->dup_expr(), prune_width,
-                           padded_expr->has_sign(), *expr_);
-      delete padded_expr;
+      expr_.reset(pad_to_width(unpadded_expr->dup_expr(), prune_width,
+                               padded_expr->has_sign(), *expr_));
 
 	// Prune the case item expressions
       for (unsigned idx = 0; idx < items_.size(); idx += 1) {
 	    if (items_[idx].guard == 0)
 		  continue;
 
-	    NetEConst*gc = dynamic_cast<NetEConst*>(items_[idx].guard);
+	    const NetEConst*gc = dynamic_cast<NetEConst*>(items_[idx].guard.get());
 	    ivl_assert(*this, gc);
 
 	    verinum value(gc->value(), prune_width);
 	    NetEConst*tmp = new NetEConst(value);
 	    tmp->set_line(*gc);
-	    delete gc;
-
-	    items_[idx].guard = tmp;
+	    items_[idx].guard.reset(tmp);
       }
 }
 
@@ -196,34 +186,33 @@ NetForever::NetForever(NetProc*p)
 {
 }
 
-NetForever::~NetForever()
-{
-      delete statement_;
-}
+NetForever::~NetForever() = default;
 
-NetForLoop::NetForLoop(NetNet*ind, NetExpr*iexpr, NetExpr*cond, NetProc*sub, NetProc*step)
-: index_(ind), init_expr_(iexpr), condition_(cond), statement_(sub), step_statement_(step)
+NetForLoop::NetForLoop(NetNet*ind, NetExpr*iexpr, NetExpr*cond, NetProc*sub,
+                       NetProc*step)
+: index_(ind), condition_(cond), statement_(sub), step_statement_(step)
 {
-      if (index_ && init_expr_) {
-	    NetAssign_*lv = new NetAssign_(index_);
-	    NetAssign*use_init_statement = new NetAssign(lv, init_expr_);
-	    use_init_statement->set_line(*init_expr_);
-	    init_statement_ = use_init_statement;
-      } else {
-	    init_statement_ = nullptr;
+	// Capture ownership until the expression is transferred to the
+	// generated assignment.
+      std::unique_ptr<NetExpr> initial_expr(iexpr);
+      if (index_ && initial_expr) {
+	    auto lv = new NetAssign_(index_);
+	    init_statement_.reset(new NetAssign(lv, initial_expr.release()));
+	    init_statement_->set_line(*init_expr());
       }
 }
 
-NetForLoop::~NetForLoop()
+const NetExpr*NetForLoop::init_expr() const
 {
-      delete init_expr_;
-      delete condition_;
-      delete statement_;
-      delete step_statement_;
+      if (!init_statement_) return nullptr;
+
+      return init_statement_->rval();
 }
 
+NetForLoop::~NetForLoop() = default;
+
 NetPDelay::NetPDelay(uint64_t d, NetProc*st)
-: delay_(d), expr_(0), statement_(st)
+: delay_(d), expr_(nullptr), statement_(st)
 {
 }
 
@@ -232,10 +221,7 @@ NetPDelay::NetPDelay(NetExpr*d, NetProc*st)
 {
 }
 
-NetPDelay::~NetPDelay()
-{
-      delete expr_;
-}
+NetPDelay::~NetPDelay() = default;
 
 uint64_t NetPDelay::delay() const
 {
@@ -245,7 +231,7 @@ uint64_t NetPDelay::delay() const
 
 const NetExpr* NetPDelay::expr() const
 {
-      return expr_;
+      return expr_.get();
 }
 
 NetRepeat::NetRepeat(NetExpr*e, NetProc*p)
@@ -253,13 +239,9 @@ NetRepeat::NetRepeat(NetExpr*e, NetProc*p)
 {
 }
 
-NetRepeat::~NetRepeat()
-{
-      delete expr_;
-      delete statement_;
-}
+NetRepeat::~NetRepeat() = default;
 
 const NetExpr* NetRepeat::expr() const
 {
-      return expr_;
+      return expr_.get();
 }

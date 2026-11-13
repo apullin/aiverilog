@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2021 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 1999-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -94,6 +94,15 @@ NetEBLogic* NetEBLogic::dup_expr() const
       return tmp;
 }
 
+NetEBMinMax* NetEBMinMax::dup_expr() const
+{
+      auto result = new NetEBMinMax(op_, left_->dup_expr(),
+				   right_->dup_expr(), expr_width(),
+				   has_sign());
+      result->set_line(*this);
+      return result;
+}
+
 NetEBMult* NetEBMult::dup_expr() const
 {
       NetEBMult*tmp = new NetEBMult(op_, left_->dup_expr(), right_->dup_expr(),
@@ -186,7 +195,7 @@ NetEEvent* NetEEvent::dup_expr() const
 
 NetELast* NetELast::dup_expr() const
 {
-      NetELast*tmp = new NetELast(sig_);
+      NetELast*tmp = new NetELast(sig_.get());
       ivl_assert(*this, tmp);
       tmp->set_line(*this);
       return tmp;
@@ -194,8 +203,9 @@ NetELast* NetELast::dup_expr() const
 
 NetENetenum* NetENetenum::dup_expr() const
 {
-      ivl_assert(*this, 0);
-      return 0;
+      auto result = new NetENetenum(netenum_);
+      result->set_line(*this);
+      return result;
 }
 
 NetENew* NetENew::dup_expr() const
@@ -206,14 +216,17 @@ NetENew* NetENew::dup_expr() const
 
 NetENull* NetENull::dup_expr() const
 {
-      ivl_assert(*this, 0);
-      return 0;
+      auto result = new NetENull;
+      result->set_line(*this);
+      return result;
 }
 
 NetEProperty* NetEProperty::dup_expr() const
 {
-      ivl_assert(*this, 0);
-      return 0;
+      auto index = index_ ? index_->dup_expr() : nullptr;
+      auto result = new NetEProperty(net_.get(), pidx_, index);
+      result->set_line(*this);
+      return result;
 }
 
 NetEScope* NetEScope::dup_expr() const
@@ -258,7 +271,7 @@ NetEShallowCopy* NetEShallowCopy::dup_expr() const
 
 NetESignal* NetESignal::dup_expr() const
 {
-      NetESignal*tmp = new NetESignal(net_, word_);
+      NetESignal*tmp = new NetESignal(net_.get(), word_ ? word_->dup_expr() : nullptr);
       ivl_assert(*this, tmp);
       tmp->expr_width(expr_width());
       tmp->cast_signed(has_sign());
@@ -290,6 +303,7 @@ NetEUFunc* NetEUFunc::dup_expr() const
 
       tmp = new NetEUFunc(scope_, func_, result_sig_->dup_expr(), tmp_parms,
                           need_const_);
+      tmp->nonvirtual_ = nonvirtual_;
 
       ivl_assert(*this, tmp);
       tmp->set_line(*this);

@@ -20,6 +20,7 @@
 
 # include  "version_base.h"
 # include  "vpi_priv.h"
+# include  "compile.h"
 # include  "schedule.h"
 # include  "logic.h"
 # include  "part.h"
@@ -856,13 +857,22 @@ void vpip_vec2_get_value(const vvp_vector2_t&word_val, unsigned width,
 	  case vpiSuppressVal:
 	    break;
 
-	  case vpiObjTypeVal:
-	    vp->format = vpiIntVal;
-	    // fallthrough
+	  case vpiBinStrVal: {
+	    char*rbuf = static_cast<char*>(need_result_buf(width+1, RBUF_VAL));
+	    for (unsigned idx = 0; idx < width; idx += 1)
+		  rbuf[width-idx-1] = word_val.value(idx) ? '1' : '0';
+	    rbuf[width] = 0;
+	    vp->value.str = rbuf;
+	    break;
+	  }
+
 	  case vpiIntVal:
 	    vector2_to_value(word_val, vp->value.integer, signed_flag);
 	    break;
 
+	  case vpiObjTypeVal:
+	    vp->format = vpiVectorVal;
+	    // fallthrough
 	  case vpiVectorVal: {
 		unsigned hwid = (width + 31)/32;
 
@@ -1317,6 +1327,9 @@ static vpiHandle vpi_iterate_global(int type)
 
 	  case vpiUserSystf:
 	    return vpip_make_systf_iterator();
+
+	  case vpiInterModPath:
+	    return vpip_make_intermodpath_iterator();
       }
 
       return 0;
@@ -1762,6 +1775,13 @@ vpiHandle vpi_handle_multi(PLI_INT32 type,
 	    return nullptr;
       }
 
+	// Return an existing path before inspecting the rewired connection.
+	// Keep bit selections in the key: base ports alone do not identify it.
+      if (__vpiInterModPath*existing = vpip_find_intermodpath(
+		port1, port2, port1_has_index, port1_bit_index,
+		port2_has_index, port2_bit_index))
+	    return existing;
+
 	// Get the names of both ports
       std::string port1_name(vpi_get_str(vpiName, ref1));
       std::string port2_name(vpi_get_str(vpiName, ref2));
@@ -1896,13 +1916,25 @@ vpiHandle vpi_handle_multi(PLI_INT32 type,
 		    // we have to reassign the __vpiSignal so that the delayed
 		    // values get dumped
 		  if (output_signal && !port2_has_index) {
-			net2->fil = net1->fil;
-			net1->fil = nullptr;
+			if (net2->fil == nullptr) {
+			      net2->fil = net1->fil;
+			      net1->fil = nullptr;
+			} else if (net1->fil != net2->fil) {
+			      if (net1->fil) {
+				    net2->fil->transfer_vpi_callbacks_from(*net1->fil);
+				    compile_replace_signal_value(
+					  net1->fil->as_signal_value(),
+					  net2->fil->as_signal_value());
+			      }
+			      net1->fil = nullptr;
+			}
 			output_signal->node = net2;
 		  }
 
 		    // Create the VPI intermodpath object
-		  __vpiInterModPath* intermodpath = vpip_make_intermodpath(new_net, port1, port2);
+		  __vpiInterModPath* intermodpath = vpip_make_intermodpath(
+			new_net, port1, port2, port1_has_index, port1_bit_index,
+			port2_has_index, port2_bit_index);
 		  intermodpath->intermodpath = obj;
 
 		    // Finally done, return the intermodpath object

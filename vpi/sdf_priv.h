@@ -1,7 +1,7 @@
 #ifndef IVL_sdf_priv_h
 #define IVL_sdf_priv_h
 /*
- * Copyright (c) 2007-2023 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2007-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -34,6 +34,11 @@ extern int sdf_flag_inform;
 
 extern int sdf_min_typ_max;
 
+/* The timescale given in the SDF file header, expressed in seconds
+   (for example 1ps is 1.0e-12). IEEE 1497 makes 1ns the default when the
+   header contains no (TIMESCALE ...) entry. */
+extern double sdf_timescale;
+
 /* ****
  * These functions are called by the parser to process the SDF file as
  * it is parsed.
@@ -63,6 +68,8 @@ struct interconnect_port_s {
 extern void sdf_select_instance(const char*celltype, const char*inst,
                                 const int sdf_lineno);
 
+extern void sdf_cond_iopath_delays(const char*key, int edge, const char*src, const char*dst,
+                                   const struct sdf_delval_list_s*values, int line);
 extern void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
                               const struct sdf_delval_list_s*delval,
                               const int sdf_lineno);
@@ -70,6 +77,7 @@ extern void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
 extern void sdf_interconnect_delays(struct interconnect_port_s port1,
                                     struct interconnect_port_s port2,
                                     const struct sdf_delval_list_s*delval_list,
+                                    bool increment,
                                     const int sdf_lineno);
 
 #endif /* IVL_sdf_priv_h */

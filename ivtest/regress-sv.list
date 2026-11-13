@@ -2,7 +2,7 @@
 # supports SystemVerilog (1800-2012).
 
 #
-# Copyright (c) 1999-2021 Guy Hutchison (ghutchis@pacbell.net)
+# Copyright (c) 1999-2026 Guy Hutchison (ghutchis@pacbell.net)
 #
 #    This source code is free software; you can redistribute it
 #    and/or modify it in source code form under the terms of the GNU
@@ -231,15 +231,22 @@ br_gh782b		normal,-g2009		ivltests gold=br_gh782b.gold
 br_gh800		normal,-g2009		ivltests
 br_gh801		normal,-g2012		ivltests
 br_gh801b		normal,-g2012		ivltests
+br_gh1112a		CE,-g2009		ivltests gold=br_gh1112a.gold
+br_gh1112b		CE,-g2009		ivltests gold=br_gh1112b.gold
+br_gh1112c		CE,-g2009		ivltests gold=br_gh1112c.gold
 br_gh1140c		CE,-g2009		ivltests gold=br_gh1140c.gold
 br_gh1466		CE,-g2012		ivltests gold=br_gh1466.gold
-br_gh1459		normal,-g2012		ivltests
 br_gh1220		normal,-g2012		ivltests
 br_gh1222		CE,-g2009		ivltests gold=br_gh1222.gold
 br_gh1223a		normal,-g2009		ivltests
 br_gh1223b		normal,-g2009		ivltests
 br_gh1223c		normal,-g2009		ivltests
 br_gh1230		normal,-g2009		ivltests
+br_gh1268b		normal,-g2009		ivltests
+br_gh1268c		CE,-g2009		ivltests
+br_gh1298		normal,-g2005-sv	ivltests
+br_gh1449		normal,-g2009		ivltests
+br_gh1459		normal,-g2005-sv	ivltests
 br_ml20171017		normal,-g2009		ivltests
 br_ml20180227		CE,-g2009		ivltests
 br_ml20180309a		normal,-g2009		ivltests
@@ -424,7 +431,8 @@ net_string_fail		CE,-g2005-sv		ivltests
 package_vec_part_select	normal,-g2005-sv	ivltests
 packeda			normal,-g2009		ivltests
 packeda2		normal,-g2009		ivltests
-param_string_compare	normal,-g2009		ivltests
+param_string_compare	normal,-g2005-sv	ivltests
+param_string_compare_err	CE,-g2005-sv	ivltests gold=param_string_compare_err.gold
 parameter_in_generate2	CE,-g2005-sv		ivltests
 parameter_no_default	normal,-g2005-sv	ivltests
 parameter_no_default_fail1 CE			ivltests
@@ -477,6 +485,7 @@ sbyte_test		normal,-g2005-sv	ivltests
 scalar_vector		normal,-g2005-sv	ivltests
 sf_countbits		normal,-g2012		ivltests
 sf_countones		normal,-g2009		ivltests
+sf_countones_inline	normal,-g2009		ivltests
 sf_isunknown		normal,-g2005-sv	ivltests
 sf_onehot		normal,-g2005-sv	ivltests
 sf_onehot0		normal,-g2005-sv	ivltests
@@ -496,6 +505,8 @@ size_cast_fail2		CE,-g2009		ivltests
 size_cast_fail3		CE,-g2009		ivltests
 slongint_test		normal,-g2005-sv	ivltests
 sshortint_test		normal,-g2005-sv	ivltests
+string_compare		normal,-g2005-sv	ivltests
+string_compare_err	CE,-g2005-sv		ivltests gold=string_compare_err.gold
 string_events		normal,-g2009		ivltests gold=string_events.gold
 string_index		normal,-g2005-sv	ivltests
 struct1			normal,-g2009		ivltests
@@ -998,8 +1009,6 @@ partsel_real_idx	CE,-g2012		ivltests gold=partsel_real_idx.gold
 ipsdownsel_real_idx	CE,-g2012		ivltests gold=ipsdownsel_real_idx.gold
 ipsupsel_real_idx	CE,-g2012		ivltests gold=ipsupsel_real_idx.gold
 real_edges		CE,-g2012		ivltests gold=real_edges.gold
-br_gh1112		CE,-g2009		ivltests gold=br_gh1112.gold
-br_gh1134		normal,-g2012		ivltests
 br_gh1140		CE,-g2012		ivltests gold=br_gh1140.gold
 br_gh1267		normal,-g2012		ivltests
 br_gh1268		normal,-g2012		ivltests
@@ -1009,7 +1018,6 @@ br_gh455		CE,-g2005		ivltests gold=br_gh455.gold
 br_gh455_ok		normal,-g2012		ivltests
 br_gh1016		normal,-g2012		ivltests
 br_gh1276		CE,-g2012		ivltests gold=br_gh1276.gold
-br_gh1298		normal,-g2012		ivltests
 br_gh1317		CE,-g2012		ivltests gold=br_gh1317.gold
 br_gh1321		normal,-g2012		ivltests
 br_gh1321_bad		CE,-g2012		ivltests

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2004-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2004-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -242,7 +242,7 @@ void waitable_hooks_s::run_waiting_threads_(vthread_t&threads)
       vthread_schedule_list(tmp);
 }
 
-evctl::evctl(unsigned long ecount)
+evctl::evctl(uint64_t ecount)
 {
       ecount_ = ecount;
       next = 0;
@@ -259,7 +259,7 @@ bool evctl::dec_and_run()
 }
 
 evctl_real::evctl_real(__vpiHandle*handle, double value,
-                       unsigned long ecount)
+                       uint64_t ecount)
 :evctl(ecount)
 {
       handle_ = handle;
@@ -276,7 +276,7 @@ void evctl_real::run_run()
 }
 
 void schedule_evctl(__vpiHandle*handle, double value,
-                    vvp_net_t*event, unsigned long ecount)
+                    vvp_net_t*event, uint64_t ecount)
 {
 	// Get the functor we are going to wait on.
       waitable_hooks_s*ep = dynamic_cast<waitable_hooks_s*> (event->fun);
@@ -287,7 +287,7 @@ void schedule_evctl(__vpiHandle*handle, double value,
 }
 
 evctl_vector::evctl_vector(vvp_net_ptr_t ptr, const vvp_vector4_t&value,
-                           unsigned off, unsigned wid, unsigned long ecount)
+                           unsigned off, unsigned wid, uint64_t ecount)
 :evctl(ecount), ptr_(ptr), value_(value)
 {
       off_ = off;
@@ -305,7 +305,7 @@ void evctl_vector::run_run()
 
 void schedule_evctl(vvp_net_ptr_t ptr, const vvp_vector4_t&value,
                     unsigned offset, unsigned wid,
-                    vvp_net_t*event, unsigned long ecount)
+                    vvp_net_t*event, uint64_t ecount)
 {
 	// Get the functor we are going to wait on.
       waitable_hooks_s*ep = dynamic_cast<waitable_hooks_s*> (event->fun);
@@ -317,7 +317,7 @@ void schedule_evctl(vvp_net_ptr_t ptr, const vvp_vector4_t&value,
 
 evctl_array::evctl_array(vvp_array_t memory, unsigned index,
                          const vvp_vector4_t&value, unsigned off,
-                         unsigned long ecount)
+                         uint64_t ecount)
 :evctl(ecount), value_(value)
 {
       mem_ = memory;
@@ -332,7 +332,7 @@ void evctl_array::run_run()
 
 void schedule_evctl(vvp_array_t memory, unsigned index,
                     const vvp_vector4_t&value, unsigned offset,
-                    vvp_net_t*event, unsigned long ecount)
+                    vvp_net_t*event, uint64_t ecount)
 {
 	// Get the functor we are going to wait on.
       waitable_hooks_s*ep = dynamic_cast<waitable_hooks_s*> (event->fun);
@@ -343,7 +343,7 @@ void schedule_evctl(vvp_array_t memory, unsigned index,
 }
 
 evctl_array_r::evctl_array_r(vvp_array_t memory, unsigned index,
-                             double value, unsigned long ecount)
+                             double value, uint64_t ecount)
 :evctl(ecount)
 {
       mem_ = memory;
@@ -358,7 +358,7 @@ void evctl_array_r::run_run()
 
 void schedule_evctl(vvp_array_t memory, unsigned index,
                     double value,
-                    vvp_net_t*event, unsigned long ecount)
+                    vvp_net_t*event, uint64_t ecount)
 {
 	// Get the functor we are going to wait on.
       waitable_hooks_s*ep = dynamic_cast<waitable_hooks_s*> (event->fun);
@@ -664,6 +664,8 @@ struct vvp_fun_anyedge_state_s : public waitable_state_s {
       }
 
       anyedge_value *last_value_[4];
+      vvp_fun_anyedge_state_s(const vvp_fun_anyedge_state_s&) = delete;
+      vvp_fun_anyedge_state_s& operator=(const vvp_fun_anyedge_state_s&) = delete;
 };
 
 vvp_fun_anyedge::vvp_fun_anyedge()

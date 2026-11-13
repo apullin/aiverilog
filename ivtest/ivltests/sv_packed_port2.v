@@ -7,7 +7,7 @@ module main;
    } foo_s;
 
    foo_s [3:0][1:0] ival;
-   wire foo_s [3:0][1:0] oval;
+   foo_s [3:0][1:0] oval;
 
    genvar	    g;
    for (g = 0 ; g < 4 ; g = g+1) begin:loop
@@ -18,7 +18,8 @@ module main;
    initial begin
       ival = 'hx3x2x1x0;
       #1 $display("ival = %h, oval = %h", ival, oval);
-      if (oval !== 64'hzzxxzzxxzzxdzzxf) begin
+      // Unassigned packed-variable elements retain their default X.
+      if (oval !== 64'hxxxxxxxxxxxdxxxf) begin
 	 $display("FAILED -- oval=%h", oval);
 	 $finish;
       end

@@ -80,6 +80,7 @@ class NetEvWait;
 class PClass;
 class PExpr;
 class PFunction;
+class PGate;
 class PModport;
 class PPackage;
 class PTaskFunc;
@@ -634,6 +635,8 @@ class NetDelaySrc  : public NetObj {
       const Link&condit_pin() const;
 
       bool is_parallel() const;
+      std::string sdf_condition;
+      std::string sdf_condition_text;
 
       void dump(std::ostream&, unsigned ind) const;
 
@@ -889,6 +892,78 @@ class NetNet  : public NetObj, public PortType {
 };
 
 /*
+ * Keep a signal referenced while it is used by an expression or l-value.
+ * These references prevent optimization from removing the signal; they
+ * do not own or delete it. Use get() for a borrowed signal pointer.
+ */
+template <void (NetNet::*acquire)(), void (NetNet::*release)()>
+class NetNetRef {
+    public:
+      explicit NetNetRef(NetNet*net = nullptr)
+      : net_(net)
+      {
+	    if (net_) (net_->*acquire)();
+      }
+
+      NetNetRef(const NetNetRef&that)
+      : NetNetRef(that.net_)
+      {
+      }
+
+      NetNetRef(NetNetRef&&that) noexcept
+      : net_(that.net_)
+      {
+	    that.net_ = nullptr;
+      }
+
+      ~NetNetRef()
+      {
+	    if (net_) (net_->*release)();
+      }
+
+      NetNetRef&operator=(NetNetRef that) noexcept
+      {
+	    swap(that);
+	    return *this;
+      }
+
+      void swap(NetNetRef&that) noexcept
+      {
+	    std::swap(net_, that.net_);
+      }
+
+      NetNet*get() const
+      {
+	    return net_;
+      }
+
+      NetNet*operator->() const
+      {
+	    return net_;
+      }
+
+      explicit operator bool() const
+      {
+	    return net_ != nullptr;
+      }
+
+    private:
+      NetNet*net_;
+};
+
+/*
+ * Use for signals read by expressions or synthesized array-read nodes.
+ * The expression reference count keeps these signals from being removed.
+ */
+using NetERef = NetNetRef<&NetNet::incr_eref, &NetNet::decr_eref>;
+
+/*
+ * Use for signals targeted by procedural assignment l-values. The l-value
+ * reference count also records that the signal is procedurally assigned.
+ */
+using NetLRef = NetNetRef<&NetNet::incr_lref, &NetNet::decr_lref>;
+
+/*
  * This object type is used for holding local variable values when
  * evaluating constant user functions.
  */
@@ -1013,6 +1088,13 @@ class NetScope : public Definitions, public Attrib {
 
 	/* Locate the scope that owns the resolved typedef object. */
       NetScope*find_typedef_scope(const Design*des, const typedef_t*type_i);
+
+	/* Record PGate names before elaborating types and expressions.
+	   Instances without child scopes still hide outer declarations once
+	   the instance has been declared. */
+      void add_gate_names(const std::list<PGate*>&gates);
+      bool gate_name_is_visible(perm_string name,
+				unsigned int lexical_pos) const;
 
 	/* Parameters exist within a scope, and these methods allow
 	   one to manipulate the set. In these cases, the name is the
@@ -1188,6 +1270,11 @@ class NetScope : public Definitions, public Attrib {
       void is_auto(bool is_auto__) { is_auto_ = is_auto__; };
       bool is_auto() const { return is_auto_; };
 
+	/* Was the method declared with the "virtual" qualifier. Use
+	   netclass_t::virtual_root() to also account for inheritance. */
+      void is_virtual(bool is_virtual__) { is_virtual_ = is_virtual__; };
+      bool is_virtual() const { return is_virtual_; };
+
 	/* Is the module a cell (is in a `celldefine) */
       void is_cell(bool is_cell__) { is_cell_ = is_cell__; };
       bool is_cell() const { return is_cell_; };
@@ -1342,8 +1429,9 @@ class NetScope : public Definitions, public Attrib {
 
       LineInfo get_parameter_line_info(perm_string name) const;
 
-      unsigned int get_constant_lexical_pos(perm_string name,
-					    bool &is_enum_name) const;
+      bool get_constant_lexical_pos(perm_string name,
+				    unsigned int &lexical_pos,
+				    bool &is_enum_name) const;
       void set_constant_lexical_pos(perm_string name,
 				    unsigned int lexical_pos);
 
@@ -1392,6 +1480,8 @@ class NetScope : public Definitions, public Attrib {
 
       std::map<perm_string,typedef_t*>typedefs_;
 
+      std::map<perm_string,unsigned int> gate_names_;
+
       NetEvent *events_;
 
       std::map<perm_string,LineInfo*> genvars_;
@@ -1422,7 +1512,7 @@ class NetScope : public Definitions, public Attrib {
       std::map<perm_string,std::map<long,interface_port_alias_t> > interface_port_alias_arrays_;
 
       unsigned lcounter_;
-      bool need_const_func_, is_const_func_, is_auto_, is_cell_, calls_stask_;
+      bool need_const_func_, is_const_func_, is_auto_, is_virtual_, is_cell_, calls_stask_;
 
       /* Final procedures sets this to notify statements that
 	 they are part of a final procedure. */
@@ -1512,7 +1602,7 @@ class NetArrayDq  : public NetNode {
       virtual bool emit_node(struct target_t*) const override;
 
     private:
-      NetNet*mem_;
+      NetERef mem_;
       unsigned awidth_;
 
 };
@@ -2114,6 +2204,8 @@ class NetTran  : public NetNode, public IslandBranch {
  */
 class NetExpr  : public LineInfo {
     public:
+      using Ptr = std::unique_ptr<NetExpr>;
+
       explicit NetExpr(unsigned w =0);
       explicit NetExpr(ivl_type_t t);
       virtual ~NetExpr() override =0;
@@ -2772,6 +2864,8 @@ enum DelayType { NO_DELAY, ZERO_DELAY, POSSIBLE_DELAY, DEFINITE_DELAY };
 class NetProc : public virtual LineInfo {
 
     public:
+      using Ptr = std::unique_ptr<NetProc>;
+
       explicit NetProc();
       virtual ~NetProc() override;
 
@@ -2969,11 +3063,12 @@ class NetAssign_ {
       void set_property(const perm_string&name, unsigned int idx);
       inline int get_property_idx(void) const { return member_idx_; }
 
-	// Determine if the assigned object is signed or unsigned.
-	// This is used when determining the expression type for
-	// a compressed assignment statement.
-      bool get_signed() const { return signed_; }
-      void set_signed(bool flag) { signed_ = flag; }
+	// Return the l-value's signedness for compound assignments.
+      bool get_signed() const;
+	// Treat the l-value as an unsigned integral assignment target, without
+	// the declared type's assignment restrictions. Its width and two-state
+	// or four-state behavior are preserved.
+      void set_untyped();
 
 	// Get the width of the r-value that this node expects. This
 	// method accounts for the presence of the mux, so it is not
@@ -3014,16 +3109,21 @@ class NetAssign_ {
       void dump_lval(std::ostream&o) const;
 
     private:
+	// Return the type of this l-value component, if any. Return nullptr
+	// if more components follow. Unlike net_type(), this retains the type
+	// when the component is marked untyped.
+      ivl_type_t component_type() const;
+
 	// Nested l-value. If this is set, sig_ must NOT be set!
       NetAssign_*nest_;
-      NetNet *sig_;
+      NetLRef sig_;
 	// Memory word index
       NetExpr*word_;
 	// member/property if signal is a class.
       perm_string member_;
       int member_idx_ = -1;
 
-      bool signed_;
+      bool untyped_ = false;
       bool turn_sig_to_wire_on_release_;
 	// indexed part select base
       NetExpr*base_;
@@ -3119,8 +3219,8 @@ class NetAssignNB  : public NetAssignBase {
       const NetExpr* get_count() const;
 
     private:
-      NetEvWait*event_;
-      NetExpr*count_;
+      std::unique_ptr<NetEvWait>event_;
+      NetExpr::Ptr count_;
 };
 
 /*
@@ -3223,11 +3323,11 @@ class NetCase  : public NetProc {
 
       inline ivl_case_quality_t case_quality() const { return quality_; }
       TYPE type() const;
-      const NetExpr*expr() const { return expr_; }
+      const NetExpr*expr() const { return expr_.get(); }
       inline unsigned nitems() const { return items_.size(); }
 
-      inline const NetExpr*expr(unsigned idx) const { return items_[idx].guard;}
-      inline const NetProc*stat(unsigned idx) const { return items_[idx].statement; }
+      inline const NetExpr*expr(unsigned idx) const { return items_[idx].guard.get(); }
+      inline const NetProc*stat(unsigned idx) const { return items_[idx].statement.get(); }
       inline unsigned source_item(unsigned idx) const
       { return items_[idx].source_item; }
 
@@ -3260,13 +3360,12 @@ class NetCase  : public NetProc {
       TYPE type_;
 
       struct Item {
-	    inline Item() : guard(0), statement(0), source_item(0) { }
-	    NetExpr*guard;
-	    NetProc*statement;
-	    unsigned source_item;
+	    NetExpr::Ptr guard;
+	    NetProc::Ptr statement;
+	    unsigned source_item = 0;
       };
 
-      NetExpr* expr_;
+      NetExpr::Ptr expr_;
       std::vector<Item>items_;
 };
 
@@ -3340,9 +3439,9 @@ class NetCondit  : public NetProc {
                                      std::map<perm_string,LocalVar>&ctx) const override;
 
     private:
-      NetExpr* expr_;
-      NetProc*if_;
-      NetProc*else_;
+      NetExpr::Ptr expr_;
+      NetProc::Ptr if_;
+      NetProc::Ptr else_;
 };
 
 class NetContinue : public NetProc {
@@ -3371,8 +3470,8 @@ class NetContribution : public NetProc {
       virtual void dump(std::ostream&, unsigned ind) const override;
 
     private:
-      NetEAccess*lval_;
-      NetExpr*rval_;
+      std::unique_ptr<NetEAccess>lval_;
+      NetExpr::Ptr rval_;
 };
 
 /*
@@ -3447,7 +3546,7 @@ class NetDoWhile  : public NetProc {
       NetDoWhile(NetExpr*c, NetProc*p)
       : cond_(c), proc_(p) { }
 
-      const NetExpr*expr() const { return cond_; }
+      const NetExpr*expr() const { return cond_.get(); }
 
       void emit_proc_recurse(struct target_t*) const;
 
@@ -3462,8 +3561,8 @@ class NetDoWhile  : public NetProc {
                                      std::map<perm_string,LocalVar>&ctx) const override;
 
     private:
-      NetExpr* cond_;
-      NetProc*proc_;
+      NetExpr::Ptr cond_;
+      NetProc::Ptr proc_;
 };
 
 /*
@@ -3628,7 +3727,7 @@ class NetEvNBTrig  : public NetProc {
 
     private:
       NetEvent*event_;
-      NetExpr*dly_;
+      NetExpr::Ptr dly_;
 	// This is used to place me in the NetEvents lists of triggers.
       NetEvNBTrig*enext_;
 };
@@ -3687,7 +3786,7 @@ class NetEvWait  : public NetProc {
       virtual bool check_synth(ivl_process_type_t pr_type, const NetScope*scope) const override;
 
     private:
-      NetProc*statement_;
+      NetProc::Ptr statement_;
 	// Events that I might wait for.
       std::vector<NetEvent*>events_;
       bool has_t0_trigger_;
@@ -3761,7 +3860,7 @@ class NetForever : public NetProc {
 				     std::map<perm_string,LocalVar>&ctx) const override;
 
     private:
-      NetProc*statement_;
+      NetProc::Ptr statement_;
 };
 
 class NetForLoop : public NetProc {
@@ -3794,12 +3893,13 @@ class NetForLoop : public NetProc {
 		       NetBus&enables, std::vector<mask_t>&bitmasks) override;
 
     private:
+      const NetExpr*init_expr() const;
+
       NetNet*index_;
-      NetExpr*init_expr_;
-      NetProc*init_statement_; // Generated form index_ and init_expr_.
-      NetExpr*condition_;
-      NetProc*statement_;
-      NetProc*step_statement_;
+      std::unique_ptr<NetAssign>init_statement_; // Assignment to index_.
+      NetExpr::Ptr condition_;
+      NetProc::Ptr statement_;
+      NetProc::Ptr step_statement_;
 };
 
 class NetFree   : public NetProc {
@@ -3897,8 +3997,8 @@ class NetPDelay  : public NetProc {
 
     private:
       uint64_t delay_;
-      NetExpr*expr_;
-      NetProc*statement_;
+      NetExpr::Ptr expr_;
+      NetProc::Ptr statement_;
 };
 
 /*
@@ -3924,8 +4024,8 @@ class NetRepeat : public NetProc {
 				     std::map<perm_string,LocalVar>&ctx) const override;
 
     private:
-      NetExpr*expr_;
-      NetProc*statement_;
+      NetExpr::Ptr expr_;
+      NetProc::Ptr statement_;
 };
 
 /*
@@ -3978,9 +4078,9 @@ class NetSTask  : public NetProc {
                                      std::map<perm_string,LocalVar>&ctx) const override;
 
     private:
-      const char* name_;
+      perm_string name_;
       ivl_sfunc_as_task_t sfunc_as_task_;
-      std::vector<NetExpr*>parms_;
+      std::vector<NetExpr::Ptr>parms_;
 };
 
 /*
@@ -4022,7 +4122,7 @@ class NetELast : public NetExpr {
       explicit NetELast(NetNet*sig);
       ~NetELast() override;
 
-      inline const NetNet*sig() const { return sig_; }
+      inline const NetNet*sig() const { return sig_.get(); }
 
       virtual ivl_variable_type_t expr_type() const override;
       virtual void dump(std::ostream&) const override;
@@ -4033,7 +4133,7 @@ class NetELast : public NetExpr {
                                   bool nested_func = false) const override;
 
     private:
-      NetNet*sig_;
+      NetERef sig_;
 };
 
 /*
@@ -4054,6 +4154,12 @@ class NetEUFunc  : public NetExpr {
 
       const NetScope* func() const;
 
+	// A call to a virtual method is normally dispatched on the
+	// class of the object. A non-virtual call (super.method())
+	// runs the selected method directly.
+      void set_nonvirtual(bool flag) { nonvirtual_ = flag; }
+      bool nonvirtual() const { return nonvirtual_; }
+
       virtual void dump(std::ostream&) const override;
 
       virtual void expr_scan(struct expr_scan_t*) const override;
@@ -4072,6 +4178,7 @@ class NetEUFunc  : public NetExpr {
       NetESignal*result_sig_;
       std::vector<NetExpr*> parms_;
       bool need_const_;
+      bool nonvirtual_;
 
     private: // not implemented
       NetEUFunc(const NetEUFunc&);
@@ -4118,6 +4225,10 @@ class NetUTask  : public NetProc {
 
       const NetScope* task() const;
 
+	// See NetEUFunc::set_nonvirtual().
+      void set_nonvirtual(bool flag) { nonvirtual_ = flag; }
+      bool nonvirtual() const { return nonvirtual_; }
+
       virtual NexusSet* nex_input(bool rem_out = true, bool always_sens = false,
                                   bool nested_func = false) const override;
       virtual void nex_output(NexusSet&) override;
@@ -4128,6 +4239,7 @@ class NetUTask  : public NetProc {
 
     private:
       NetScope*task_;
+      bool nonvirtual_;
 };
 
 /*
@@ -4141,7 +4253,7 @@ class NetWhile  : public NetProc {
       NetWhile(NetExpr*c, NetProc*p)
       : cond_(c), proc_(p) { }
 
-      const NetExpr*expr() const { return cond_; }
+      const NetExpr*expr() const { return cond_.get(); }
 
       void emit_proc_recurse(struct target_t*) const;
 
@@ -4156,8 +4268,8 @@ class NetWhile  : public NetProc {
 				     std::map<perm_string,LocalVar>&ctx) const override;
 
     private:
-      NetExpr*cond_;
-      NetProc*proc_;
+      NetExpr::Ptr cond_;
+      NetProc::Ptr proc_;
 };
 
 
@@ -4455,6 +4567,7 @@ class NetEBMinMax : public NetEBinary {
       ~NetEBMinMax() override;
 
       virtual ivl_variable_type_t expr_type() const override;
+      virtual NetEBMinMax* dup_expr() const override;
 
     private:
       virtual NetExpr* eval_arguments_(const NetExpr*l, const NetExpr*r) const override;
@@ -4616,8 +4729,8 @@ class NetESelect  : public NetExpr {
       virtual void dump(std::ostream&) const override;
 
     private:
-      NetExpr*expr_;
-      NetExpr*base_;
+      NetExpr::Ptr expr_;
+      NetExpr::Ptr base_;
       ivl_select_type_t sel_type_;
 };
 
@@ -4675,8 +4788,8 @@ class NetENew : public NetExpr {
       explicit NetENew(ivl_type_t, NetExpr*size, NetExpr* init_val=0);
       ~NetENew() override;
 
-      inline const NetExpr*size_expr() const { return size_; }
-      inline const NetExpr*init_expr() const { return init_val_; }
+      inline const NetExpr*size_expr() const { return size_.get(); }
+      inline const NetExpr*init_expr() const { return init_val_.get(); }
 
       virtual ivl_variable_type_t expr_type() const override;
 
@@ -4688,8 +4801,8 @@ class NetENew : public NetExpr {
       virtual void dump(std::ostream&os) const override;
 
     private:
-      NetExpr*size_;
-      NetExpr*init_val_;
+      NetExpr::Ptr size_;
+      NetExpr::Ptr init_val_;
 };
 
 /*
@@ -4723,9 +4836,9 @@ class NetEProperty : public NetExpr {
       NetEProperty(NetNet*n, size_t pidx_, NetExpr*canon_index =0);
       ~NetEProperty() override;
 
-      inline const NetNet* get_sig() const { return net_; }
+      inline const NetNet* get_sig() const { return net_.get(); }
       inline size_t property_idx() const { return pidx_; }
-      inline const NetExpr*get_index() const { return index_; }
+      inline const NetExpr*get_index() const { return index_.get(); }
 
     public: // Overridden methods
       virtual void expr_scan(struct expr_scan_t*) const override;
@@ -4736,9 +4849,9 @@ class NetEProperty : public NetExpr {
       virtual void dump(std::ostream&os) const override;
 
     private:
-      NetNet*net_;
+      NetERef net_;
       size_t pidx_;
-      NetExpr*index_;
+      NetExpr::Ptr index_;
 };
 
 /*
@@ -4865,7 +4978,7 @@ class NetESFunc  : public NetExpr {
 	    return func & (1U << (nargs + 16));
       }
 
-      const char* name_;
+      perm_string name_;
       ivl_variable_type_t type_;
       std::vector<NetExpr*>parms_;
       bool is_overridden_;
@@ -4933,8 +5046,8 @@ class NetEShallowCopy : public NetExpr {
       void expr_scan_oper2(struct expr_scan_t*) const;
 
     private:
-      NetExpr*arg1_;
-      NetExpr*arg2_;
+      NetExpr::Ptr arg1_;
+      NetExpr::Ptr arg2_;
 };
 
 /*
@@ -4971,9 +5084,9 @@ class NetETernary  : public NetExpr {
     private:
       NetExpr* blended_arguments_(const NetExpr*t, const NetExpr*f) const;
 
-      NetExpr*cond_;
-      NetExpr*true_val_;
-      NetExpr*false_val_;
+      NetExpr::Ptr cond_;
+      NetExpr::Ptr true_val_;
+      NetExpr::Ptr false_val_;
 };
 
 /*
@@ -5006,7 +5119,7 @@ class NetEUnary  : public NetExpr {
       ~NetEUnary() override;
 
       char op() const { return op_; }
-      const NetExpr* expr() const { return expr_; }
+      const NetExpr* expr() const { return expr_.get(); }
 
       virtual NetEUnary* dup_expr() const override;
       virtual NetExpr* eval_tree() override;
@@ -5022,7 +5135,7 @@ class NetEUnary  : public NetExpr {
 
     protected:
       char op_;
-      NetExpr* expr_;
+      NetExpr::Ptr expr_;
 
     private:
       virtual NetExpr* eval_arguments_(const NetExpr*ex) const;
@@ -5117,9 +5230,9 @@ class NetESignal  : public NetExpr {
       virtual void dump(std::ostream&) const override;
 
     private:
-      NetNet*net_;
+      NetERef net_;
 	// Expression to select a word from the net.
-      NetExpr*word_;
+      std::unique_ptr<NetExpr> word_;
 };
 
 /*

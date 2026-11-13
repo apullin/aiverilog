@@ -1,7 +1,7 @@
 
 %{
 /*
- * Copyright (c) 2001-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2001-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -100,8 +100,9 @@ static struct __vpiModPath*modpath_dst = 0;
 %token K_SCOPE K_SFUNC K_SFUNC_E K_SHIFTL K_SHIFTR K_SHIFTRS
 %token K_SUBSTITUTE
 %token K_THREAD K_TIMESCALE K_TRAN K_TRANIF0 K_TRANIF1 K_TRANVP
-%token K_UFUNC_REAL K_UFUNC_VEC4 K_UFUNC_E K_UDP K_UDP_C K_UDP_S
-%token K_VAR K_VAR_COBJECT K_VAR_DARRAY
+%token K_UFUNC_REAL K_UFUNC_REAL_E K_UFUNC_VEC4 K_UFUNC_E K_UDP K_UDP_C K_UDP_S
+%token K_VAR K_VAR_COBJECT K_VAR_DARRAY K_VIRT
+%token K_SUPER
 %token K_VAR_QUEUE
 %token K_VAR_S K_VAR_STR K_VAR_I K_VAR_R K_VAR_2S K_VAR_2U
 %token K_vpi_call K_vpi_call_w K_vpi_call_i
@@ -124,6 +125,7 @@ static struct __vpiModPath*modpath_dst = 0;
 %type <symb>  symbol symbol_opt
 %type <symbv> symbols symbols_net
 %type <numbv> numbers
+%type <text> enum_ref_opt
 %type <text> label_opt
 %type <opa>  operand operands operands_opt
 %type <table> udp_table
@@ -271,6 +273,11 @@ statement
       { compile_ufunc_real($1, $3, $5, 0, 0, 0, 0, $7, strdup("E_0x0")); }
   | T_LABEL K_UFUNC_REAL T_SYMBOL ',' T_NUMBER ',' symbols '(' symbols ')' T_SYMBOL ';'
       { compile_ufunc_real($1, $3, $5, $7.cnt, $7.vect, $9.cnt, $9.vect, $11, 0); }
+
+  | T_LABEL K_UFUNC_REAL_E T_SYMBOL ',' T_NUMBER ',' T_SYMBOL ',' T_SYMBOL ';'
+      { compile_ufunc_real($1, $3, $5, 0, nullptr, 0, nullptr, $9, $7); }
+  | T_LABEL K_UFUNC_REAL_E T_SYMBOL ',' T_NUMBER ',' T_SYMBOL ',' symbols '(' symbols ')' T_SYMBOL ';'
+      { compile_ufunc_real($1, $3, $5, $9.cnt, $9.vect, $11.cnt, $11.vect, $13, $7); }
 
   | T_LABEL K_UFUNC_VEC4 T_SYMBOL ',' T_NUMBER ',' T_SYMBOL ';'
       { compile_ufunc_vec4($1, $3, $5, 0, 0, 0, 0, $7, strdup("E_0x0")); }
@@ -711,11 +718,15 @@ statement
      parent scope, then this is a root scope. */
 
 	| T_LABEL K_SCOPE T_SYMBOL ',' T_STRING T_STRING T_NUMBER T_NUMBER ';'
-		{ compile_scope_decl($1, $3, $5, $6, 0, $7, $8, $7, $8, 0); }
+		{ compile_scope_decl($1, $3, $5, $6, 0, 0, $7, $8, $7, $8, 0); }
 
 	| T_LABEL K_SCOPE T_SYMBOL ',' T_STRING T_STRING T_NUMBER T_NUMBER ','
 	  T_NUMBER T_NUMBER T_NUMBER ',' T_SYMBOL ';'
-		{ compile_scope_decl($1, $3, $5, $6, $14, $7, $8, $10, $11, $12); }
+		{ compile_scope_decl($1, $3, $5, $6, 0, $14, $7, $8, $10, $11, $12); }
+
+	| T_LABEL K_SCOPE T_SYMBOL ',' T_STRING T_STRING T_NUMBER T_NUMBER ','
+	  T_NUMBER T_NUMBER T_NUMBER ',' T_SYMBOL ',' T_SYMBOL ';'
+		{ compile_scope_decl($1, $3, $5, $6, $14, $16, $7, $8, $10, $11, $12); }
 
   /* Scope recall has no label of its own, but refers by label to a
      declared scope. */
@@ -757,20 +768,20 @@ statement
      creates a functor with the same name that acts as the output of
      the variable in the netlist. */
 
-  | T_LABEL K_VAR signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number ';'
-      { compile_variable($1, $5, $7, $8, vpiLogicVar, false, $3, $4); }
+  | T_LABEL K_VAR signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
+      { compile_variable($1, $5, $7, $8, vpiLogicVar, false, $3, $4, $9); }
 
-  | T_LABEL K_VAR_S signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number ';'
-      { compile_variable($1, $5, $7, $8, vpiLogicVar, true, $3, $4); }
+  | T_LABEL K_VAR_S signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
+      { compile_variable($1, $5, $7, $8, vpiLogicVar, true, $3, $4, $9); }
 
-  | T_LABEL K_VAR_I signal_vector_flag local_flag T_STRING ',' T_NUMBER T_NUMBER ';'
-      { compile_variable($1, $5, $7, $8, vpiIntegerVar, true, $3, $4); }
+  | T_LABEL K_VAR_I signal_vector_flag local_flag T_STRING ',' T_NUMBER T_NUMBER enum_ref_opt ';'
+      { compile_variable($1, $5, $7, $8, vpiIntegerVar, true, $3, $4, $9); }
 
-  | T_LABEL K_VAR_2S signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number ';'
-      { compile_variable($1, $5, $7, $8, vpiIntVar, true, $3, $4); }
+  | T_LABEL K_VAR_2S signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
+      { compile_variable($1, $5, $7, $8, vpiIntVar, true, $3, $4, $9); }
 
-  | T_LABEL K_VAR_2U signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number ';'
-      { compile_variable($1, $5, $7, $8, vpiIntVar, false, $3, $4); }
+  | T_LABEL K_VAR_2U signal_vector_flag local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
+      { compile_variable($1, $5, $7, $8, vpiIntVar, false, $3, $4, $9); }
 
   | T_LABEL K_VAR_R local_flag T_STRING ',' signed_t_number signed_t_number ';'
       { compile_var_real($1, $4, $3); }
@@ -913,6 +924,12 @@ statement
     class_properties_opt ';'
       { compile_class_done(); }
 
+  | K_SUPER T_SYMBOL ',' T_SYMBOL ';'
+      { compile_super($2, $4); }
+
+  | K_VIRT T_SYMBOL ',' T_SYMBOL ',' T_SYMBOL ';'
+      { compile_virt($2, $4, $6); }
+
   | enum_type
       { ; }
 
@@ -990,6 +1007,11 @@ enum_type_name
       { $$.text = $1; $$.val2 = $2; $$.val4 = 0; }
   | T_STRING T_VECTOR
       { $$.text = $1; $$.val2 = 0; $$.val4 = $2.text; }
+  ;
+
+enum_ref_opt
+  : ',' T_SYMBOL { $$ = $2; }
+  | { $$ = 0; }
   ;
 
 local_flag
@@ -1234,18 +1256,24 @@ modpath_src
       { compile_modpath_src(modpath_dst, 0, $1, $3, 0, $6, true); }
   | symbol '(' numbers '?' symbol ')' symbol
       { compile_modpath_src(modpath_dst, 0, $1, $3, $5, $7); }
+  | symbol '(' numbers '?' symbol ')' symbol T_STRING
+      { compile_modpath_src(modpath_dst, 0, $1, $3, $5, $7, $8); delete[] $8; }
   | symbol '+' '(' numbers ')' symbol
       { compile_modpath_src(modpath_dst, '+', $1, $4, 0, $6, false); }
   | symbol '+' '(' numbers '?' ')' symbol
       { compile_modpath_src(modpath_dst, '+', $1, $4, 0, $7, true); }
   | symbol '+' '(' numbers '?' symbol ')' symbol
       { compile_modpath_src(modpath_dst, '+', $1, $4, $6, $8); }
+  | symbol '+' '(' numbers '?' symbol ')' symbol T_STRING
+      { compile_modpath_src(modpath_dst, '+', $1, $4, $6, $8, $9); delete[] $9; }
   | symbol '-' '(' numbers ')' symbol
       { compile_modpath_src(modpath_dst, '-', $1, $4, 0, $6, false); }
   | symbol '-' '(' numbers '?' ')' symbol
       { compile_modpath_src(modpath_dst, '-', $1, $4, 0, $7, true); }
   | symbol '-' '(' numbers '?' symbol ')' symbol
       { compile_modpath_src(modpath_dst, '-', $1, $4, $6, $8); }
+  | symbol '-' '(' numbers '?' symbol ')' symbol T_STRING
+      { compile_modpath_src(modpath_dst, '-', $1, $4, $6, $8, $9); delete[] $9; }
   ;
 
 udp_table

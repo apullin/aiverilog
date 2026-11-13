@@ -40,7 +40,7 @@ VERSION_MAJOR = @VERSION_MAJOR@
 VERSION_MINOR = @VERSION_MINOR@
 
 SUBDIRS = ivlpp vhdlpp vvp vpi tgt-null tgt-stub tgt-vvp \
-          tgt-vhdl tgt-vlog95 tgt-pcb tgt-blif tgt-sizer driver \
+          tgt-vhdl tgt-vlog95 tgt-pcb tgt-blif tgt-sizer tgt-flow driver \
           ivtest
 # Only run distclean for these directories.
 NOTUSED = tgt-fpga tgt-pal tgt-verilog
@@ -150,7 +150,7 @@ check: all
 	driver/iverilog@EXEEXT@ -B. -BMvpi -BPivlpp -tcheck -ocheck.vvp $(srcdir)/examples/hello.vl && \
 	$(ENV_VVP) vvp/vvp$(suffix)@EXEEXT@ -M- -M./vpi ./check.vvp | grep 'Hello, World'
 
-check-installed check-installed-vpi check-installed-vvp check-installed-vvp-py:
+check-installed check-installed-vpi check-installed-vvp check-installed-vvp-py check-installed-fst:
 	$(MAKE) -C ivtest $@
 
 clean:
@@ -331,4 +331,4 @@ uninstall:
 
 -include $(patsubst %.o, dep/%.d, $O)
 
-.PHONY: check-installed check-installed-vpi check-installed-vvp check-installed-vvp-py
+.PHONY: check-installed-fst check-installed check-installed-vpi check-installed-vvp check-installed-vvp-py

@@ -10,14 +10,20 @@ nullPointerOutOfMemory
 ctuuninitvar:parse_misc.cc:61
 
 // Skip strdup() not constant.
-constVariablePointer:main.cc:421
-constVariablePointer:main.cc:425
-constVariablePointer:main.cc:675
+constVariablePointer:main.cc:434
+constVariablePointer:main.cc:438
+constVariablePointer:main.cc:688
 
 // const auto should be const
-constVariablePointer:elab_expr.cc:628
-constVariablePointer:elab_expr.cc:631
-constVariablePointer:elab_expr.cc:700
+constVariablePointer:elab_expr.cc:636
+constVariablePointer:elab_expr.cc:972
+constVariablePointer:elab_expr.cc:975
+constVariablePointer:elab_expr.cc:986
+constVariablePointer:elab_expr.cc:1061
+constVariablePointer:elab_expr.cc:5150
+constVariablePointer:elab_lval.cc:1158
+constVariablePointer:elab_scope.cc:1556
+constVariablePointer:parse.y:5509
 
 // The reference cannot be const since it is updated in the calling function.
 constParameterReference:net_udp.cc:37
@@ -36,23 +42,22 @@ uninitMemberVar:t-dll.cc:41
 uninitMemberVar:t-dll.cc:109
 
 // By convention we put statics at the top scope.
-variableScope:pform.cc:3630
+variableScope:pform.cc:3634
 
 // These are correct and are used to find the base (zero) pin.
-thisSubtraction:netlist.h:5370
-thisSubtraction:netlist.h:5379
+thisSubtraction:netlist.h:5486
+thisSubtraction:netlist.h:5495
 
 // This is used when running a debugger
 // debugger_release
-knownConditionTrueFalse:main.cc:955
+knownConditionTrueFalse:main.cc:968
 
 // These should be checked, but are not real issues
-knownConditionTrueFalse:elaborate.cc:8165
 knownConditionTrueFalse:elab_sig.cc:272
 knownConditionTrueFalse:elab_sig.cc:345
 
 // Yes, it's a duplicate
-duplicateCondition:elaborate.cc:8216
+duplicateCondition:elaborate.cc:8465
 
 // To complicated to use std::find_if()
 useStlAlgorithm:map_named_args.cc:38
@@ -61,7 +66,7 @@ useStlAlgorithm:map_named_args.cc:38
 derefInvalidIterator:netmisc.cc:420
 
 // By convention we put statics at the top scope.
-variableScope:t-dll.cc:2309
+variableScope:t-dll.cc:2336
 
 // We check memory allocation with valgrind
 unsafeClassCanLeak:libmisc/StringHeap.h:79
@@ -720,9 +725,9 @@ unusedFunction:Attrib.cc:72
 // bl_type()
 unusedFunction:Statement.h:194
 // chain_args()
-unusedFunction:Statement.h:369
+unusedFunction:Statement.h:372
 // gn_modules_nest()
-unusedFunction:compiler.h:247
+unusedFunction:compiler.h:250
 // driven_mask()
 unusedFunction:link_const.cc:275
 // find_root_scope()
@@ -732,19 +737,25 @@ unusedFunction:net_link.cc:283
 // intersect()
 unusedFunction:net_link.cc:687
 // get_def_fileline()
-unusedFunction:net_scope.cc:200
+unusedFunction:net_scope.cc:204
 // get_module_port_info()
-unusedFunction:net_scope.cc:631
+unusedFunction:net_scope.cc:684
 // find_link_signal()
 unusedFunction:netlist.cc:113
 // find_link()
 unusedFunction:netlist.cc:304
 // set_module_port_index()
 unusedFunction:netlist.cc:658
+// incr_eref()
+unusedFunction:netlist.cc:825
+// decr_eref()
+unusedFunction:netlist.cc:830
+// incr_lref()
+unusedFunction:netlist.cc:893
 // width_a()
-unusedFunction:netlist.cc:1685
+unusedFunction:netlist.cc:1680
 // width_b()
-unusedFunction:netlist.cc:1690
+unusedFunction:netlist.cc:1685
 // result_sig()
 unusedFunction:netlist.cc:2191
 // soft_union()
@@ -760,9 +771,9 @@ unusedFunction:t-dll-expr.cc:55
 // mul_expr_by_const_()
 unusedFunction:t-dll-expr.cc:91
 // net_assign()
-unusedFunction:t-dll.cc:2300
+unusedFunction:t-dll.cc:2327
 // is_before()
-unusedFunction:verinum.cc:588
+unusedFunction:verinum.cc:599
 
 // Errors/limitations in the generated yacc and lex files
 constVariablePointer:<stdout>

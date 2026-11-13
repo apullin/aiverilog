@@ -217,12 +217,9 @@ ostream& data_type_t::debug_dump(ostream&out) const
       return out;
 }
 
-std::ostream& typeref_t::debug_dump(ostream&out) const
+std::ostream& type_identifier_t::debug_dump(ostream&out) const
 {
-      if (scope)
-	    out << scope->pscope_name() << "::";
-      out << type->name;
-
+      out << *identifier_;
       return out;
 }
 
@@ -401,7 +398,22 @@ void PExpr::dump(ostream&out) const
 
 void PEAssignPattern::dump(ostream&out) const
 {
-      out << "'{" << parms_ << "}";
+      if (is_keyed_()) {
+	    out << "'{";
+	    const char*sep = "";
+	    for (const auto &item : keyed_) {
+		  out << sep << *item.key << ": " << *item.value;
+		  sep = ", ";
+	    }
+	    if (default_)
+		  out << sep << "default: " << *default_;
+	    out << "}";
+	    return;
+      }
+      if (repeat_)
+	    out << "'{" << *repeat_ << "{" << parms_ << "}}";
+      else
+	    out << "'{" << parms_ << "}";
 }
 
 void PEConcat::dump(ostream&out) const
@@ -1110,7 +1122,7 @@ void PForce::dump(ostream&out, unsigned ind) const
 void PForeach::dump(ostream&fd, unsigned ind) const
 {
       fd << setw(ind) << "" << "foreach "
-	 << "variable=" << array_var_
+	 << "variable=" << *array_var_
 	 << ", indices=[";
       for (size_t idx = 0 ; idx < index_vars_.size() ; idx += 1) {
 	    if (idx > 0) fd << ",";
@@ -1584,7 +1596,7 @@ void LexicalScope::dump_enumerations_(ostream&out, unsigned indent) const
 		 ; cur != enum_sets.end() ; ++ cur) {
 	    out << setw(indent) << "" << "enum {" << endl;
 
-	    for (list<named_pexpr_t>::const_iterator idx = (*cur)->names->begin()
+	    for (auto idx = (*cur)->names->cbegin()
 		       ; idx != (*cur)->names->end() ; ++ idx) {
 		  out << setw(indent+4) << "" << idx->name
 		      << " = " << idx->parm << endl;

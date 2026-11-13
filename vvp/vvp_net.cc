@@ -803,9 +803,10 @@ vvp_vector4_t::vvp_vector4_t(unsigned size__, double val)
 
 	/* If the value is small enough just use lround(). */
       if (exponent < BITS_PER_WORD-2) {
-	    if (is_neg) this->invert();  // Invert the bits if negative.
 	    long sval = lround(val);
 	    if (is_neg) sval = -sval;
+	      /* Sign extend the rounded value, which may be zero. */
+	    if (sval < 0) this->invert();
 	      /* This requires that 0 and 1 have the same bbit value. */
 	    if (size_ > BITS_PER_WORD) {
 		  abits_ptr_[0] = sval;
@@ -2683,7 +2684,7 @@ void vvp_vector2_t::clear_unused_bits_()
       vec_[words-1] &= -1UL >> (BITS_PER_WORD-tail_bits);
 }
 
-vvp_vector2_t::vvp_vector2_t(unsigned long v, unsigned wid)
+vvp_vector2_t::vvp_vector2_t(uint64_t v, unsigned wid)
 {
       wid_ = wid;
       const unsigned bits_per_word = 8 * sizeof(vec_[0]);
@@ -2695,9 +2696,10 @@ vvp_vector2_t::vvp_vector2_t(unsigned long v, unsigned wid)
       }
 
       vec_ = new unsigned long[words];
-      vec_[0] = v;
-      for (unsigned idx = 1 ;  idx < words ;  idx += 1)
-	    vec_[idx] = 0;
+      for (unsigned idx = 0 ; idx < words ; idx += 1) {
+	    const unsigned shift = idx * bits_per_word;
+	    vec_[idx] = shift < 64 ? v >> shift : 0;
+      }
       clear_unused_bits_();
 }
 
@@ -2888,23 +2890,6 @@ vvp_vector2_t& vvp_vector2_t::operator >>= (unsigned shift)
       return *this;
 }
 
-static unsigned long add_carry(unsigned long a, unsigned long b,
-			       unsigned long&carry)
-{
-      unsigned long out = carry;
-      carry = 0;
-
-      if ((ULONG_MAX - out) < a)
-	    carry += 1;
-      out += a;
-
-      if ((ULONG_MAX - out) < b)
-	    carry += 1;
-      out += b;
-
-      return out;
-}
-
 vvp_vector2_t& vvp_vector2_t::operator += (const vvp_vector2_t&that)
 {
       assert(wid_ == that.wid_);
@@ -2915,7 +2900,7 @@ vvp_vector2_t& vvp_vector2_t::operator += (const vvp_vector2_t&that)
 
       unsigned long carry = 0;
       for (unsigned idx = 0 ;  idx < words ;  idx += 1) {
-	    vec_[idx] = add_carry(vec_[idx], that.vec_[idx], carry);
+	    vec_[idx] = add_with_carry(vec_[idx], that.vec_[idx], carry);
       }
       clear_unused_bits_();
 
@@ -2932,7 +2917,7 @@ vvp_vector2_t& vvp_vector2_t::operator -= (const vvp_vector2_t&that)
 
       unsigned long carry = 1;
       for (unsigned idx = 0 ;  idx < words ;  idx += 1) {
-	    vec_[idx] = add_carry(vec_[idx], ~that.vec_[idx], carry);
+	    vec_[idx] = add_with_carry(vec_[idx], ~that.vec_[idx], carry);
       }
       clear_unused_bits_();
 
@@ -3107,7 +3092,7 @@ vvp_vector2_t operator * (const vvp_vector2_t&a, const vvp_vector2_t&b)
 			     ; (adx+bdx+sdx) < words
 			     ;  sdx += 1) {
 
-			r.vec_[adx+bdx+sdx] = add_carry(r.vec_[adx+bdx+sdx],
+			r.vec_[adx+bdx+sdx] = add_with_carry(r.vec_[adx+bdx+sdx],
 							low, carry);
 			low = hig;
 			hig = 0;

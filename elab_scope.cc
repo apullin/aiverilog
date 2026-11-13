@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2000-2026 Stephen Williams (steve@icarus.com)
  * Copyright CERN 2013 / Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
@@ -211,7 +211,7 @@ static void elaborate_scope_enumeration(Design*des, NetScope*scope,
 	// Variable to indicate when a defined value wraps.
       bool implicit_wrapped = false;
 	// Process the enumeration definition.
-      for (list<named_pexpr_t>::const_iterator cur = enum_type->names->begin()
+      for (auto cur = enum_type->names->cbegin()
 		 ; cur != enum_type->names->end() ;  ++ cur, name_idx += 1) {
 	      // Check to see if the enumeration name has a value given.
 	    if (cur->parm) {
@@ -477,7 +477,7 @@ static void blend_class_constructors(PClass*pclass)
 
 static void elaborate_scope_class(Design*des, NetScope*scope, PClass*pclass)
 {
-      class_type_t*use_type = pclass->type;
+      const class_type_t*use_type = pclass->type;
 
       if (debug_scopes) {
 	    cerr << pclass->get_fileline() <<": elaborate_scope_class: "
@@ -530,6 +530,8 @@ static void elaborate_scope_class(Design*des, NetScope*scope, PClass*pclass)
 		  des->errors += 1;
 	    }
 	    method_scope->is_auto(true);
+	    method_scope->is_virtual(cur->second->is_virtual());
+	    use_class->add_method(method_scope);
 	    method_scope->set_line(cur->second);
 	    method_scope->add_imports(&cur->second->explicit_imports);
 
@@ -556,6 +558,8 @@ static void elaborate_scope_class(Design*des, NetScope*scope, PClass*pclass)
 		  des->errors += 1;
 	    }
 	    method_scope->is_auto(true);
+	    method_scope->is_virtual(cur->second->is_virtual());
+	    use_class->add_method(method_scope);
 	    method_scope->set_line(cur->second);
 	    method_scope->add_imports(&cur->second->explicit_imports);
 
@@ -796,7 +800,22 @@ bool Module::elaborate_scope(Design*des, NetScope*scope,
 		 << "Elaborate " << scope_path(scope) << "." << endl;
       }
 
+      map<perm_string, bool> port_names;
+      for (const auto*port : ports) {
+	    if (!port || port->name.nil()) continue;
+
+	      // Repeated implicit references to the same port are legal.
+	    auto cur = port_names.emplace(port->name, port->explicit_name);
+	    if (!cur.second && (cur.first->second || port->explicit_name)) {
+		  cerr << get_fileline() << ": error: Duplicate port name '"
+		       << port->name << "'." << endl;
+		  des->errors++;
+	    }
+	    cur.first->second |= port->explicit_name;
+      }
+
       scope->add_typedefs(&typedefs);
+      scope->add_gate_names(gates_);
 
 	// Add the genvars to the scope.
       typedef map<perm_string,LineInfo*>::const_iterator genvar_it_t;
@@ -1293,7 +1312,7 @@ bool PGenerate::generate_scope_case_(Design*des, NetScope*container)
       NetScope*scope = new NetScope(container, use_name,
 				    NetScope::GENBLOCK);
       scope->set_line(get_file(), get_lineno());
-      scope->add_imports(&explicit_imports);
+      scope->add_imports(&item->explicit_imports);
 
       item->elaborate_subscope_(des, scope);
 
@@ -1335,6 +1354,7 @@ void PGenerate::elaborate_subscope_direct_(Design*des, NetScope*scope)
 void PGenerate::elaborate_subscope_(Design*des, NetScope*scope)
 {
       scope->add_typedefs(&typedefs);
+      scope->add_gate_names(gates);
 
 	// Add the genvars to this scope.
       typedef map<perm_string,LineInfo*>::const_iterator genvar_it_t;
@@ -1525,6 +1545,20 @@ void PGModule::elaborate_scope_mod_(Design*des, Module*mod, NetScope*sc) const
  */
 void PGModule::elaborate_scope_mod_instances_(Design*des, Module*mod, NetScope*sc) const
 {
+        // A module's compilation unit follows its declaration, not the
+        // instance hierarchy. Nested modules share their outer module's unit.
+      NetScope*unit_scope = nullptr;
+      if (gn_system_verilog()) {
+	    auto unit = mod->parent_scope();
+	    while (unit->parent_scope()) {
+		  unit = unit->parent_scope();
+	    }
+	    auto unit_package = dynamic_cast<PPackage*>(unit);
+	    ivl_assert(*this, unit_package);
+	    unit_scope = des->find_package(unit_package->pscope_name());
+	    ivl_assert(*this, unit_scope && unit_scope->is_unit());
+      }
+
       long instance_low  = 0;
       long instance_high = 0;
       long instance_count = calculate_array_size_(des, sc, instance_high, instance_low);
@@ -1563,7 +1597,8 @@ void PGModule::elaborate_scope_mod_instances_(Design*des, Module*mod, NetScope*s
 	      // Create the new scope as a MODULE with my name. Note
 	      // that if this is a nested module, mark it thus so that
 	      // scope searches will continue into the parent scope.
-	    NetScope*my_scope = new NetScope(sc, use_name, NetScope::MODULE, 0,
+	    NetScope*my_scope = new NetScope(sc, use_name, NetScope::MODULE,
+					     unit_scope,
 					     bound_type_? true : false,
 					     mod->program_block,
 					     mod->is_interface);
@@ -1632,8 +1667,14 @@ void PGModule::elaborate_scope_mod_instances_(Design*des, Module*mod, NetScope*s
 		  for (unsigned jdx = 0 ;  jdx < nparms_ ;  jdx += 1) {
 		          // No expression means that the parameter is not
 		          // replaced.
-			if (parms_[jdx].parm)
-			      replace[parms_[jdx].name] = parms_[jdx].parm;
+			if (parms_[jdx].parm &&
+			    !replace.emplace(parms_[jdx].name,
+			                     parms_[jdx].parm).second) {
+			      cerr << get_fileline() << ": error: Parameter "
+			           << parms_[jdx].name << " is assigned more than "
+			           << "once in instance " << use_name << "." << endl;
+			      des->errors += 1;
+			}
 		  }
 
 	    }
@@ -1785,8 +1826,18 @@ void PBlock::elaborate_scope(Design*des, NetScope*scope) const
 void PCase::elaborate_scope(Design*des, NetScope*scope) const
 {
       ivl_assert(*this, items_);
+      bool default_seen = false;
       for (unsigned idx = 0 ;  idx < (*items_).size() ;  idx += 1) {
 	    ivl_assert(*this, (*items_)[idx]);
+
+	    if ((*items_)[idx]->expr.empty()) {
+		  if (default_seen) {
+			cerr << get_fileline()
+			     << ": error: Multiple default case items." << endl;
+			des->errors += 1;
+		  }
+		  default_seen = true;
+	    }
 
 	    if (const Statement*sp = (*items_)[idx]->stat)
 		  sp -> elaborate_scope(des, scope);

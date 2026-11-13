@@ -25,6 +25,7 @@
 
 # include  "compiler.h"
 # include  "PExpr.h"
+# include  "PGenerate.h"
 # include  "PPackage.h"
 # include  "PWire.h"
 # include  "Module.h"
@@ -105,6 +106,21 @@ PEAssignPattern::PEAssignPattern(const list<PExpr*>&p)
 {
 }
 
+PEAssignPattern::PEAssignPattern(const list<pattern_item_t>&p)
+{
+      for (const auto &item : p) {
+	    if (item.key)
+		  keyed_.push_back(item);
+	    else
+		  default_ = item.value;
+      }
+}
+
+PEAssignPattern::PEAssignPattern(PExpr*r, const list<PExpr*>&p)
+: parms_(p.begin(), p.end()), repeat_(r)
+{
+}
+
 PEAssignPattern::~PEAssignPattern()
 {
 }
@@ -116,6 +132,14 @@ bool PEAssignPattern::has_aa_term(Design*des, NetScope*scope) const
 	    if (parm)
 		  flag = parm->has_aa_term(des, scope) || flag;
       }
+      for (const auto &item : keyed_) {
+	    if (item.value)
+		  flag = item.value->has_aa_term(des, scope) || flag;
+      }
+      if (default_)
+	    flag = default_->has_aa_term(des, scope) || flag;
+      if (repeat_)
+	    flag = repeat_->has_aa_term(des, scope) || flag;
       return flag;
 }
 
@@ -214,8 +238,9 @@ PECallFunction::PECallFunction(const pform_name_t &n, const vector<named_pexpr_t
 {
 }
 
-PECallFunction::PECallFunction(PPackage *pkg, const pform_name_t &n, const vector<named_pexpr_t> &parms)
-: path_(pkg, n), parms_(parms), is_overridden_(false)
+PECallFunction::PECallFunction(const pform_scoped_name_t &n,
+			       const vector<named_pexpr_t> &parms)
+: path_(n), parms_(parms), is_overridden_(false)
 {
 }
 
@@ -227,8 +252,9 @@ static pform_name_t pn_from_ps(perm_string n)
       return tmp;
 }
 
-PECallFunction::PECallFunction(PPackage *pkg, const pform_name_t &n, const list<named_pexpr_t> &parms)
-: path_(pkg, n), parms_(parms.begin(), parms.end()), is_overridden_(false)
+PECallFunction::PECallFunction(const pform_scoped_name_t &n,
+			       const list<named_pexpr_t> &parms)
+: path_(n), parms_(parms.begin(), parms.end()), is_overridden_(false)
 {
 }
 
@@ -402,8 +428,8 @@ PEIdent::PEIdent(perm_string s, unsigned lexical_pos, bool no_implicit_sig)
       path_.name.push_back(name_component_t(s));
 }
 
-PEIdent::PEIdent(PPackage*pkg, const pform_name_t&that)
-: path_(pkg, that), no_implicit_sig_(true)
+PEIdent::PEIdent(const pform_scoped_name_t&that)
+: path_(that), no_implicit_sig_(true)
 {
 }
 
@@ -416,7 +442,7 @@ static bool find_enum_constant(LexicalScope*scope, perm_string name)
       return std::any_of(scope->enum_sets.cbegin(), scope->enum_sets.cend(),
                          [name](const enum_type_t *cur) {
 	    return std::any_of(cur->names->cbegin(), cur->names->cend(),
-	                       [name](const named_pexpr_t&idx){return idx.name == name;});
+	                       [name](const enum_name_t&idx){return idx.name == name;});
       });
 }
 
@@ -461,6 +487,7 @@ void PEIdent::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
 
             LexicalScope*ss = scope;
             while (ss) {
+                  if (ss->explicit_imports.count(name)) return;
                   if (ss->wires.find(name) != ss->wires.end())
                         return;
                   if (ss->parameters.find(name) != ss->parameters.end())
@@ -471,6 +498,15 @@ void PEIdent::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
                         return;
                   if (find_enum_constant(ss, name))
                         return;
+                  /* The index of a generate loop is an implicit
+                     localparam inside the loop body. When it was
+                     declared in the loop header (for (genvar i = ...)),
+                     it is not in the genvars of any enclosing scope. */
+                  if (const PGenerate*gen = dynamic_cast<const PGenerate*>(ss)) {
+                        if (gen->scheme_type == PGenerate::GS_LOOP
+                            && gen->loop_index == name)
+                              return;
+                  }
                   /* Strictly speaking, we should also check for name clashes
                      with tasks, functions, named blocks, module instances,
                      and generate blocks. However, this information is not

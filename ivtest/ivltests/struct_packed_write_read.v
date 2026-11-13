@@ -30,6 +30,7 @@ module test;
    assign word_sw1            = {16+0{1'b1}};
    assign word_sw2            = {16+1{1'b1}};
    assign word_sw3            = {16-1{1'b1}};
+   // Unassigned bits of these variables retain their default X.
    // access to parts of structure elements
    assign word_ep1.high [3:0] = {4+0{1'b1}};
    assign word_ep1.low  [3:0] = {4+0{1'b0}};

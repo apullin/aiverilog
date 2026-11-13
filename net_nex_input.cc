@@ -144,9 +144,9 @@ NexusSet* NetESelect::nex_input(bool rem_out, bool always_sens, bool nested_func
       NexusSet*tmp = expr_->nex_input(rem_out, always_sens, nested_func);
       bool const_select = result->size() == 0;
       if (always_sens && const_select) {
-	    if (/* const NetEConst *val = */ dynamic_cast <NetEConst*> (base_)) {
+	    if (/* const NetEConst *val = */ dynamic_cast <NetEConst*> (base_.get())) {
 		  assert(select_type() == IVL_SEL_OTHER);
-		  if (const NetESignal *sig = dynamic_cast<NetESignal*> (expr_)) {
+		  if (const NetESignal *sig = dynamic_cast<NetESignal*> (expr_.get())) {
 			cerr << get_fileline() << ": sorry: constant selects "
 			        "in always_* processes are not fully supported "
 			        "(the process will be sensitive to all bits in '"
@@ -229,7 +229,7 @@ NexusSet* NetESignal::nex_input_base(bool rem_out, bool always_sens, bool nested
                        << net_->unpacked_count() << " words in array '"
                        << name() << "'." << endl;
             }
-	    if (always_sens) if (const NetEConst *val = dynamic_cast <NetEConst*> (word_)) {
+	    if (always_sens) if (const NetEConst *val = dynamic_cast <NetEConst*> (word_.get())) {
 		  const_select = true;
 		  const_word = val->value().as_unsigned();
 	    }
@@ -280,8 +280,10 @@ static void func_always_sens(NetFuncDef *func, NexusSet *result,
 	std::unique_ptr<NexusSet> in(new NexusSet);
 	for (unsigned idx = 0; idx < func->port_count(); idx++) {
 	      NetNet *net = func->port(idx);
-	      assert(net->pin_count() == 1);
-	      in->add(net->pin(0).nexus(), 0, net->vector_width());
+		// A port with unpacked dimensions has one pin per word, so
+		// remove them all, not just the first.
+	      for (unsigned pin = 0 ; pin < net->pin_count() ; pin += 1)
+		    in->add(net->pin(pin).nexus(), 0, net->vector_width());
 	}
 	tmp->rem(*in);
 	result->add(*tmp);
@@ -521,8 +523,8 @@ NexusSet* NetForLoop::nex_input(bool rem_out, bool always_sens, bool nested_func
 {
       NexusSet*result = new NexusSet;
 
-      if (init_expr_) {
-	    NexusSet*tmp = init_expr_->nex_input(rem_out, always_sens, nested_func);
+      if (const NetExpr*init = init_expr()) {
+	    NexusSet*tmp = init->nex_input(rem_out, always_sens, nested_func);
 	    result->add(*tmp);
 	    delete tmp;
       }

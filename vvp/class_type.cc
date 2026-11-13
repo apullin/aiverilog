@@ -374,14 +374,17 @@ void property_object::destruct(char*buf) const
 
 void property_object::set_object(char*buf, const vvp_object_t&val, uint64_t idx)
 {
-      assert(idx < array_size_);
+      if (idx >= array_size_) return;
       vvp_object_t*tmp = reinterpret_cast<vvp_object_t*>(buf+offset_);
       tmp[idx] = val;
 }
 
 void property_object::get_object(char*buf, vvp_object_t&val, uint64_t idx)
 {
-      assert(idx < array_size_);
+      if (idx >= array_size_) {
+	    val.reset(nullptr);
+	    return;
+      }
       const vvp_object_t*tmp = reinterpret_cast<vvp_object_t*>(buf+offset_);
       val = tmp[idx];
 }
@@ -397,7 +400,7 @@ void property_object::copy(char*dst, char*src)
 /* **** */
 
 class_type::class_type(const string&nam, size_t nprop)
-: class_name_(nam), properties_(nprop)
+: class_name_(nam), properties_(nprop), super_(nullptr)
 {
       instance_size_ = 0;
 }
@@ -570,6 +573,27 @@ void class_type::copy_property(class_type::inst_t dst, size_t pid, class_type::i
       assert(pid < properties_.size());
 
       properties_[pid].type->copy(dst_buf, src_buf);
+}
+
+void class_type::set_virtual(vpiHandle scope, vvp_code_t code)
+{
+      virtual_[scope] = code;
+}
+
+vvp_code_t class_type::get_virtual(vpiHandle scope) const
+{
+      auto cur = virtual_.find(scope);
+      return cur == virtual_.end() ? nullptr : cur->second;
+}
+
+bool class_type::is_a(const class_type*that) const
+{
+      for (const class_type*cur = this ; cur ; cur = cur->super_) {
+	    if (cur == that)
+		  return true;
+      }
+
+      return false;
 }
 
 int class_type::get_type_code(void) const

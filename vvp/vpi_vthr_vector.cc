@@ -289,7 +289,7 @@ class __vpiVThrVec4Stack : public __vpiHandle {
       static void vpi_get_value_binstr_(p_vpi_value vp, const vvp_vector4_t&val);
       void vpi_get_value_decstr_(p_vpi_value vp, const vvp_vector4_t&val);
       void vpi_get_value_int_   (p_vpi_value vp, const vvp_vector4_t&val);
-      static void vpi_get_value_real_  (p_vpi_value vp, const vvp_vector4_t&val);
+      void vpi_get_value_real_  (p_vpi_value vp, const vvp_vector4_t&val);
       static void vpi_get_value_strength_(p_vpi_value vp, const vvp_vector4_t&val);
       static void vpi_get_value_octstr_(p_vpi_value vp, const vvp_vector4_t&val);
       static void vpi_get_value_hexstr_(p_vpi_value vp, const vvp_vector4_t&val);
@@ -503,14 +503,7 @@ void __vpiVThrVec4Stack::vpi_get_value_int_(p_vpi_value vp, const vvp_vector4_t&
 
 void __vpiVThrVec4Stack::vpi_get_value_real_(p_vpi_value vp, const vvp_vector4_t&val)
 {
-      unsigned wid = val.size();
-      vp->value.real = 0.0;
-
-      for (unsigned idx = wid ; idx > 0 ; idx -= 1) {
-	    vp->value.real *= 2.0;
-	    if (val.value(idx-1) == BIT4_1)
-		  vp->value.real += 1.0;
-      }
+      vector4_to_value(val, vp->value.real, signed_flag_);
 }
 
 void __vpiVThrVec4Stack::vpi_get_value_string_(p_vpi_value vp, const vvp_vector4_t&val)
@@ -547,16 +540,17 @@ void __vpiVThrVec4Stack::vpi_get_value_string_(p_vpi_value vp, const vvp_vector4
 void __vpiVThrVec4Stack::vpi_get_value_vector_(p_vpi_value vp, const vvp_vector4_t&val)
 {
       unsigned wid = val.size();
-      unsigned words = (wid + 31) / 32;
 
+      unsigned hwid = (wid+31)/32;
       vp->value.vector = static_cast<s_vpi_vecval*>
-                         (need_result_buf(words * sizeof(s_vpi_vecval), RBUF_VAL));
+                         (need_result_buf(hwid*sizeof(s_vpi_vecval), RBUF_VAL));
       assert(vp->value.vector);
 
-      for (unsigned idx = 0 ; idx < words ; idx += 1) {
-	    vp->value.vector[idx].aval = 0;
-	    vp->value.vector[idx].bval = 0;
-      }
+	/* Zero the top of the result buffer first since the fill loop below only writes
+	   bits 0..wid-1, which can leave stale data in the unused high bits. */
+      if (hwid == 0) hwid = 1;
+      vp->value.vector[hwid-1].aval = 0;
+      vp->value.vector[hwid-1].bval = 0;
 
       for (unsigned idx = 0 ;  idx < wid ;  idx += 1) {
 	    int word = idx/32;

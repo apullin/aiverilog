@@ -35,6 +35,7 @@
 # include  <iostream>
 # include  <sstream>
 # include  <list>
+# include  <memory>
 # include  "pform.h"
 # include  "PClass.h"
 # include  "PEvent.h"
@@ -777,11 +778,12 @@ void PGBuiltin::elaborate(Design*des, NetScope*scope) const
 		  des->errors += 1;
 		  return;
 	    }
-	      // In SystemVerilog, variables can be driven by a single
-	      // primitive/gate output (IEEE 1800-2017 6.5). Primitives always
-	      // use default (strong) drive strength.
+	      // Normal gates cannot have variable output ports except for
+	      // SystemVerilog. See: 1800-2023 section 10.3.2. Bi-directional
+	      // (tran) gates can never have their output ports connected to
+	      // a variable.
             if (lval_count > gate_count)
-	          lval_sigs[idx] = pin(idx)->elaborate_bi_net(des, scope, gn_system_verilog());
+	          lval_sigs[idx] = pin(idx)->elaborate_bi_net(des, scope, false);
             else
 	          lval_sigs[idx] = pin(idx)->elaborate_lnet(des, scope, gn_system_verilog());
 
@@ -1260,11 +1262,20 @@ bool PGModule::match_module_ports_(Design*des, const Module*rmod,
 	// reflects the positions of the named ports.
       if (pins_) {
 	    unsigned nexp = rmod->port_count();
+	    bool seen_wildcard = false;
 
 	      // Scan the bindings, matching them with port names.
 	    for (unsigned idx = 0 ;  idx < npins_ ;  idx += 1) {
 		    // Handle wildcard named port.
 		  if (pins_[idx].name[0] == '*') {
+			if (seen_wildcard) {
+			      cerr << get_fileline() << ": error: "
+			           << "Wildcard port connection already specified."
+			           << endl;
+			      des->errors += 1;
+			      continue;
+			}
+			seen_wildcard = true;
 			const auto &wildcard = pins_[idx];
 			for (unsigned j = 0 ; j < nexp ; j += 1) {
 			      if (rmod->ports[j] && !pins[j] && !pins_is_explicitly_not_connected[j]) {
@@ -1308,11 +1319,9 @@ bool PGModule::match_module_ports_(Design*des, const Module*rmod,
 			delete pins[pidx];
 			pins_fromwc[pidx] = false;
 
-		    // If I already explicitly bound something to
-		    // this port, then the pins array will already
-		    // have a pointer value where I want to place this
-		    // expression.
-		  } else if (pins[pidx]) {
+		    // An explicit binding is recorded by either an
+		    // expression or the explicitly unconnected flag.
+		  } else if (pins[pidx] || pins_is_explicitly_not_connected[pidx]) {
 			cerr << get_fileline() << ": error: port ``" <<
 			      pins_[idx].name << "'' already bound." <<
 			      endl;
@@ -1749,10 +1758,10 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 		  continue;
 	    }
 
-	      // If the port is unconnected, substitute the default
-	      // value. The parser ensures that a default value only
-	      // exists for input ports.
-	    if (pins[idx] == 0) {
+	      // Substitute the default for an omitted input connection,
+	      // but leave an explicit empty named connection unconnected.
+	      // The parser only allows defaults for input ports.
+	    if (pins[idx] == nullptr && !pins_is_explicitly_not_connected[idx]) {
 		  PExpr*default_value = rmod->get_port_default_value(idx);
 		  if (default_value) {
 			pins[idx] = default_value;
@@ -1760,9 +1769,7 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 		  }
 	    }
 
-	      // Skip unconnected module ports. This happens when a
-	      // null parameter is passed in and there is no default
-	      // value.
+	      // Skip unconnected module ports.
 	    if (pins[idx] == 0) {
 
 		  if (pins_fromwc[idx]) {
@@ -1891,6 +1898,7 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 	    ivl_assert(*this, prts_vector_width % instance.size() == 0);
 
 	    if (!prts.empty() && (prts[0]->port_type() == NetNet::PINPUT)
+	        && (prts[0]->type() != NetNet::REG)
 	        && prts[0]->pin(0).nexus()->drivers_present()
 	        && pins[idx]->is_collapsible_net(des, scope,
 	                                         prts[0]->port_type())) {
@@ -3107,7 +3115,7 @@ NetProc* PAssign::elaborate(Design*des, NetScope*scope) const
 	   netlist. The compound statement is exactly equivalent. */
 
       if (delay || event_) {
-	    unsigned wid = count_lval_width(lv);
+	    unsigned wid = rv->expr_width();
 
 	    const netvector_t*tmp2_vec = new netvector_t(rv->expr_type(),wid-1,0);
 	    NetNet*tmp = new NetNet(scope, scope->local_symbol(),
@@ -3209,6 +3217,14 @@ NetProc* PAssign::elaborate(Design*des, NetScope*scope) const
 }
 
 /*
+ * True if the l-value is a single element of a dynamic array or queue.
+ */
+static bool is_darray_element_(const NetAssign_*lv)
+{
+      return lv->word() && !lv->nest() && lv->sig()->darray_type();
+}
+
+/*
  * Elaborate non-blocking assignments. The statement is of the general
  * form:
  *
@@ -3243,6 +3259,18 @@ NetProc* PAssignNB::elaborate(Design*des, NetScope*scope) const
 	/* Elaborate the l-value. */
       NetAssign_*lv = elaborate_lval(des, scope);
       if (lv == 0) return 0;
+
+	// IEEE 1800-2023 6.21 and 10.4.2: it is illegal to make
+	// nonblocking assignments to elements of dynamically sized
+	// array variables. Assigning the whole array is fine.
+      if (is_darray_element_(lv)) {
+	    cerr << get_fileline() << ": error: elements of dynamically sized arrays "
+		    "may not be assigned values using non-blocking "
+		    "assignments." << endl;
+	    des->errors += 1;
+	    delete lv;
+	    return 0;
+      }
 
       if (scope->program_block() && lval_not_program_variable(lv)) {
 	    cerr << get_fileline() << ": warning: Program non-blocking "
@@ -3861,7 +3889,7 @@ NetProc* PCallTask::elaborate(Design*des, NetScope*scope) const
 {
       if (peek_tail_name(path_)[0] == '$') {
 	    if (void_cast_)
-		  return elaborate_non_void_function_(des, scope, path_);
+		  return elaborate_non_void_function_(des, scope, path_.name);
 	    else
 		  return elaborate_sys(des, scope);
       } else {
@@ -3922,6 +3950,20 @@ NetProc* PCallTask::elaborate_sys(Design*des, NetScope*scope) const
 	    return noop;
       }
 
+      if (name == "$cast") {
+	    bool ok = parm_count == 2 && eparms[0] && eparms[1];
+	    if (parm_count != 2) {
+		  cerr << get_fileline() << ": error: The $cast task takes "
+		       << "exactly two(2) arguments." << endl;
+		  des->errors += 1;
+	    }
+	    if (!ok || !check_class_cast_args(des, this, eparms[0], eparms[1])) {
+		  NetBlock*noop = new NetBlock(NetBlock::SEQU, scope);
+		  noop->set_line(*this);
+		  return noop;
+	    }
+      }
+
       scope->calls_sys_task(true);
 
       NetSTask*cur = new NetSTask(name, def_sfunc_as_task, eparms);
@@ -3962,10 +4004,9 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
       ivl_assert(*this, scope);
 
       symbol_search_results search_results;
-      pform_scoped_name_t call_path(package_, path_);
       NetScope *task = nullptr;
       NetScope *func_scope = nullptr;
-      if (symbol_search(this, des, scope, call_path, lexical_pos(),
+      if (symbol_search(this, des, scope, path_, lexical_pos(),
 			&search_results,
 			SYMBOL_SEARCH_ALLOW_FORWARD_REFERENCE)) {
 	    if (!search_results.require_non_type(
@@ -4031,7 +4072,7 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 
 	/* Handle non-automatic tasks with no parameters specially. There is
            no need to make a sequential block to hold the generated code. */
-      if ((parm_count == 0) && !task->is_auto()) {
+      if (parm_count == 0 && parms_.empty() && !task->is_auto()) {
 	      // Check if a task call is allowed in this context.
 	    test_task_calls_ok_(des, scope);
 
@@ -4307,7 +4348,7 @@ NetProc* PCallTask::elaborate_method_property_func_(NetScope*scope,
 NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
                                       bool add_this_flag) const
 {
-      pform_name_t use_path = path_;
+      pform_name_t use_path = path_.name;
       perm_string method_name = peek_tail_name(use_path);
       use_path.pop_back();
 
@@ -4333,7 +4374,8 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 	// (internally represented as "@") is handled by there being a
 	// "this" object in the instance scope.
       symbol_search_results sr;
-      pform_scoped_name_t object_path(package_, use_path);
+      pform_scoped_name_t object_path = path_;
+      object_path.name = use_path;
       symbol_search(this, des, scope, object_path, lexical_pos(), &sr);
 
       NetNet*net = sr.net;
@@ -4454,6 +4496,23 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 									       "$ivl_darray_method$shuffle",
 									       parm_names);
 			      }
+			}
+
+			  /* Property is a class handle (not queue/darray).
+			     Find the method in that class and build the call
+			     using a property-access expression as "this". */
+			if (const netclass_t*prop_class = dynamic_cast<const netclass_t*>(ptype)) {
+			      NetScope*task = prop_class->method_from_name(method_name);
+			      if (task == 0) {
+				    cerr << get_fileline() << ": error: "
+					 << "Can't find task " << method_name
+					 << " in class " << prop_class->get_name() << endl;
+				    des->errors += 1;
+				    return 0;
+			      }
+			      NetEProperty*use_this = new NetEProperty(net, pidx);
+			      use_this->set_line(*this);
+			      return elaborate_build_call_(des, scope, task, use_this, false);
 			}
 		  }
 	    }
@@ -4609,7 +4668,9 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 	    NetESignal*use_this = new NetESignal(net);
 	    use_this->set_line(*this);
 
-	    return elaborate_build_call_(des, scope, task, use_this);
+	    // A call through super is not virtual.
+	    bool nonvirtual = use_path.back().name == "#";
+	    return elaborate_build_call_(des, scope, task, use_this, nonvirtual);
       }
 
       return 0;
@@ -4641,17 +4702,19 @@ bool PCallTask::test_task_calls_ok_(Design*des, const NetScope*scope) const
 }
 
 NetProc *PCallTask::elaborate_non_void_function_(Design *des, NetScope *scope,
-						 const pform_name_t &path) const
+						 const pform_name_t &cpath) const
 {
 	// Generate a function call version of this task call.
-      auto rval = new PECallFunction(package_, path, parms_);
+      pform_scoped_name_t call_path = path_;
+      call_path.name = cpath;
+      auto rval = new PECallFunction(call_path, parms_);
       rval->set_line(*this);
 	// Generate an assign to nothing.
       auto tmp = new PAssign(nullptr, rval);
       tmp->set_line(*this);
       if (!void_cast_) {
 	    cerr << get_fileline() << ": warning: User function '"
-		 << peek_tail_name(path) << "' is being called as a task." << endl;
+		 << peek_tail_name(cpath) << "' is being called as a task." << endl;
       }
 
 	// Elaborate the assignment to a dummy variable.
@@ -4677,7 +4740,7 @@ NetProc *PCallTask::elaborate_function_(
       if (gn_system_verilog() && func->is_void())
 	    return elaborate_void_function_(des, scope, func);
 
-      return elaborate_non_void_function_(des, scope, path_);
+      return elaborate_non_void_function_(des, scope, path_.name);
 }
 
 NetProc* PCallTask::elaborate_void_function_(Design*des, NetScope*scope,
@@ -4701,7 +4764,8 @@ NetProc* PCallTask::elaborate_void_function_(Design*des, NetScope*scope,
 }
 
 NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
-					  NetScope*task, NetExpr*use_this) const
+					  NetScope*task, NetExpr*use_this,
+					  bool nonvirtual) const
 {
       const NetBaseDef*def = 0;
       if (task->type() == NetScope::TASK) {
@@ -4722,7 +4786,7 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
       } else if (task->type() == NetScope::FUNC) {
 	    const NetFuncDef*tmp = task->func_def();
 	    if (!tmp->is_void())
-		  return elaborate_non_void_function_(des, scope, path_);
+		  return elaborate_non_void_function_(des, scope, path_.name);
 	    def = tmp;
 
 	    if (void_cast_) {
@@ -4743,6 +4807,23 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 
       unsigned parm_count = def->port_count();
 
+	/* A call to a virtual method is bound to the virtual
+	   declaration, which dispatches to the override that matches
+	   the class of the object. The arguments are passed to the
+	   ports of the declaration, which are the same as the ports of
+	   the method found above. */
+      NetScope*callee = task;
+      const NetBaseDef*pdef = def;
+      if (!nonvirtual) {
+	    if (NetScope*root = netclass_t::virtual_root(task)) {
+		  callee = root;
+		  if (root->type() == NetScope::TASK)
+			pdef = root->task_def();
+		  else
+			pdef = root->func_def();
+	    }
+      }
+
       if (parms_.size() > parm_count) {
 	    cerr << get_fileline() << ": error: "
 		 << "Too many arguments (" << parms_.size()
@@ -4751,6 +4832,9 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    des->errors += 1;
       }
 
+      unsigned int off = use_this ? 1 : 0;
+      auto args = map_named_args(des, def, parms_, off);
+
       NetBlock*block = new NetBlock(NetBlock::SEQU, 0);
       block->set_line(*this);
 
@@ -4758,7 +4842,7 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
            allocate the local storage. */
 
       if (task->is_auto()) {
-	    NetAlloc*ap = new NetAlloc(task);
+	    NetAlloc*ap = new NetAlloc(callee);
 	    ap->set_line(*this);
 	    block->append(ap);
       }
@@ -4770,7 +4854,7 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 
       if (use_this) {
 	    ivl_assert(*this, def->port_count() >= 1);
-	    NetNet*port = def->port(0);
+	    NetNet*port = pdef->port(0);
 	    ivl_assert(*this, port->port_type()==NetNet::PINPUT);
 
 	    NetAssign_*lv = new NetAssign_(port);
@@ -4785,13 +4869,10 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	   expression the r-value. We know by definition that the port
 	   is a reg type, so this elaboration is pretty obvious. */
 
-      unsigned int off = use_this ? 1 : 0;
-
-      auto args = map_named_args(des, def, parms_, off);
       for (unsigned int idx = off; idx < parm_count; idx++) {
 	    size_t parms_idx = idx - off;
 
-	    NetNet*port = def->port(idx);
+	    NetNet*port = pdef->port(idx);
 	    ivl_assert(*this, port->port_type() != NetNet::NOT_A_PORT);
 	    if (port->port_type() == NetNet::POUTPUT)
 		  continue;
@@ -4803,7 +4884,14 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    NetExpr*rv = 0;
 
 	    if (args[parms_idx]) {
-		  rv = elaborate_rval_expr(des, scope, port->net_type(),
+		    // As for functions: an unpacked-array formal takes the
+		    // array type as its context, not the element type.
+		  ivl_type_t ctype = port->net_type();
+		  if (port->unpacked_dimensions() > 0) {
+			if (const netarray_t*at = port->array_type())
+			      ctype = at;
+		  }
+		  rv = elaborate_rval_expr(des, scope, ctype,
 					   args[parms_idx]);
 		  if (const NetEEvent*evt = dynamic_cast<NetEEvent*> (rv)) {
 			cerr << evt->get_fileline() << ": error: An event '"
@@ -4838,7 +4926,8 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
       }
 
 	/* Generate the task call proper... */
-      NetUTask*cur = new NetUTask(task);
+      NetUTask*cur = new NetUTask(callee);
+      cur->set_nonvirtual(nonvirtual);
       cur->set_line(*this);
       block->append(cur);
 
@@ -4856,7 +4945,7 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 
 	    size_t parms_idx = idx - off;
 
-	    NetNet*port = def->port(idx);
+	    NetNet*port = pdef->port(idx);
 
 	      /* Skip input ports. */
 	    ivl_assert(*this, port->port_type() != NetNet::NOT_A_PORT);
@@ -4889,7 +4978,11 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    if (lv == 0)
 		  continue;
 
-	    if (dynamic_cast<const netuarray_t*>(lv->net_type())) {
+	    const netuarray_t*lv_uarray = dynamic_cast<const netuarray_t*>(lv->net_type());
+	    const netuarray_t*port_uarray = port->unpacked_dimensions() > 0
+		  ? dynamic_cast<const netuarray_t*>(port->array_type()) : nullptr;
+	    if ((lv_uarray != nullptr) != (port_uarray != nullptr) ||
+		(lv_uarray && !lv_uarray->type_compatible(port_uarray))) {
 		  cerr << get_fileline() << ": error: "
 		       << "Type of task port " << (idx+1)
 		       << " is not compatible with the argument type."
@@ -4915,14 +5008,18 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 			rv = cast_to_int4(rv, lv_width);
 			break;
 		      default:
-			  /* Cannot cast between these types. */
 			cerr << get_fileline() << ": error: "
-			     << "Type of task port " << (idx+1)
-			     << " is not compatible with the argument type."
-			     << endl;
+			     << "Argument " << (idx+1) << " for task '"
+			     << task->basename() << "' is called with '";
+			lv->dump_lval(cerr);
+			cerr << "' which has type '"
+			     << lv->expr_type() << "'." << endl;
+			cerr << get_fileline() << ":      : "
+			        "The task expects to return type '"
+			     << rv->expr_type() << "'." << endl;
 			des->errors += 1;
-			delete rv;
 			delete lv;
+			delete rv;
 			continue;
 		  }
 	    }
@@ -4938,7 +5035,7 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
         /* If this is an automatic task, generate a statement to free
            the local storage. */
       if (task->is_auto()) {
-	    NetFree*fp = new NetFree(task);
+	    NetFree*fp = new NetFree(callee);
 	    fp->set_line(*this);
 	    block->append(fp);
       }
@@ -5158,6 +5255,15 @@ NetCAssign* PCAssign::elaborate(Design*des, NetScope*scope) const
       if (lval == 0)
 	    return 0;
 
+      if (is_darray_element_(lval)) {
+	    cerr << get_fileline() << ": error: elements of dynamically "
+		    "sized arrays may not be assigned values using "
+		    "procedural continuous assignments." << endl;
+	    des->errors += 1;
+	    delete lval;
+	    return 0;
+      }
+
       unsigned lwid = count_lval_width(lval);
       ivl_variable_type_t ltype = lval->expr_type();
 
@@ -5331,9 +5437,21 @@ NetProc* PDoWhile::elaborate(Design*des, NetScope*scope) const
 	    delete sub;
 	    return 0;
       }
+      ce = condition_reduce(ce);
       NetDoWhile*loop = new NetDoWhile(ce, sub);
       loop->set_line(*this);
       return loop;
+}
+
+static bool check_event_select(Design*des, const name_component_t&name)
+{
+      if (name.index.empty()) return true;
+
+      cerr << name.index.front().get_fileline()
+	   << ": error: Cannot select from scalar event '" << name.name
+	   << "'." << endl;
+      des->errors += 1;
+      return false;
 }
 
 /*
@@ -5546,6 +5664,7 @@ cerr << endl;
 		  symbol_search(this, des, scope, id->path(), id->lexical_pos(), &sr);
 
 		  if (sr.scope && sr.eve) {
+			if (!check_event_select(des, id->path().back())) continue;
 			wa->add_event(sr.eve);
 			  /* You can not look for the posedge or negedge of
 			   * an event. */
@@ -5723,8 +5842,8 @@ NetProc* PEventStatement::elaborate_wait(Design*des, NetScope*scope,
 
       PExpr *pe = expr_[0]->expr();
 
-	/* Elaborate wait expression. Don't eval yet, we will do that
-	   shortly, after we apply a reduction or. */
+	/* Elaborate the wait expression. Evaluate it after reducing
+	   it to its logical value. */
 
       PExpr::width_mode_t mode = PExpr::SIZED;
       pe->test_width(des, scope, mode);
@@ -5737,22 +5856,7 @@ NetProc* PEventStatement::elaborate_wait(Design*des, NetScope*scope,
 	    return 0;
       }
 
-	// If the condition expression is more than 1 bits, then
-	// generate a reduction operator to get the result down to
-	// one bit. In other words, Turn <e> into |<e>;
-
-      if (expr->expr_width() < 1) {
-	    cerr << get_fileline() << ": internal error: "
-		  "incomprehensible wait expression width (0)." << endl;
-	    return 0;
-      }
-
-      if (expr->expr_width() > 1) {
-	    ivl_assert(*this, expr->expr_width() > 1);
-	    NetEUReduce*cmp = new NetEUReduce('|', expr);
-	    cmp->set_line(*pe);
-	    expr = cmp;
-      }
+      expr = condition_reduce(expr);
 
 	/* precalculate as much as possible of the wait expression. */
       eval_expr(expr);
@@ -5977,6 +6081,15 @@ NetForce* PForce::elaborate(Design*des, NetScope*scope) const
       if (lval == 0)
 	    return 0;
 
+      if (is_darray_element_(lval)) {
+	    cerr << get_fileline() << ": error: elements of dynamically "
+		    "sized arrays may not be assigned values using "
+		    "procedural force statements." << endl;
+	    des->errors += 1;
+	    delete lval;
+	    return 0;
+      }
+
       unsigned lwid = count_lval_width(lval);
       ivl_variable_type_t ltype = lval->expr_type();
 
@@ -6002,20 +6115,6 @@ NetForce* PForce::elaborate(Design*des, NetScope*scope) const
       return dev;
 }
 
-static void find_property_in_class(const LineInfo&loc, const NetScope*scope, perm_string name, const netclass_t*&found_in, int&property)
-{
-      found_in = find_class_containing_scope(loc, scope);
-      property = -1;
-
-      if (found_in==0) return;
-
-      property = found_in->property_idx_from_name(name);
-      if (property < 0) {
-	    found_in = 0;
-	    return;
-      }
-}
-
 /*
  * The foreach statement can be written as a for statement like so:
  *
@@ -6027,85 +6126,40 @@ static void find_property_in_class(const LineInfo&loc, const NetScope*scope, per
  */
 NetProc* PForeach::elaborate(Design*des, NetScope*scope) const
 {
-	// Locate the signal for the array variable
-      pform_name_t array_name;
-      array_name.push_back(name_component_t(array_var_));
-      NetNet*array_sig = des->find_signal(scope, array_name);
+      auto array_scope = scope->parent();
+      ivl_assert(*this, array_scope);
 
-	// And if necessary, look for the class property that is
-	// referenced.
-      const netclass_t*class_scope = 0;
-      int class_property = -1;
-      if (array_sig == 0)
-	    find_property_in_class(*this, scope, array_var_, class_scope, class_property);
+      auto array_expr = array_var_->elaborate_variable(des, array_scope);
+      if (!array_expr) return nullptr;
 
-      if (debug_elaborate && array_sig) {
-	    cerr << get_fileline() << ": PForeach::elaborate: "
-		 << "Found array_sig in " << scope_path(array_sig->scope()) << "." << endl;
-      }
-
-      if (debug_elaborate && class_scope) {
-	    cerr << get_fileline() << ": PForeach::elaborate: "
-		 << "Found array_sig property (" << class_property
-		 << ") in class " << class_scope->get_name()
-		 << " as " << *class_scope->get_prop_type(class_property) << "." << endl;
-      }
-
-      if (class_scope!=0 && class_property >= 0) {
-	    ivl_type_t ptype = class_scope->get_prop_type(class_property);
-	    const netsarray_t*atype = dynamic_cast<const netsarray_t*> (ptype);
-	    if (atype == 0) {
-		  cerr << get_fileline() << ": error: "
-		       << "I can't handle the type of " << array_var_
-		       << " as a foreach loop." << endl;
-		  des->errors += 1;
-		  return 0;
-	    }
-
-	    const netranges_t&dims = atype->static_dimensions();
-	    if (dims.size() < index_vars_.size()) {
-		  cerr << get_fileline() << ": error: "
-		       << "class " << class_scope->get_name()
-		       << " property " << array_var_
-		       << " has too few dimensions for foreach dimension list." << endl;
-		  des->errors += 1;
-		  return 0;
-	    }
-
-	    return elaborate_static_array_(des, scope, dims);
-      }
-
-      if (array_sig == 0) {
-	    cerr << get_fileline() << ": error:"
-		 << " Unable to find foreach array " << array_name
-		 << " in scope " << scope_path(scope)
-		 << "." << endl;
+      ivl_type_t array_type = array_expr->net_type();
+      if (!array_type) {
+	    cerr << get_fileline() << ": error: I can't handle the type of "
+		 << *array_var_ << " as a foreach loop." << endl;
 	    des->errors += 1;
-	    return 0;
+	    return nullptr;
       }
-
-      ivl_assert(*this, array_sig);
 
       if (debug_elaborate) {
 	    cerr << get_fileline() << ": PForeach::elaborate: "
-		 << "Scan array " << array_sig->name()
-		 << " of " << array_sig->data_type()
-		 << " with " << array_sig->unpacked_dimensions() << " unpacked"
-		 << " and " << array_sig->packed_dimensions()
-		 << " packed dimensions." << endl;
+		 << "Scan array " << *array_var_ << " of type "
+		 << *array_type << "." << endl;
       }
 
-      netranges_t dims = array_sig->unpacked_dims();
-      if (array_sig->packed_dimensions() > 0) {
-            dims.insert(dims.end(), array_sig->packed_dims().begin(), array_sig->packed_dims().end());
+      netranges_t dims;
+      ivl_type_t element_type = array_type;
+      while (auto unpacked = dynamic_cast<const netuarray_t*>(element_type)) {
+	    const netranges_t&unpacked_dims = unpacked->static_dimensions();
+	    dims.insert(dims.end(), unpacked_dims.begin(), unpacked_dims.end());
+	    element_type = unpacked->element_type();
       }
 
-	// Classic arrays are processed this way.
-      if (array_sig->data_type()==IVL_VT_BOOL)
-	    return elaborate_static_array_(des, scope, dims);
-      if (array_sig->data_type()==IVL_VT_LOGIC)
-	    return elaborate_static_array_(des, scope, dims);
-      if (array_sig->unpacked_dimensions() >= index_vars_.size())
+      netranges_t packed_dims = element_type->slice_dimensions();
+      dims.insert(dims.end(), packed_dims.begin(), packed_dims.end());
+
+      const bool dynamic_array = dynamic_cast<const netdarray_t*>(array_type)
+	    || (dims.empty() && array_type->base_type() == IVL_VT_STRING);
+      if (!dynamic_array)
 	    return elaborate_static_array_(des, scope, dims);
 
 	// At this point, we know that the array is dynamic so we
@@ -6123,9 +6177,6 @@ NetProc* PForeach::elaborate(Design*des, NetScope*scope) const
       NetNet*idx_sig = des->find_signal(scope, index_name);
       ivl_assert(*this, idx_sig);
 
-      NetESignal*array_exp = new NetESignal(array_sig);
-      array_exp->set_line(*this);
-
       NetESignal*idx_exp = new NetESignal(idx_sig);
       idx_exp->set_line(*this);
 
@@ -6135,12 +6186,14 @@ NetProc* PForeach::elaborate(Design*des, NetScope*scope) const
 	// Make an initialization expression for the index.
       NetESFunc*init_expr = new NetESFunc("$low", &netvector_t::atom2s32, 1);
       init_expr->set_line(*this);
-      init_expr->parm(0, array_exp);
+
+      NetExpr*high_array_expr = array_expr->dup_expr();
+      init_expr->parm(0, array_expr.release());
 
 	// Make a condition expression: idx <= $high(array)
       NetESFunc*high_exp = new NetESFunc("$high", &netvector_t::atom2s32, 1);
       high_exp->set_line(*this);
-      high_exp->parm(0, array_exp);
+      high_exp->parm(0, high_array_expr);
 
       NetEBComp*cond_expr = new NetEBComp('L', idx_exp, high_exp);
       cond_expr->set_line(*this);
@@ -6358,6 +6411,7 @@ NetProc* PForStatement::elaborate(Design*des, NetScope*scope) const
       // have a consistent input.
       ivl_assert(*this, sig || !initial_expr);
 
+      ce = condition_reduce(ce);
       NetForLoop*loop = new NetForLoop(sig, initial_expr, ce, sub, step);
       loop->set_line(*this);
       return loop;
@@ -6487,17 +6541,14 @@ NetProc* PRepeat::elaborate(Design*des, NetScope*scope) const
 	    stat = new NetBlock(NetBlock::SEQU, 0);
       if (stat == 0) return 0;
 
-	// If the expression is a constant, handle certain special
-	// iteration counts.
+	// Elide loops that have no iterations. Keep single iterations to
+	// preserve the loop targets of break and continue statements.
       if (const NetEConst*ce = dynamic_cast<NetEConst*>(expr)) {
 	    long val = ce->value().as_long();
 	    if (val <= 0) {
 		  delete expr;
 		  delete stat;
 		  return new NetBlock(NetBlock::SEQU, 0);
-	    } else if (val == 1) {
-		  delete expr;
-		  return stat;
 	    }
       }
 
@@ -6700,6 +6751,8 @@ NetProc* PTrigger::elaborate(Design*des, NetScope*scope) const
 	    return 0;
       }
 
+      if (!check_event_select(des, event_.back())) return nullptr;
+
       NetEvTrig*trig = new NetEvTrig(sr.eve);
       trig->set_line(*this);
       return trig;
@@ -6731,6 +6784,8 @@ NetProc* PNBTrigger::elaborate(Design*des, NetScope*scope) const
 	    return 0;
       }
 
+      if (!check_event_select(des, event_.back())) return nullptr;
+
       NetExpr*dly = 0;
       if (dly_) dly = elab_and_eval(des, scope, dly_, -1);
       NetEvNBTrig*trig = new NetEvNBTrig(sr.eve, dly);
@@ -6754,6 +6809,7 @@ NetProc* PWhile::elaborate(Design*des, NetScope*scope) const
 	    delete sub;
 	    return 0;
       }
+      ce = condition_reduce(ce);
       NetWhile*loop = new NetWhile(ce, sub);
       loop->set_line(*this);
       return loop;
@@ -6824,6 +6880,71 @@ bool PProcess::elaborate(Design*des, NetScope*scope) const
       } while (0);
 
       return true;
+}
+
+static std::string ordinary_path_condition_name(Design*des, NetScope*scope,
+                                               const PExpr*expr,
+                                               bool comparison = false)
+{
+      const PEIdent*id = dynamic_cast<const PEIdent*>(expr);
+      if (!id || id->path().package || id->path().name.size() != 1
+          || !id->path().name.front().index.empty()) return {};
+      NetNet*sig = des->find_signal(scope, id->path().name);
+      if (!sig || sig->scope() != scope || sig->vector_width() != 1
+          || sig->unpacked_dimensions()) return {};
+      if (sig->data_type() != IVL_VT_LOGIC && sig->data_type() != IVL_VT_BOOL)
+            return {};
+      if (comparison && sig->packed_dimensions()) return {};
+      return sig->name().str();
+}
+
+// Preserve source condition identity, not its optimized condition nexus.
+// Bare names keep the existing encoding. Expression keys start with a space,
+// which cannot occur in a Verilog identifier, and use typed, length-delimited
+// leaves and ordered binary trees. The SDF parser constructs the same keys.
+static std::string ordinary_path_condition_key(Design*des, NetScope*scope,
+                                              const PExpr*expr,
+                                              std::string&text)
+{
+      const PEBinary*binary = dynamic_cast<const PEBinary*>(expr);
+      if (!binary) {
+            std::string name = ordinary_path_condition_name(des, scope, expr);
+            if (!name.empty()) text = "\\" + name + " ";
+            return name;
+      }
+
+      if (binary->peek_opcode() == 'e' || binary->peek_opcode() == 'E') {
+            const bool case_equal = binary->peek_opcode() == 'E';
+            std::string name = ordinary_path_condition_name(des, scope,
+                                                   binary->peek_left(), true);
+            const PENumber*number = dynamic_cast<const PENumber*>(binary->peek_right());
+            if (name.empty() || !number) return {};
+            const verinum&value = number->value();
+            if (!value.has_len() || value.len() != 1 || value.has_sign()
+                || value.is_single() || !value.is_defined()) return {};
+            std::ostringstream key;
+            key << (case_equal ? " C" : " E") << name.size() << ':' << name
+                << (value.is_zero() ? '0' : '1');
+            text = "(\\" + name + (case_equal ? "  === 1'b" : "  == 1'b") +
+                  (value.is_zero() ? "0)" : "1)");
+            return key.str();
+      }
+
+      if (binary->peek_opcode() == 'a' || binary->peek_opcode() == 'o') {
+            std::string left_text, right_text;
+            std::string left = ordinary_path_condition_key(des, scope,
+                                              binary->peek_left(), left_text);
+            std::string right = ordinary_path_condition_key(des, scope,
+                                              binary->peek_right(), right_text);
+            // Logical leaves must be comparisons, not bare names or constants.
+            if (left.empty() || right.empty()
+                || left[0] != ' ' || right[0] != ' ') return {};
+            const bool is_or = binary->peek_opcode() == 'o';
+            text = "(" + left_text + (is_or ? " || " : " && ") + right_text + ")";
+            return (is_or ? " O" : " A") + left + right;
+      }
+
+      return {};
 }
 
 void PSpecPath::elaborate(Design*des, NetScope*scope) const
@@ -6962,11 +7083,14 @@ void PSpecPath::elaborate(Design*des, NetScope*scope) const
 					       src.size(), condit_sig,
 					       conditional, !full_flag_);
 	    path->set_line(*this);
+	    path->sdf_condition = ordinary_path_condition_key(des, scope, condition,
+						path->sdf_condition_text);
 
-	      // The presence of the data_source_expression indicates
-	      // that this is an edge sensitive path. If so, then set
-	      // the edges. Note that edge==0 is BOTH edges.
-	    if (data_source_expression) {
+	      // An edge sensitive path has either a data source
+	      // expression or an explicit edge keyword. When neither is
+	      // present the path is a simple (non-edge) path. Note that
+	      // edge==0 with a data source expression is BOTH edges.
+	    if (data_source_expression || edge != 0) {
 		  if (edge >= 0) path->set_posedge();
 		  if (edge <= 0) path->set_negedge();
 	    }
@@ -7354,6 +7478,71 @@ bool Module::elaborate(Design*des, NetScope*scope) const
  * child scope for each definition and use that for the context of the
  * function.
  */
+/*
+ * Compare the type of an argument or return value of a virtual method
+ * with the one in the method that it overrides. Class return values may
+ * be covariant, in which case the override returns a derived class.
+ */
+static bool virtual_types_match(ivl_type_t base, ivl_type_t over, bool covariant)
+{
+      if (base == 0 || over == 0)
+	    return base == over;
+      if (base->base_type() != over->base_type())
+	    return false;
+      switch (base->base_type()) {
+	  case IVL_VT_CLASS:
+	    return covariant ? base->type_compatible(over) : base == over;
+	  case IVL_VT_BOOL:
+	  case IVL_VT_LOGIC:
+	    return base->type_equivalent(over);
+	  default:
+	    return true;
+      }
+}
+
+static const NetBaseDef*method_def(const NetScope*method)
+{
+      if (method->type() == NetScope::FUNC)
+	    return method->func_def();
+      return method->task_def();
+}
+
+static const char*virtual_mismatch(NetScope*over, NetScope*root)
+{
+      if (over->type() != root->type())
+	    return "a function and a task";
+
+      const NetBaseDef*odef = method_def(over);
+      const NetBaseDef*rdef = method_def(root);
+      if (odef == 0 || rdef == 0)
+	    return 0;
+
+      if (odef->port_count() != rdef->port_count())
+	    return "a different number of arguments";
+
+	// Port 0 is the implicit "this" argument.
+      for (unsigned idx = 1 ; idx < odef->port_count() ; idx += 1) {
+	    const NetNet*op = odef->port(idx);
+	    const NetNet*rp = rdef->port(idx);
+	    if (op->port_type() != rp->port_type())
+		  return "a different argument direction";
+	    if (op->unpacked_dimensions() != rp->unpacked_dimensions()
+		|| !virtual_types_match(rp->net_type(), op->net_type(), false))
+		  return "a different argument type";
+      }
+
+      if (over->type() == NetScope::FUNC) {
+	    const NetNet*ores = over->find_signal(over->basename());
+	    const NetNet*rres = root->find_signal(root->basename());
+	    if ((ores == 0) != (rres == 0))
+		  return "a different return type";
+	    if (ores && !virtual_types_match(rres->net_type(), ores->net_type(), true))
+		  return "a different return type";
+      }
+
+      return 0;
+}
+
 void netclass_t::elaborate(Design*des, PClass*pclass)
 {
       if (! pclass->type->initialize_static.empty()) {
@@ -7393,6 +7582,46 @@ void netclass_t::elaborate(Design*des, PClass*pclass)
 	    NetScope*scope = class_scope_->child( hname_t(cur->first) );
 	    ivl_assert(*cur->second, scope);
 	    cur->second->elaborate(des, scope);
+      }
+
+	// Check that each override of a virtual method has the same
+	// signature as the virtual method that it overrides.
+      std::vector<perm_string> names;
+      for (map<perm_string,PFunction*>::iterator cur = pclass->funcs.begin()
+		 ; cur != pclass->funcs.end() ; ++ cur)
+	    names.push_back(cur->first);
+      for (map<perm_string,PTask*>::iterator cur = pclass->tasks.begin()
+		 ; cur != pclass->tasks.end() ; ++ cur)
+	    names.push_back(cur->first);
+
+      for (perm_string name : names) {
+	    NetScope*method = class_scope_->child( hname_t(name) );
+	    NetScope*root = virtual_root(method);
+	    if (root == 0 || root == method)
+		  continue;
+
+	    // The code that passes the arguments of a virtual method on
+	    // to an override does not copy unpacked arrays.
+	    const NetBaseDef*def = method_def(method);
+	    for (unsigned idx = 0 ; def && idx < def->port_count() ; idx += 1) {
+		  if (def->port(idx)->unpacked_dimensions() == 0)
+			continue;
+		  cerr << method->get_fileline() << ": sorry: Method `"
+		       << method->basename() << "` of class " << name_
+		       << " is virtual and has an unpacked array argument." << endl;
+		  des->errors += 1;
+		  break;
+	    }
+
+	    if (const char*what = virtual_mismatch(method, root)) {
+		  cerr << method->get_fileline() << ": error: Method `"
+		       << method->basename() << "` of class " << name_
+		       << " overrides a virtual method but has " << what
+		       << "." << endl;
+		  cerr << root->get_fileline() << ":      : "
+		       << "The virtual method is declared here." << endl;
+		  des->errors += 1;
+	    }
       }
 }
 

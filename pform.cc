@@ -715,6 +715,9 @@ PFunction* pform_push_function_scope(const struct vlltype&loc, const char*name,
 	    scopex->funcs[func_name] = func;
       }
 
+        // The function name is also visible in its own scope.
+      add_local_symbol(func, func_name, func);
+
       lexical_scope = func;
 
       return func;
@@ -763,7 +766,7 @@ PTrigger* pform_new_trigger(const struct vlltype&loc, PPackage*pkg,
       if (gn_system_verilog())
 	    check_potential_imports(loc, name.front().name, false);
 
-      PTrigger*tmp = new PTrigger(pkg, name);
+      PTrigger*tmp = new PTrigger(pform_scoped_name_t(pkg, name));
       FILE_NAME(tmp, loc);
       return tmp;
 }
@@ -858,16 +861,16 @@ void pform_put_enum_type_in_scope(enum_type_t*enum_set)
 	    return;
 
       set<perm_string> enum_names;
-      list<named_pexpr_t>::const_iterator cur;
-      for (cur = enum_set->names->begin(); cur != enum_set->names->end(); ++cur) {
-	    if (enum_names.count(cur->name)) {
-		  cerr << enum_set->get_fileline() << ": error: "
+
+      for (auto&cur : *enum_set->names) {
+	    if (enum_names.count(cur.name)) {
+		  cerr << cur.get_fileline() << ": error: "
 			  "Duplicate enumeration name '"
-		       << cur->name << "'." << endl;
+		       << cur.name << "'." << endl;
 		  error_count += 1;
 	    } else {
-		  add_local_symbol(lexical_scope, cur->name, enum_set);
-		  enum_names.insert(cur->name);
+		  add_local_symbol(lexical_scope, cur.name, &cur);
+		  enum_names.insert(cur.name);
 	    }
       }
 
@@ -906,8 +909,10 @@ void pform_set_typedef(const struct vlltype&loc, perm_string name,
 {
       typedef_t *td = pform_get_typedef(loc, name);
 
-      if(unp_ranges)
+      if (unp_ranges) {
 	    data_type = new uarray_type_t(data_type, unp_ranges);
+	    FILE_NAME(data_type, loc);
+      }
 
       if (!td->set_data_type(data_type)) {
 	    cerr << loc << " error: Type identifier `" << name
@@ -917,12 +922,6 @@ void pform_set_typedef(const struct vlltype&loc, perm_string name,
 	    error_count++;
 	    delete data_type;
       }
-}
-
-void pform_set_type_referenced(const struct vlltype&loc, const char*name)
-{
-      perm_string lex_name = lex_strings.make(name);
-      check_potential_imports(loc, lex_name, false);
 }
 
 typedef_t* pform_test_type_identifier(const struct vlltype&loc, const char*txt)
@@ -1038,7 +1037,7 @@ void pform_make_foreach_declarations(const struct vlltype&loc,
 	    if (cur->nil())
 		  continue;
 	    decl_assignment_t*tmp_assign = new decl_assignment_t;
-	    tmp_assign->name = { lex_strings.make(*cur), 0 };
+	    tmp_assign->name = { lex_strings.make(*cur), loc.lexical_pos };
 	    assign_list.push_back(tmp_assign);
       }
 
@@ -1046,12 +1045,11 @@ void pform_make_foreach_declarations(const struct vlltype&loc,
 }
 
 PForeach* pform_make_foreach(const struct vlltype&loc,
-			     char*name,
+			     PEIdent*array_ident,
 			     list<perm_string>*loop_vars,
 			     Statement*stmt)
 {
-      perm_string use_name = lex_strings.make(name);
-      delete[]name;
+      unique_ptr<PEIdent> array_var(array_ident);
 
       if (loop_vars==0 || loop_vars->empty()) {
 	    cerr << loc.get_fileline() << ": error: "
@@ -1060,12 +1058,12 @@ PForeach* pform_make_foreach(const struct vlltype&loc,
       }
 
       ivl_assert(loc, loop_vars);
-      PForeach*fe = new PForeach(use_name, *loop_vars, stmt);
-      FILE_NAME(fe, loc);
+      auto foreach_stmt = new PForeach(std::move(array_var), *loop_vars, stmt);
+      FILE_NAME(foreach_stmt, loc);
 
       delete loop_vars;
 
-      return fe;
+      return foreach_stmt;
 }
 
 static void pform_put_behavior_in_scope(PProcess*pp)
@@ -1596,6 +1594,7 @@ void pform_genvars(const struct vlltype&li, list<pform_ident_t>*names)
       list<pform_ident_t>::const_iterator cur;
       for (cur = names->begin(); cur != names->end() ; ++cur) {
 	    PGenvar*genvar = new PGenvar();
+	    genvar->lexical_pos(cur->second);
 	    FILE_NAME(genvar, li);
 
 	    if (pform_cur_generate) {
@@ -3135,17 +3134,22 @@ void pform_set_parameter(const struct vlltype&loc,
 
       const vector_type_t*vt = dynamic_cast<vector_type_t*>(data_type);
       if (vt && vt->pdims && vt->pdims->size() > 1) {
-	    if (pform_requires_sv(loc, "packed array parameter")) {
-		  VLerror(loc, "sorry: packed array parameters are not supported yet.");
-	    }
-	    return;
+	    // A multi-dimension packed array parameter, e.g.
+	    //   localparam logic [0:63][3:0] MEM = '{ ... };
+	    // The value elaborates to a foldable packed constant and the
+	    // multi-dimension type is carried through for element selects.
+	    pform_requires_sv(loc, "packed array parameter");
       }
 
       if (udims) {
+	    // An unpacked array parameter, e.g.
+	    //   localparam logic [3:0] MEM [0:63] = '{ ... };
+	    // Wrap the element data type in an unpacked array type (mirrors the
+	    // wire declaration path) so the parameter carries a netuarray_t.
 	    if (pform_requires_sv(loc, "unpacked array parameter")) {
-		  VLerror(loc, "sorry: unpacked array parameters are not supported yet.");
+		  data_type = new uarray_type_t(data_type,
+				   new std::list<pform_range_t>(*udims));
 	    }
-	    return;
       }
 
       bool overridable = !is_local;
@@ -3195,13 +3199,12 @@ void pform_set_parameter(const struct vlltype&loc,
 }
 
 void pform_set_specparam(const struct vlltype&loc, perm_string name,
-			 list<pform_range_t> *range, PExpr *expr,
+			 vector_type_t*data_type, PExpr *expr,
 			 bool check_decl_order)
 {
       ivl_assert(loc, !pform_cur_module.empty());
       Module*scope = pform_cur_module.front();
       if (scope != lexical_scope) {
-	    delete range;
 	    delete expr;
 	    return;
       }
@@ -3220,11 +3223,10 @@ void pform_set_specparam(const struct vlltype&loc, perm_string name,
       if (check_decl_order)
 	    parm->lexical_pos = loc.lexical_pos;
 
-      if (range) {
-	    ivl_assert(loc, range->size() == 1);
-	    parm->data_type = new vector_type_t(IVL_VT_LOGIC, false, range);
-	    parm->range = 0;
+      if (data_type) {
+	    ivl_assert(loc, data_type->pdims->size() == 1);
       }
+      parm->data_type = data_type;
 }
 
 void pform_set_defparam(const pform_name_t&name, PExpr*expr)

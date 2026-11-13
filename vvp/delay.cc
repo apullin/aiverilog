@@ -554,21 +554,146 @@ struct vvp_fun_modpath::state_t {
       map<vvp_time64_t, vvp_fun_modpath_event*> events;
 };
 
+// Keep functional requests separate from values already delivered. Each
+// surviving scalar transaction owns its value and scheduled delivery time.
+struct modpath_scalar_state {
+      vvp_bit4_t delivered;
+      list<modpath_scalar_event*> pending;
+      modpath_scalar_state() : delivered(BIT4_X) { }
+};
+
+struct modpath_event_registry;
+struct modpath_scalar_event : public vvp_gen_event_s {
+      modpath_scalar_event(vvp_fun_modpath*, vvp_bit4_t, vvp_time64_t);
+      ~modpath_scalar_event() override;
+      void run_run() override;
+      void detach();
+
+      vvp_fun_modpath*owner;
+      const vvp_bit4_t target;
+      const vvp_time64_t due;
+      list<modpath_scalar_event*>::iterator pending;
+      list<modpath_scalar_event*>::iterator lifetime;
+      modpath_event_registry&registry;
+};
+
+// The generic scheduler deletes dispatched payloads, but does not dispatch
+// future events after $finish. Keep those payloads until post-simulation
+// cleanup, independently of whether they remain in an owner's pending list.
+struct modpath_event_registry {
+      list<modpath_scalar_event*> outstanding;
+      modpath_event_registry();
+      ~modpath_event_registry() { cleanup(); }
+      void cleanup()
+      {
+            while (!outstanding.empty()) delete outstanding.front();
+      }
+      static PLI_INT32 postsim(p_cb_data);
+};
+
+static modpath_event_registry&modpath_registry()
+{
+      static modpath_event_registry registry;
+      return registry;
+}
+
+modpath_event_registry::modpath_event_registry()
+{
+      s_cb_data cb = {};
+      cb.reason = cbEndOfSimulation;
+      cb.cb_rtn = postsim;
+      cb.user_data = reinterpret_cast<PLI_BYTE8*>(this);
+      vpiHandle handle = vpi_register_cb(&cb);
+      assert(handle);
+}
+
+PLI_INT32 modpath_event_registry::postsim(p_cb_data cb)
+{
+      // Final blocks have run and the scheduler will not dispatch again.
+      const_cast<modpath_event_registry*>(
+            reinterpret_cast<const modpath_event_registry*>(cb->user_data))->cleanup();
+      return 0;
+}
+
+modpath_scalar_event::modpath_scalar_event(vvp_fun_modpath*o, vvp_bit4_t v,
+                                         vvp_time64_t when)
+: owner(o), target(v), due(when), registry(modpath_registry())
+{
+      owner->scalar_->pending.push_back(this);
+      pending = --owner->scalar_->pending.end();
+      registry.outstanding.push_back(this);
+      lifetime = --registry.outstanding.end();
+}
+
+void modpath_scalar_event::detach()
+{
+      if (!owner) return;
+      owner->scalar_->pending.erase(pending);
+      owner = 0;
+}
+
+modpath_scalar_event::~modpath_scalar_event()
+{
+      detach();
+      registry.outstanding.erase(lifetime);
+}
+
+void modpath_scalar_event::run_run()
+{
+      if (!owner) return; // A canceled callback cannot deliver a newer request.
+      assert(schedule_simtime() == due);
+      vvp_fun_modpath*o = owner;
+      detach();
+      o->scalar_->delivered = target;
+      o->net_->send_vec4(vvp_vector4_t(1, target), 0);
+      // The generic scheduler deletes this payload after return.
+}
+
+void vvp_fun_modpath::scalar_request_(vvp_bit4_t value, vvp_time64_t delay,
+                                    vvp_time64_t reject_limit)
+{
+      const vvp_time64_t due = schedule_simtime() + delay;
+      input_vec4_.set_bit(0, value);
+
+      // Default pulse rejection uses the trailing transition's full path
+      // delay. Reject negative or shorter nominal output pulses; equality
+      // survives. Canceled payloads remain scheduler-owned until dispatched.
+      while (!scalar_->pending.empty()) {
+            modpath_scalar_event*p = scalar_->pending.back();
+            if (due >= p->due && due - p->due >= reject_limit) break;
+            p->detach();
+      }
+
+      // A due-now transaction is still the projected output until it runs.
+      const vvp_bit4_t base = scalar_->pending.empty() ? scalar_->delivered
+                            : scalar_->pending.back()->target;
+      if (value == base) return;
+      modpath_scalar_event*event = new modpath_scalar_event(this, value, due);
+      schedule_generic(event, delay, false, true, true);
+}
+
 vvp_fun_modpath::vvp_fun_modpath(vvp_net_t*net, unsigned width)
 : net_(net), input_vec4_(width, BIT4_X), output_vec4_(width, BIT4_X),
-  state_(new state_t(width)), src_list_(0), ifnone_list_(0)
+  scalar_(width == 1 ? new modpath_scalar_state : 0),
+  state_(width == 1 ? 0 : new state_t(width)),
+  src_list_(0), ifnone_list_(0)
 {
       schedule_init_propagate(net_, output_vec4_);
 }
 
 vvp_fun_modpath::~vvp_fun_modpath()
 {
-	// Release event payloads left behind when simulation stops early.
-      for (map<vvp_time64_t, vvp_fun_modpath_event*>::iterator cur
-             = state_->events.begin(); cur != state_->events.end(); ++cur)
-            delete cur->second;
-      delete state_;
-
+      if (scalar_) {
+            while (!scalar_->pending.empty()) scalar_->pending.back()->detach();
+            delete scalar_;
+      }
+      if (state_) {
+	    // Release event payloads left behind when simulation stops early.
+	    for (map<vvp_time64_t, vvp_fun_modpath_event*>::iterator cur
+	           = state_->events.begin(); cur != state_->events.end(); ++cur)
+		  delete cur->second;
+	    delete state_;
+      }
 	// Delete the source probes.
       while (src_list_) {
 	    vvp_fun_modpath_src*tmp = src_list_;
@@ -681,8 +806,8 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
       list<vvp_fun_modpath_src*>candidate_list;
       vvp_time64_t candidate_wake_time = 0;
       for (vvp_fun_modpath_src*cur = src_list_ ;  cur ;  cur=cur->next_) {
-	      /* Skip paths that are disabled by conditions. */
-	    if (cur->condition_flag_ == false)
+	      /* A zero timestamp can also be a real edge at time zero. */
+	    if (!cur->condition_flag_ || cur->waiting_for_edge_)
 		  continue;
 
 	    if (candidate_list.empty()) {
@@ -702,6 +827,8 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 	 * if there are no normal delays. */
       vvp_time64_t ifnone_wake_time = candidate_wake_time;
       for (vvp_fun_modpath_src*cur = ifnone_list_ ;  cur ;  cur=cur->next_) {
+	    if (cur->waiting_for_edge_)
+		  continue;
 	    if (candidate_list.empty()) {
 		  candidate_list.push_back(cur);
 		  ifnone_wake_time = cur->wake_time_;
@@ -721,6 +848,10 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 	   conditional delays is incomplete, leaving some cases
 	   uncovered. In that case, just pass the data without delay */
       if (candidate_list.empty()) {
+	    if (scalar_) {
+		  scalar_request_(bit.value(0), 0, 0);
+		  return;
+	    }
 	    for (unsigned idx = 0; idx < bit.size(); idx += 1) {
 		  if (input_vec4_.value(idx) == bit.value(idx))
 			continue;
@@ -737,6 +868,7 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 	   candidates. This minimum set becomes the chosen delay to
 	   use. */
       vvp_time64_t out_at[12];
+      vvp_time64_t full_delay[12];
       vvp_time64_t now = schedule_simtime();
 
       typedef list<vvp_fun_modpath_src*>::const_iterator iter_t;
@@ -745,6 +877,7 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
       const vvp_fun_modpath_src*src = *cur;
 
       for (unsigned idx = 0 ;  idx < 12 ;  idx += 1) {
+	    full_delay[idx] = src->delay_[idx];
 	    out_at[idx] = src->wake_time_ + src->delay_[idx];
 	    if (out_at[idx] <= now)
 		  out_at[idx] = 0;
@@ -755,6 +888,8 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
       for (++ cur ; cur != candidate_list.end() ; ++ cur ) {
 	    src = *cur;
 	    for (unsigned idx = 0 ;  idx < 12 ;  idx += 1) {
+		  if (src->delay_[idx] < full_delay[idx])
+			full_delay[idx] = src->delay_[idx];
 		  vvp_time64_t tmp = src->wake_time_ + src->delay_[idx];
 		  if (tmp <= now)
 			tmp = 0;
@@ -763,6 +898,16 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 		  if (tmp < out_at[idx])
 			out_at[idx] = tmp;
 	    }
+      }
+
+      if (scalar_) {
+	    vvp_time64_t use_delay = delay_from_edge(input_vec4_.value(0),
+						     bit.value(0),
+						     out_at);
+	    vvp_time64_t limit = delay_from_edge(input_vec4_.value(0),
+					        bit.value(0), full_delay);
+	    scalar_request_(bit.value(0), use_delay, limit);
+	    return;
       }
 
 	/* Schedule each changed bit using its own transition delay. Bits that
@@ -783,7 +928,8 @@ void vvp_fun_modpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
       input_vec4_ = bit;
 }
 
-vvp_fun_modpath_src::vvp_fun_modpath_src(vvp_time64_t const del[12])
+vvp_fun_modpath_src::vvp_fun_modpath_src(vvp_time64_t const del[12], bool wait_for_edge)
+: waiting_for_edge_(wait_for_edge)
 {
       for (unsigned idx = 0 ;  idx < 12 ;  idx += 1)
 	    delay_[idx] = del[idx];
@@ -814,12 +960,14 @@ void vvp_fun_modpath_src::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 {
       if (port.port() == 0) {
 	      // The modpath input...
-	    if (test_vec4(bit))
+	    if (test_vec4(bit)) {
 		  wake_time_ = schedule_simtime();
+		  waiting_for_edge_ = false;
+	    }
 
       } else if (port.port() == 1) {
 	      // The modpath condition input...
-	    if (bit.value(0) == BIT4_1)
+	    if (bit.value(0) != BIT4_0)
 		  condition_flag_ = true;
 	    else
 		  condition_flag_ = false;
@@ -833,7 +981,7 @@ bool vvp_fun_modpath_src::test_vec4(const vvp_vector4_t&)
 
 vvp_fun_modpath_edge::vvp_fun_modpath_edge(vvp_time64_t del[12],
 					   bool pos, bool neg)
-: vvp_fun_modpath_src(del)
+: vvp_fun_modpath_src(del, true)
 {
       old_value_ = BIT4_X;
       posedge_ = pos;
@@ -891,12 +1039,7 @@ static vpiHandle modpath_src_get_handle(int code, vpiHandle ref)
 	  return rfp->dest->scope;
 
 	  case vpiModule:
-	      { __vpiScope*scope = rfp->dest->scope;
-		while (scope && scope->get_type_code() != vpiModule)
-		      scope = scope->scope;
-		assert(scope);
-		return scope;
-	      }
+	    return vpip_module(rfp->dest->scope);
 
 	    // Handles to path term objects should really be obtained via
 	    // the vpi_iterate and vpi_scan functions. Continue to allow
@@ -1114,6 +1257,13 @@ int __vpiModPathSrc::get_type_code(void) const
 int __vpiModPathSrc::vpi_get(int code)
 { return modpath_src_get(code, this); }
 
+char* __vpiModPathSrc::vpi_get_str(int code)
+{
+      if (code == _vpiModPathCondition && !sdf_condition.empty())
+            return simple_set_rbuf_str(sdf_condition.c_str());
+      return 0;
+}
+
 void __vpiModPathSrc::vpi_get_value(p_vpi_value val)
 { modpath_src_get_value(this, val); }
 
@@ -1224,11 +1374,131 @@ struct __vpiModPathSrc* vpip_make_modpath_src(struct __vpiModPath*path,
       return obj;
 }
 
-vvp_fun_intermodpath::vvp_fun_intermodpath(vvp_net_t*net, unsigned width)
-: net_(net)
+// Each receiving connection has independent requested, pending and delivered
+// values. A canceled callback must not publish a later request's value.
+struct intermodpath_scalar_state {
+      vvp_bit4_t delivered;
+      list<intermodpath_scalar_event*> pending;
+      intermodpath_scalar_state() : delivered(BIT4_X) { }
+};
+
+struct intermodpath_event_registry;
+struct intermodpath_scalar_event : public vvp_gen_event_s {
+      intermodpath_scalar_event(vvp_fun_intermodpath*, vvp_bit4_t, vvp_time64_t);
+      ~intermodpath_scalar_event() override;
+      void run_run() override;
+      void detach();
+
+      vvp_fun_intermodpath*owner;
+      const vvp_bit4_t target;
+      const vvp_time64_t due;
+      list<intermodpath_scalar_event*>::iterator pending;
+      list<intermodpath_scalar_event*>::iterator lifetime;
+      intermodpath_event_registry&registry;
+};
+
+// The scheduler deletes dispatched payloads, but $finish may leave future
+// callbacks queued. Track payload lifetime separately from semantic membership
+// so both canceled and surviving undispatched payloads can be released.
+struct intermodpath_event_registry {
+      list<intermodpath_scalar_event*> outstanding;
+      intermodpath_event_registry();
+      ~intermodpath_event_registry() { cleanup(); }
+      void cleanup()
+      {
+            while (!outstanding.empty()) delete outstanding.front();
+      }
+      static PLI_INT32 postsim(p_cb_data);
+};
+
+static intermodpath_event_registry&intermodpath_registry()
 {
-      for (unsigned idx = 0 ;  idx < 12 ;  idx += 1)
+      static intermodpath_event_registry registry;
+      return registry;
+}
+
+intermodpath_event_registry::intermodpath_event_registry()
+{
+      s_cb_data cb = {};
+      cb.reason = cbEndOfSimulation;
+      cb.cb_rtn = postsim;
+      cb.user_data = reinterpret_cast<PLI_BYTE8*>(this);
+      vpiHandle handle = vpi_register_cb(&cb);
+      assert(handle);
+}
+
+PLI_INT32 intermodpath_event_registry::postsim(p_cb_data cb)
+{
+      // Final blocks have run and the scheduler will not dispatch again.
+      const_cast<intermodpath_event_registry*>(
+            reinterpret_cast<const intermodpath_event_registry*>(cb->user_data))->cleanup();
+      return 0;
+}
+
+intermodpath_scalar_event::intermodpath_scalar_event(vvp_fun_intermodpath*o,
+                                                   vvp_bit4_t v,
+                                                   vvp_time64_t when)
+: owner(o), target(v), due(when), registry(intermodpath_registry())
+{
+      owner->scalar_->pending.push_back(this);
+      pending = --owner->scalar_->pending.end();
+      registry.outstanding.push_back(this);
+      lifetime = --registry.outstanding.end();
+}
+
+void intermodpath_scalar_event::detach()
+{
+      if (!owner) return;
+      owner->scalar_->pending.erase(pending);
+      owner = 0;
+}
+
+intermodpath_scalar_event::~intermodpath_scalar_event()
+{
+      detach();
+      registry.outstanding.erase(lifetime);
+}
+
+void intermodpath_scalar_event::run_run()
+{
+      if (!owner) return;
+      assert(schedule_simtime() == due);
+      vvp_fun_intermodpath*o = owner;
+      detach();
+      o->scalar_->delivered = target;
+      o->net_->send_vec4(vvp_vector4_t(1, target), 0);
+      // The generic scheduler deletes this payload after return.
+}
+
+void vvp_fun_intermodpath::scalar_request_(vvp_bit4_t value, vvp_time64_t delay)
+{
+      const vvp_time64_t due = schedule_simtime() + delay;
+      cur_vec4_.set_bit(0, value);
+
+      // The default rejection limit is this trailing transition's delay.
+      // Reject negative or shorter nominal pulses, preserving equality.
+      while (!scalar_->pending.empty()) {
+            intermodpath_scalar_event*p = scalar_->pending.back();
+            if (due >= p->due && due - p->due >= delay) break;
+            p->detach();
+      }
+
+      // Preserve a due-now transaction as the projected output until it runs.
+      const vvp_bit4_t base = scalar_->pending.empty() ? scalar_->delivered
+                            : scalar_->pending.back()->target;
+      if (value == base) return;
+      intermodpath_scalar_event*event = new intermodpath_scalar_event(this,
+                                                                   value, due);
+      schedule_generic(event, delay, false, true, true);
+}
+
+vvp_fun_intermodpath::vvp_fun_intermodpath(vvp_net_t*net, unsigned width)
+: net_(net), scalar_(0), width_known_(false)
+{
+      for (unsigned idx = 0 ;  idx < 12 ;  idx += 1) {
 	    delay_[idx] = 0;
+	    delay_real_[idx] = 0.0;
+      }
 
       cur_vec4_ = vvp_vector4_t(width, BIT4_X);
       schedule_init_propagate(net_, cur_vec4_);
@@ -1236,6 +1506,10 @@ vvp_fun_intermodpath::vvp_fun_intermodpath(vvp_net_t*net, unsigned width)
 
 vvp_fun_intermodpath::~vvp_fun_intermodpath()
 {
+      if (scalar_) {
+            while (!scalar_->pending.empty()) scalar_->pending.back()->detach();
+            delete scalar_;
+      }
 }
 
 void vvp_fun_intermodpath::get_delay12(vvp_time64_t val[12]) const
@@ -1244,10 +1518,19 @@ void vvp_fun_intermodpath::get_delay12(vvp_time64_t val[12]) const
 	    val[idx] = delay_[idx];
 }
 
-void vvp_fun_intermodpath::put_delay12(const vvp_time64_t val[12])
+void vvp_fun_intermodpath::get_delay_real12(double val[12]) const
 {
       for (unsigned idx = 0 ;  idx < 12 ;  idx += 1)
+	    val[idx] = delay_real_[idx];
+}
+
+void vvp_fun_intermodpath::put_delay12(const vvp_time64_t val[12],
+                                      const double real[12])
+{
+      for (unsigned idx = 0 ;  idx < 12 ;  idx += 1) {
 	    delay_[idx] = val[idx];
+	    delay_real_[idx] = real[idx];
+      }
 }
 
 /*
@@ -1264,6 +1547,15 @@ void vvp_fun_intermodpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit
       if (port.port() > 0)
 	    return;
 
+      // The constructor width may be a placeholder for an indexed port.
+      // Select the scalar algorithm once from the actual connection payload,
+      // before scheduling any events; wider connections keep the legacy path.
+      if (!width_known_) {
+            width_known_ = true;
+            if (bit.size() == 1) scalar_ = new intermodpath_scalar_state;
+      }
+      assert(!scalar_ || bit.size() == 1);
+
       if (cur_vec4_.eeq(bit))
 	    return;
 
@@ -1271,6 +1563,11 @@ void vvp_fun_intermodpath::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit
       vvp_time64_t use_delay = delay_from_edge(cur_vec4_.value(0),
 					       bit.value(0),
 					       delay_);
+
+      if (scalar_) {
+            scalar_request_(bit.value(0), use_delay);
+            return;
+      }
 
 	/* FIXME: This bases the edge delay on only the least
 	   bit. This is WRONG! I need to find all the possible delays,
@@ -1333,12 +1630,7 @@ static vpiHandle intermodpath_get_handle(int code, vpiHandle ref)
 	  return rfp->scope;
 
 	  case vpiModule:
-	      { __vpiScope*scope = rfp->scope;
-		while (scope && scope->get_type_code() != vpiModule)
-		      scope = scope->scope;
-		assert(scope);
-		return scope;
-	      }
+	    return vpip_module(rfp->scope);
       }
       return 0;
 }
@@ -1360,15 +1652,43 @@ static vpiHandle intermodpath_iterate(int code, vpiHandle ref)
       return 0;
 }
 
-/*
- * This routine will put specific dimension of delay[] values
- * into a vpiHandle. In this case, we will put
- * specific delays values in a vpiInterModPath object
- *
+/* Match the receiving scope's rounding and global scaling without casting
+ * an out-of-range real to an unsigned integer. Negative annotation values
+ * remain available for later updates, but their effective event delay is zero.
  */
+static bool intermodpath_real_to_ticks(double value, const __vpiScope*scope,
+                                      vvp_time64_t&ticks)
+{
+      if (!isfinite(value)) return false;
+      if (value <= 0.0) {
+	    ticks = 0;
+	    return true;
+      }
+
+      int shift = scope->time_units - scope->time_precision;
+      assert(shift >= 0);
+      double scale = pow(10.0L, shift);
+      double rounded = value * scale;
+      rounded += 0.5;
+      if (!isfinite(rounded) || rounded >= 18446744073709551616.0)
+	    return false;
+      vvp_time64_t delay = static_cast<vvp_time64_t>(rounded);
+
+      shift = scope->time_precision - vpip_get_time_precision();
+      assert(shift >= 0);
+      for (int idx = 0; idx < shift; idx += 1) {
+	    if (delay > (~vvp_time64_t(0)) / 10) return false;
+	    delay *= 10;
+      }
+      ticks = delay;
+      return true;
+}
+
+/* Update retained annotation values and effective delays together. */
 static void intermodpath_put_delays (vpiHandle ref, p_vpi_delay delays)
 {
       vvp_time64_t tmp[12];
+      double real[12];
       int idx;
       struct __vpiInterModPath * src = dynamic_cast<__vpiInterModPath*>(ref) ;
       assert(src) ;
@@ -1409,16 +1729,22 @@ static void intermodpath_put_delays (vpiHandle ref, p_vpi_delay delays)
       if (delays->time_type == vpiSimTime) {
 	    for (idx = 0 ; idx < 12 ; idx += 1) {
 		  tmp[idx] = vpip_timestruct_to_time(delays->da+use_map[0][idx]);
+		  real[idx] = vpip_time_to_scaled_real(tmp[idx], src->scope);
 	    }
       } else {
-	      // You cannot create a modpath with a negative delay so set it
-	      // to zero per 1364-2005 section 14.3.1.
+	    vvp_time64_t supplied[12];
+	      // Validate every supplied value before changing either array.
 	    for (idx = 0 ; idx < delays->no_of_delays ; idx += 1) {
-		  if (delays->da[idx].real < 0.0) delays->da[idx].real = 0.0;
+		  if (!intermodpath_real_to_ticks(delays->da[idx].real, src->scope,
+		                                 supplied[idx])) {
+			vpi_printf("VPI WARNING: INTERCONNECT delay is not finite or "
+			           "is outside the simulation time range; delays unchanged.\n");
+			return;
+		  }
 	    }
 	    for (idx = 0 ; idx < 12 ; idx += 1) {
-		  tmp[idx] = vpip_scaled_real_to_time64(delays->da[use_map[0][idx]].real,
-							src->scope);
+		  tmp[idx] = supplied[use_map[0][idx]];
+		  real[idx] = delays->da[use_map[0][idx]].real;
 	    }
       }
 
@@ -1442,9 +1768,15 @@ static void intermodpath_put_delays (vpiHandle ref, p_vpi_delay delays)
 	      /* z->x is the minimum of z->1 and z->0. */
 	    tmp[DELAY_EDGE_zx] = tmp[DELAY_EDGE_z1] < tmp[DELAY_EDGE_z0] ?
 	                           tmp[DELAY_EDGE_z1] : tmp[DELAY_EDGE_z0];
+	    real[DELAY_EDGE_0x] = fmin(real[DELAY_EDGE_0z], real[DELAY_EDGE_01]);
+	    real[DELAY_EDGE_x1] = fmax(real[DELAY_EDGE_z1], real[DELAY_EDGE_01]);
+	    real[DELAY_EDGE_1x] = fmin(real[DELAY_EDGE_1z], real[DELAY_EDGE_10]);
+	    real[DELAY_EDGE_x0] = fmax(real[DELAY_EDGE_z0], real[DELAY_EDGE_10]);
+	    real[DELAY_EDGE_xz] = fmax(real[DELAY_EDGE_1z], real[DELAY_EDGE_0z]);
+	    real[DELAY_EDGE_zx] = fmin(real[DELAY_EDGE_z1], real[DELAY_EDGE_z0]);
       }
 
-      fun->put_delay12(tmp);
+      fun->put_delay12(tmp, real);
 }
 
 /*
@@ -1464,8 +1796,6 @@ static void intermodpath_get_delays ( vpiHandle ref, p_vpi_delay delays )
       assert(fun);
 
       int idx;
-      vvp_time64_t tmp[12];
-      fun->get_delay12(tmp);
 
       switch (delays->no_of_delays) {
 	  case 1:
@@ -1481,12 +1811,16 @@ static void intermodpath_get_delays ( vpiHandle ref, p_vpi_delay delays )
       }
 
       if (delays->time_type == vpiSimTime) {
+	    vvp_time64_t tmp[12];
+	    fun->get_delay12(tmp);
 	    for (idx = 0; idx < delays->no_of_delays; idx += 1) {
 		  vpip_time_to_timestruct(delays->da+idx, tmp[idx]);
 	    }
       } else {
+	    double real[12];
+	    fun->get_delay_real12(real);
 	    for (idx = 0; idx < delays->no_of_delays; idx += 1) {
-		  delays->da[idx].real = vpip_time_to_scaled_real(tmp[idx], src->scope);
+		  delays->da[idx].real = real[idx];
 	    }
       }
 }
@@ -1522,53 +1856,77 @@ void __vpiInterModPath::vpi_get_delays(p_vpi_delay del)
 void __vpiInterModPath::vpi_put_delays(p_vpi_delay del)
 { intermodpath_put_delays(this, del); }
 
-static int intermodpath_free_object( vpiHandle ref )
+/*
+ * These handles belong to the simulation, not to an individual VPI query.
+ * They use the default no-op handle release so that multiple iterators can
+ * safely refer to the same path. The net pool owns the delay functors.
+ */
+/* Index by source port so lookup does not scan unrelated connections. */
+static multimap<vpiPortInfo*, __vpiInterModPath*> intermodpaths;
+
+__vpiInterModPath* vpip_find_intermodpath(
+      vpiPortInfo* port1, const vpiPortInfo* port2,
+      bool port1_has_index, int port1_bit_index,
+      bool port2_has_index, int port2_bit_index)
 {
-      delete ref;
-      return 1 ;
+      auto range = intermodpaths.equal_range(port1);
+      for (auto it = range.first; it != range.second; ++it) {
+	    __vpiInterModPath*obj = it->second;
+	    if (obj->port2 == port2 &&
+		obj->port1_has_index == port1_has_index &&
+		(!port1_has_index || obj->port1_bit_index == port1_bit_index) &&
+		obj->port2_has_index == port2_has_index &&
+		(!port2_has_index || obj->port2_bit_index == port2_bit_index))
+		  return obj;
+      }
+      return 0;
 }
 
-__vpiHandle::free_object_fun_t __vpiInterModPath::free_object_fun(void)
-{ return &intermodpath_free_object; }
+vpiHandle vpip_make_intermodpath_iterator()
+{
+      if (intermodpaths.empty())
+	    return 0;
 
-/*
- * This function will construct a vpiInterModPath Object.
- * give a respective "net", and will point to his
- * respective functor
- */
+      vpiHandle*args = static_cast<vpiHandle*>
+	    (calloc(intermodpaths.size(), sizeof(vpiHandle)));
+      unsigned idx = 0;
+      for (const auto&entry : intermodpaths)
+	    args[idx++] = entry.second;
 
-#ifdef CHECK_WITH_VALGRIND
-static struct __vpiInterModPath**imp_list = 0;
-static unsigned imp_count = 0;
-#endif
+	/* The iterator owns the array, but not the path handles. */
+      return vpip_make_iterator(intermodpaths.size(), args, true);
+}
 
-struct __vpiInterModPath* vpip_make_intermodpath(vvp_net_t *net, vpiPortInfo* port1, vpiPortInfo* port2)
+/* Construct a handle for an intermodule delay functor. */
+
+struct __vpiInterModPath* vpip_make_intermodpath(
+      vvp_net_t *net, vpiPortInfo* port1, vpiPortInfo* port2,
+      bool port1_has_index, int port1_bit_index,
+      bool port2_has_index, int port2_bit_index)
 {
       struct __vpiInterModPath*obj = new __vpiInterModPath;
-      obj->scope = vpip_peek_current_scope ( );
+        // The delay is inserted before port2. Use that load's module for
+        // scaled-real units and precision, not the last compiled scope.
+      obj->scope = dynamic_cast<__vpiScope*>(port2->vpi_handle(vpiScope));
+      assert(obj->scope);
 
       obj->net = net;
       obj->port1 = port1;
       obj->port2 = port2;
+      obj->port1_has_index = port1_has_index;
+      obj->port1_bit_index = port1_bit_index;
+      obj->port2_has_index = port2_has_index;
+      obj->port2_bit_index = port2_bit_index;
 
-#ifdef CHECK_WITH_VALGRIND
-      imp_count += 1;
-      imp_list = static_cast<struct __vpiInterModPath **>
-                 (realloc(imp_list,
-                  imp_count*sizeof(struct __vpiInterModPath **)));
-      imp_list[imp_count-1] = obj;
-#endif
+      intermodpaths.insert(make_pair(port1, obj));
       return obj;
 }
 
 #ifdef CHECK_WITH_VALGRIND
 void intermodpath_delete()
 {
-      for (unsigned idx = 0; idx < mp_count; idx += 1) {
-	    delete imp_list[idx];
-      }
-      free(imp_list);
-      imp_list = 0;
-      imp_count = 0;
+      for (const auto&entry : intermodpaths)
+	    delete entry.second;
+      intermodpaths.clear();
 }
 #endif

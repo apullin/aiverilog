@@ -574,6 +574,36 @@ static void get_queue_or_darray_vec4_from_net(vthread_t thr, vvp_net_t* net,
       dsrc = 0;
 }
 
+static void get_queue_or_darray_real_from_net(vthread_t thr, vvp_net_t* net,
+					      vvp_queue_real*& qsrc,
+					      vvp_darray*& dsrc)
+{
+      vvp_fun_signal_object* obj = dynamic_cast<vvp_fun_signal_object*>(net->fun);
+      assert(obj);
+      vvp_object_t top = obj->get_object();
+      qsrc = top.peek<vvp_queue_real>();
+      if (qsrc) {
+	    dsrc = 0;
+	    return;
+      }
+      vvp_darray* dany = top.peek<vvp_darray>();
+      if (dany && dynamic_cast<vvp_queue*>(dany) == 0) {
+	    dsrc = dany;
+	    return;
+      }
+      if (top.test_nil()) {
+	    qsrc = new vvp_queue_real();
+	    vvp_object_t val(qsrc);
+	    vvp_net_ptr_t ptr(net, 0);
+	    vvp_send_object(ptr, val, thr->wt_context);
+	    dsrc = 0;
+	    return;
+      }
+      /* e.g. real/string queue — not vec4 queue or plain darray */
+      qsrc = 0;
+      dsrc = 0;
+}
+
 static void get_queue_or_darray_vec4_from_object(vvp_object_t src_obj,
 						 vvp_queue_vec4*& qsrc,
 						 vvp_darray*& dsrc)
@@ -1531,6 +1561,14 @@ bool of_BLEND(vthread_t thr, vvp_code_t)
       return true;
 }
 
+bool of_BLEND_STR(vthread_t thr, vvp_code_t)
+{
+      string f = thr->pop_str();
+      string t = thr->pop_str();
+      thr->push_str((t == f) ? t : "");
+      return true;
+}
+
 bool of_BLEND_WR(vthread_t thr, vvp_code_t)
 {
       double f = thr->pop_real();
@@ -1589,26 +1627,103 @@ bool of_CALLF_OBJ(vthread_t thr, vvp_code_t cp)
       // XXXX NOT IMPLEMENTED
 }
 
+static void do_init_func_real_ret_val(vthread_t thr, vthread_t child,
+				      vpiScopeFunction*scope_func)
+{
+      if (scope_func->func_ret_val) {
+	    const vvp_signal_value*sig = dynamic_cast<vvp_signal_value*>(scope_func->func_ret_val->fil);
+	    assert(sig);
+	    thr->push_real(sig->real_value());
+      } else {
+	    thr->push_real(0.0);
+      }
+      child->args_real.push_back(0);
+}
+
+static void do_save_func_real_ret_val(vthread_t thr, vpiScopeFunction*scope_func)
+{
+      if (scope_func->func_ret_val) {
+	      // We have a static function return value, so store the new value.
+	    vvp_net_ptr_t ptr(scope_func->func_ret_val, 0);
+	    vvp_send_real(ptr, thr->peek_real(0), thr->wt_context);
+      }
+}
+
 bool of_CALLF_REAL(vthread_t thr, vvp_code_t cp)
 {
       vthread_t child = vthread_new(cp->cptr2, cp->scope);
 
-	// This is the return value. Push a place-holder value. The function
-	// will replace this with the actual value using a %ret/real instruction.
-      thr->push_real(0.0);
-      child->args_real.push_back(0);
+      vpiScopeFunction*scope_func = dynamic_cast<vpiScopeFunction*>(cp->scope);
+      assert(scope_func);
 
-      return do_callf_void(thr, child);
+      do_init_func_real_ret_val(thr, child, scope_func);
+
+      bool ret = do_callf_void(thr, child);
+
+      do_save_func_real_ret_val(thr, scope_func);
+
+      return ret;
+}
+
+static void do_init_func_string_ret_val(vthread_t thr, vthread_t child,
+				        vpiScopeFunction*scope_func)
+{
+      if (scope_func->func_ret_val) {
+            vvp_fun_signal_string*fun = dynamic_cast<vvp_fun_signal_string*>(scope_func->func_ret_val->fun);
+            assert(fun);
+            const string&val = fun->get_string();
+            thr->push_str(val);
+      } else {
+	    thr->push_str("");
+      }
+      child->args_str.push_back(0);
+}
+
+static void do_save_func_string_ret_val(vthread_t thr, vpiScopeFunction*scope_func)
+{
+      if (scope_func->func_ret_val) {
+	      // We have a static function return value, so store the new value.
+	    vvp_net_ptr_t ptr(scope_func->func_ret_val, 0);
+	    vvp_send_string(ptr, thr->peek_str(0), thr->wt_context);
+      }
 }
 
 bool of_CALLF_STR(vthread_t thr, vvp_code_t cp)
 {
       vthread_t child = vthread_new(cp->cptr2, cp->scope);
 
-      thr->push_str("");
-      child->args_str.push_back(0);
+      vpiScopeFunction*scope_func = dynamic_cast<vpiScopeFunction*>(cp->scope);
+      assert(scope_func);
 
-      return do_callf_void(thr, child);
+      do_init_func_string_ret_val(thr, child, scope_func);
+
+      bool ret = do_callf_void(thr, child);
+
+      do_save_func_string_ret_val(thr, scope_func);
+
+      return ret;
+}
+
+static void do_init_func_vec4_ret_val(vthread_t thr, vthread_t child,
+				      vpiScopeFunction*scope_func)
+{
+      thr->push_vec4(vvp_vector4_t(scope_func->get_func_width(), scope_func->get_func_init_val()));
+      if (scope_func->func_ret_val) {
+	      // We have a static function return value, so load the old value.
+	    const vvp_signal_value*sig = dynamic_cast<vvp_signal_value*>(scope_func->func_ret_val->fil);
+	    assert(sig);
+	    sig->vec4_value(thr->peek_vec4());
+      }
+      child->args_vec4.push_back(0);
+}
+
+static void do_save_func_vec4_ret_val(vthread_t thr, vpiScopeFunction*scope_func)
+{
+      if (scope_func->func_ret_val) {
+	      // We have a static function return value, so store the new value.
+	    vvp_net_ptr_t ptr(scope_func->func_ret_val, 0);
+	    vvp_send_vec4(ptr, thr->peek_vec4(), thr->wt_context);
+      }
 }
 
 bool of_CALLF_VEC4(vthread_t thr, vvp_code_t cp)
@@ -1618,12 +1733,13 @@ bool of_CALLF_VEC4(vthread_t thr, vvp_code_t cp)
       vpiScopeFunction*scope_func = dynamic_cast<vpiScopeFunction*>(cp->scope);
       assert(scope_func);
 
-	// This is the return value. Push a place-holder value. The function
-	// will replace this with the actual value using a %ret/real instruction.
-      thr->push_vec4(vvp_vector4_t(scope_func->get_func_width(), scope_func->get_func_init_val()));
-      child->args_vec4.push_back(0);
+      do_init_func_vec4_ret_val(thr, child, scope_func);
 
-      return do_callf_void(thr, child);
+      bool ret = do_callf_void(thr, child);
+
+      do_save_func_vec4_ret_val(thr, scope_func);
+
+      return ret;
 }
 
 bool of_CALLF_VOID(vthread_t thr, vvp_code_t cp)
@@ -1761,6 +1877,33 @@ bool of_CASSIGN_WR(vthread_t thr, vvp_code_t cp)
 	/* Set the value into port 1 of the destination. */
       vvp_net_ptr_t ptr (net, 1);
       vvp_send_real(ptr, value, 0);
+
+      return true;
+}
+
+/*
+ * %cast/class <class>, <report>
+ *
+ * Test the object on the top of the object stack, which stays there,
+ * against the class. If the object is nil, or an instance of the class
+ * or of a class derived from it, write "1" into flags[4], otherwise
+ * write "0". When the test fails and <report> is 1, print an error.
+ */
+bool of_CAST_CLASS(vthread_t thr, vvp_code_t cp)
+{
+      const class_type*defn = dynamic_cast<const class_type*>(cp->handle);
+      assert(defn);
+
+      vvp_object_t&obj = thr->peek_object();
+      const vvp_cobject*cobj = obj.peek<vvp_cobject>();
+      bool ok = obj.test_nil() || (cobj && cobj->is_a(defn));
+
+      thr->flags[4] = ok ? BIT4_1 : BIT4_0;
+
+      if (!ok && cp->bit_idx[0])
+	    cerr << thr->get_fileline() << "Error: $cast to class "
+	         << defn->class_name() << " failed, the object is not an"
+		 << " instance of that class." << endl;
 
       return true;
 }
@@ -2984,6 +3127,27 @@ bool of_DISABLE_FORK(vthread_t thr, vvp_code_t)
 }
 
 /*
+ * %dispatch/virt <scope>
+ *
+ * This is the first instruction of a virtual function. Pop the handle
+ * of the object that the function is called on and, if the class of the
+ * object overrides the function, continue with the code of the
+ * override. Otherwise continue with the next instruction.
+ */
+bool of_DISPATCH_VIRT(vthread_t thr, vvp_code_t cp)
+{
+      vvp_object_t obj;
+      thr->pop_object(obj);
+
+      if (const vvp_cobject*cobj = obj.peek<vvp_cobject>()) {
+	    if (vvp_code_t code = cobj->get_virtual(cp->handle))
+		  thr->pc = code;
+      }
+
+      return true;
+}
+
+/*
  * This function divides a 2-word number {high, a} by a 1-word
  * number. Assume that high < b.
  */
@@ -3309,6 +3473,12 @@ bool of_DUP_OBJ(vthread_t thr, vvp_code_t)
 bool of_DUP_REAL(vthread_t thr, vvp_code_t)
 {
       thr->push_real(thr->peek_real(0));
+      return true;
+}
+
+bool of_DUP_STR(vthread_t thr, vvp_code_t)
+{
+      thr->push_str(thr->peek_str(0));
       return true;
 }
 
@@ -3704,6 +3874,22 @@ bool of_FREE(vthread_t thr, vvp_code_t cp)
 
         /* Free the context. */
       vthread_free_context(child_context, cp->scope);
+
+      return true;
+}
+
+bool of_GETC(vthread_t thr, vvp_code_t cp)
+{
+      int32_t idx = thr->words[cp->bit_idx[0]].w_int;
+      const string str = thr->pop_str();
+      int8_t byte = 0;
+
+      if (idx >= 0 && idx < (int32_t)str.size() &&
+          (thr->flags[4] == BIT4_0)) {
+	    byte = str[idx];
+      }
+
+      thr->push_vec4(vvp_vector4_t(8, byte));
 
       return true;
 }
@@ -5325,6 +5511,19 @@ bool of_POW_WR(vthread_t thr, vvp_code_t)
 }
 
 /*
+ * Preserve the full index until checking the property bounds. Map unknown
+ * or overflowing indices to a sentinel that cannot name an array element.
+ */
+static size_t property_object_index(vthread_t thr, unsigned reg)
+{
+      if (reg == 0) return 0;
+      assert(reg < vthread_s::WORDS_COUNT);
+      uint64_t index = thr->words[reg].w_uint;
+      if (thr->flags[4] != BIT4_0 || index >= SIZE_MAX) return SIZE_MAX;
+      return index;
+}
+
+/*
  * %prop/obj <pid>, <idx>
  *
  * Load an object value from the cobject and push it onto the object stack.
@@ -5332,12 +5531,7 @@ bool of_POW_WR(vthread_t thr, vvp_code_t)
 bool of_PROP_OBJ(vthread_t thr, vvp_code_t cp)
 {
       unsigned pid = cp->number;
-      unsigned idx = cp->bit_idx[0];
-
-      if (idx != 0) {
-	    assert(idx < vthread_s::WORDS_COUNT);
-	    idx = thr->words[idx].w_uint;
-      }
+      size_t idx = property_object_index(thr, cp->bit_idx[0]);
 
       vvp_object_t&obj = thr->peek_object();
       vvp_cobject*cobj = obj.peek<vvp_cobject>();
@@ -6372,12 +6566,7 @@ bool of_STORE_OBJA(vthread_t thr, vvp_code_t cp)
 bool of_STORE_PROP_OBJ(vthread_t thr, vvp_code_t cp)
 {
       size_t pid = cp->number;
-      unsigned idx = cp->bit_idx[0];
-
-      if (idx != 0) {
-	    assert(idx < vthread_s::WORDS_COUNT);
-	    idx = thr->words[idx].w_uint;
-      }
+      size_t idx = property_object_index(thr, cp->bit_idx[0]);
 
       vvp_object_t val;
       thr->pop_object(val);
@@ -6786,7 +6975,7 @@ static vvp_queue_vec4* queue_find_first_last_to_queue_src(SRC* src,
       return dst;
 }
 
-/* min()/max() return all elements equal to the selected extrema. */
+/* min()/max() return one element with the selected extremum. */
 template <class SRC>
 static vvp_queue_vec4* queue_run_min_max_src(SRC* src, unsigned wid, bool want_max)
 {
@@ -6795,167 +6984,19 @@ static vvp_queue_vec4* queue_run_min_max_src(SRC* src, unsigned wid, bool want_m
 
       vvp_vector4_t best(wid);
       src->get_word(0, best);
-      dst->push_back(best, 0);
 
       size_t n = src->get_size();
-      for (size_t i = 1; i < n; i += 1) {
+      for (size_t i = 1 ; i < n ; i += 1) {
 	    vvp_vector4_t vi(wid);
 	    src->get_word(i, vi);
-	    if (vi.eeq(best)) {
-		  dst->push_back(vi, 0);
-		  continue;
-	    }
 
 	    vvp_bit4_t ge = compare_gtge(vi, best, BIT4_1);
 	    bool replace = want_max ? (ge == BIT4_1) : (ge == BIT4_0);
-	    if (!replace) continue;
-
-	    best = vi;
-	    delete dst;
-	    dst = new vvp_queue_vec4();
-	    dst->push_back(best, 0);
+	    if (replace) best = vi;
       }
 
+      dst->push_back(best, 0);
       return dst;
-}
-
-/* sum() reduction returns the scalar sum (Verilog-style addition per word). */
-template <class SRC>
-static vvp_vector4_t queue_sum_words_src(SRC* src, unsigned wid)
-{
-      vvp_vector4_t acc(wid, BIT4_0);
-      if (!src) return acc;
-      for (size_t i = 0; i < src->get_size(); i += 1) {
-	    vvp_vector4_t vi(wid);
-	    src->get_word(i, vi);
-	    acc.add(vi);
-      }
-      return acc;
-}
-
-template <class SRC>
-static vvp_vector4_t queue_product_words_src(SRC* src, unsigned wid)
-{
-      vvp_vector4_t acc = queue_unique_ulong_to_vec4(1UL, wid);
-      if (!src) return acc;
-      for (size_t i = 0; i < src->get_size(); i += 1) {
-	    vvp_vector4_t vi(wid);
-	    src->get_word(i, vi);
-	    acc.mul(vi);
-      }
-      return acc;
-}
-
-bool of_QUEUE_PRODUCT_V(vthread_t thr, vvp_code_t cp)
-{
-      vvp_net_t* net = cp->net;
-      unsigned wid = cp->bit_idx[0];
-      vvp_queue_vec4* qsrc = 0;
-      vvp_darray* dsrc = 0;
-      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
-      vvp_vector4_t prod;
-      if (qsrc) prod = queue_product_words_src(qsrc, wid);
-      else if (dsrc) prod = queue_product_words_src(dsrc, wid);
-      else {
-	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
-	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
-	    prod = queue_product_words_src(src, wid);
-      }
-      thr->push_vec4(prod);
-      return true;
-}
-
-bool of_QUEUE_PRODUCT_PROP_V(vthread_t thr, vvp_code_t cp)
-{
-      size_t pid = cp->number;
-      unsigned wid = cp->bit_idx[0];
-
-      vvp_object_t& top = thr->peek_object();
-      vvp_cobject*cobj = top.peek<vvp_cobject>();
-      assert(cobj);
-
-      vvp_object_t qobj;
-      cobj->get_object(pid, qobj, 0);
-      vvp_queue_vec4* qsrc = 0;
-      vvp_darray* dsrc = 0;
-      get_queue_or_darray_vec4_from_object(qobj, qsrc, dsrc);
-      vvp_vector4_t prod =
-	    qsrc ? queue_product_words_src(qsrc, wid)
-		 : queue_product_words_src(dsrc, wid);
-      thr->push_vec4(prod);
-      return true;
-}
-
-bool of_QUEUE_PRODUCT_OBJ_V(vthread_t thr, vvp_code_t cp)
-{
-      unsigned wid = cp->bit_idx[0];
-      vvp_object_t src_obj;
-      thr->pop_object(src_obj);
-
-      vvp_queue_vec4* qsrc = 0;
-      vvp_darray* dsrc = 0;
-      get_queue_or_darray_vec4_from_object(src_obj, qsrc, dsrc);
-      vvp_vector4_t prod =
-	    qsrc ? queue_product_words_src(qsrc, wid)
-		 : queue_product_words_src(dsrc, wid);
-      thr->push_vec4(prod);
-      return true;
-}
-
-bool of_QUEUE_SUM_V(vthread_t thr, vvp_code_t cp)
-{
-      vvp_net_t* net = cp->net;
-      unsigned wid = cp->bit_idx[0];
-      vvp_queue_vec4* qsrc = 0;
-      vvp_darray* dsrc = 0;
-      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
-      vvp_vector4_t sum;
-      if (qsrc) sum = queue_sum_words_src(qsrc, wid);
-      else if (dsrc) sum = queue_sum_words_src(dsrc, wid);
-      else {
-	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
-	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
-	    sum = queue_sum_words_src(src, wid);
-      }
-      thr->push_vec4(sum);
-      return true;
-}
-
-bool of_QUEUE_SUM_PROP_V(vthread_t thr, vvp_code_t cp)
-{
-      size_t pid = cp->number;
-      unsigned wid = cp->bit_idx[0];
-
-      vvp_object_t& top = thr->peek_object();
-      vvp_cobject*cobj = top.peek<vvp_cobject>();
-      assert(cobj);
-
-      vvp_object_t qobj;
-      cobj->get_object(pid, qobj, 0);
-      vvp_queue_vec4* qsrc = 0;
-      vvp_darray* dsrc = 0;
-      get_queue_or_darray_vec4_from_object(qobj, qsrc, dsrc);
-      vvp_vector4_t sum =
-	    qsrc ? queue_sum_words_src(qsrc, wid)
-		 : queue_sum_words_src(dsrc, wid);
-      thr->push_vec4(sum);
-      return true;
-}
-
-bool of_QUEUE_SUM_OBJ_V(vthread_t thr, vvp_code_t cp)
-{
-      unsigned wid = cp->bit_idx[0];
-      vvp_object_t src_obj;
-      thr->pop_object(src_obj);
-
-      vvp_queue_vec4* qsrc = 0;
-      vvp_darray* dsrc = 0;
-      get_queue_or_darray_vec4_from_object(src_obj, qsrc, dsrc);
-      vvp_vector4_t sum =
-	    qsrc ? queue_sum_words_src(qsrc, wid)
-		 : queue_sum_words_src(dsrc, wid);
-      thr->push_vec4(sum);
-      return true;
 }
 
 bool of_QUEUE_FIND_V(vthread_t thr, vvp_code_t cp)
@@ -8145,9 +8186,11 @@ bool of_SUBSTR(vthread_t thr, vvp_code_t cp)
 {
       int32_t first = thr->words[cp->bit_idx[0]].w_int;
       int32_t last = thr->words[cp->bit_idx[1]].w_int;
+      // FIXME: if either index has an undefined value we should return ""
       string&val = thr->peek_str(0);
 
-      if (first < 0 || last < first || last >= (int32_t)val.size()) {
+      if (first < 0 || last < first || last >= (int32_t)val.size() ||
+          (thr->flags[4] == BIT4_1)) {
 	    val = string("");
 	    return true;
       }
@@ -8260,12 +8303,7 @@ bool of_TEST_NUL_OBJ(vthread_t thr, vvp_code_t)
 bool of_TEST_NUL_PROP(vthread_t thr, vvp_code_t cp)
 {
       unsigned pid = cp->number;
-      unsigned idx = cp->bit_idx[0];
-
-      if (idx != 0) {
-	    assert(idx < vthread_s::WORDS_COUNT);
-	    idx = thr->words[idx].w_uint;
-      }
+      size_t idx = property_object_index(thr, cp->bit_idx[0]);
 
       vvp_object_t&obj = thr->peek_object();
       vvp_cobject*cobj  = obj.peek<vvp_cobject>();
@@ -8278,6 +8316,309 @@ bool of_TEST_NUL_PROP(vthread_t thr, vvp_code_t cp)
       else
 	    thr->flags[4] = BIT4_0;
 
+      return true;
+}
+
+/* and() reduction returns the scalar sum (Verilog-style bitwise-AND per word). */
+template <class SRC>
+static vvp_vector4_t uparr_and_words_src(SRC* src, unsigned wid)
+{
+      if (!src) return vvp_vector4_t(wid, BIT4_X);
+      vvp_vector4_t res(wid, BIT4_1);
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    vvp_vector4_t vi(wid);
+	    src->get_word(i, vi);
+	    res &= vi;
+      }
+      return res;
+}
+
+bool of_UPARR_AND_V(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      unsigned wid = cp->bit_idx[0];
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
+      vvp_vector4_t res;
+      if (qsrc) res = uparr_and_words_src(qsrc, wid);
+      else if (dsrc) res = uparr_and_words_src(dsrc, wid);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
+	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
+	    res = uparr_and_words_src(src, wid);
+      }
+      thr->push_vec4(res);
+      return true;
+}
+
+/* or() reduction returns the scalar sum (Verilog-style bitwise-AND per word). */
+template <class SRC>
+static vvp_vector4_t uparr_or_words_src(SRC* src, unsigned wid)
+{
+      if (!src) return vvp_vector4_t(wid, BIT4_X);
+      vvp_vector4_t res(wid, BIT4_0);
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    vvp_vector4_t vi(wid);
+	    src->get_word(i, vi);
+	    res |= vi;
+      }
+      return res;
+}
+
+bool of_UPARR_OR_V(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      unsigned wid = cp->bit_idx[0];
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
+      vvp_vector4_t res;
+      if (qsrc) res = uparr_or_words_src(qsrc, wid);
+      else if (dsrc) res = uparr_or_words_src(dsrc, wid);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
+	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
+	    res = uparr_or_words_src(src, wid);
+      }
+      thr->push_vec4(res);
+      return true;
+}
+
+/* real product() reduction returns the scalar sum */
+template <class SRC>
+static double uparr_product_words_src_real(SRC* src)
+{
+      if (!src) return 0.0;
+      double acc = 1.0;
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    double vi;
+	    src->get_word(i, vi);
+	    acc *= vi;
+      }
+      return acc;
+}
+
+bool of_UPARR_PRODUCT_REAL(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      vvp_queue_real* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_real_from_net(thr, net, qsrc, dsrc);
+      double sum;
+      if (qsrc) sum = uparr_product_words_src_real(qsrc);
+      else if (dsrc) sum = uparr_product_words_src_real(dsrc);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_real>(thr, net);
+	    vvp_queue_real* src = dynamic_cast<vvp_queue_real*>(src_q);
+	    sum = uparr_product_words_src_real(src);
+      }
+      thr->push_real(sum);
+      return true;
+}
+
+/* product() reduction returns the scalar product (Verilog-style multiplication per word). */
+template <class SRC>
+static vvp_vector4_t uparr_product_words_src(SRC* src, unsigned wid)
+{
+      if (!src) return vvp_vector4_t(wid, BIT4_X);
+      vvp_vector4_t acc = queue_unique_ulong_to_vec4(1UL, wid);
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    vvp_vector4_t vi(wid);
+	    src->get_word(i, vi);
+	    acc.mul(vi);
+      }
+      return acc;
+}
+
+bool of_UPARR_PRODUCT_V(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      unsigned wid = cp->bit_idx[0];
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
+      vvp_vector4_t prod;
+      if (qsrc) prod = uparr_product_words_src(qsrc, wid);
+      else if (dsrc) prod = uparr_product_words_src(dsrc, wid);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
+	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
+	    prod = uparr_product_words_src(src, wid);
+      }
+      thr->push_vec4(prod);
+      return true;
+}
+
+bool of_UPARR_PRODUCT_PROP_V(vthread_t thr, vvp_code_t cp)
+{
+      size_t pid = cp->number;
+      unsigned wid = cp->bit_idx[0];
+
+      vvp_object_t& top = thr->peek_object();
+      vvp_cobject*cobj = top.peek<vvp_cobject>();
+      assert(cobj);
+
+      vvp_object_t qobj;
+      cobj->get_object(pid, qobj, 0);
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_object(qobj, qsrc, dsrc);
+      vvp_vector4_t prod =
+	    qsrc ? uparr_product_words_src(qsrc, wid)
+		 : uparr_product_words_src(dsrc, wid);
+      thr->push_vec4(prod);
+      return true;
+}
+
+bool of_UPARR_PRODUCT_OBJ_V(vthread_t thr, vvp_code_t cp)
+{
+      unsigned wid = cp->bit_idx[0];
+      vvp_object_t src_obj;
+      thr->pop_object(src_obj);
+
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_object(src_obj, qsrc, dsrc);
+      vvp_vector4_t prod =
+	    qsrc ? uparr_product_words_src(qsrc, wid)
+		 : uparr_product_words_src(dsrc, wid);
+      thr->push_vec4(prod);
+      return true;
+}
+
+/* real sum() reduction returns the scalar sum */
+template <class SRC>
+static double uparr_sum_words_src_real(SRC* src)
+{
+      double acc = 0.0;
+      if (!src) return acc;
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    double vi;
+	    src->get_word(i, vi);
+	    acc += vi;
+      }
+      return acc;
+}
+
+bool of_UPARR_SUM_REAL(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      vvp_queue_real* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_real_from_net(thr, net, qsrc, dsrc);
+      double sum;
+      if (qsrc) sum = uparr_sum_words_src_real(qsrc);
+      else if (dsrc) sum = uparr_sum_words_src_real(dsrc);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_real>(thr, net);
+	    vvp_queue_real* src = dynamic_cast<vvp_queue_real*>(src_q);
+	    sum = uparr_sum_words_src_real(src);
+      }
+      thr->push_real(sum);
+      return true;
+}
+
+/* sum() reduction returns the scalar sum (Verilog-style addition per word). */
+template <class SRC>
+static vvp_vector4_t uparr_sum_words_src(SRC* src, unsigned wid)
+{
+      if (!src) return vvp_vector4_t(wid, BIT4_X);
+      vvp_vector4_t acc(wid, BIT4_0);
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    vvp_vector4_t vi(wid);
+	    src->get_word(i, vi);
+	    acc.add(vi);
+      }
+      return acc;
+}
+
+bool of_UPARR_SUM_V(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      unsigned wid = cp->bit_idx[0];
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
+      vvp_vector4_t sum;
+      if (qsrc) sum = uparr_sum_words_src(qsrc, wid);
+      else if (dsrc) sum = uparr_sum_words_src(dsrc, wid);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
+	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
+	    sum = uparr_sum_words_src(src, wid);
+      }
+      thr->push_vec4(sum);
+      return true;
+}
+
+bool of_UPARR_SUM_PROP_V(vthread_t thr, vvp_code_t cp)
+{
+      size_t pid = cp->number;
+      unsigned wid = cp->bit_idx[0];
+
+      vvp_object_t& top = thr->peek_object();
+      vvp_cobject*cobj = top.peek<vvp_cobject>();
+      assert(cobj);
+
+      vvp_object_t qobj;
+      cobj->get_object(pid, qobj, 0);
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_object(qobj, qsrc, dsrc);
+      vvp_vector4_t sum =
+	    qsrc ? uparr_sum_words_src(qsrc, wid)
+		 : uparr_sum_words_src(dsrc, wid);
+      thr->push_vec4(sum);
+      return true;
+}
+
+bool of_UPARR_SUM_OBJ_V(vthread_t thr, vvp_code_t cp)
+{
+      unsigned wid = cp->bit_idx[0];
+      vvp_object_t src_obj;
+      thr->pop_object(src_obj);
+
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_object(src_obj, qsrc, dsrc);
+      vvp_vector4_t sum =
+	    qsrc ? uparr_sum_words_src(qsrc, wid)
+		 : uparr_sum_words_src(dsrc, wid);
+      thr->push_vec4(sum);
+      return true;
+}
+
+/* xor() reduction returns the scalar sum (Verilog-style bitwise-XOR per word). */
+template <class SRC>
+static vvp_vector4_t uparr_xor_words_src(SRC* src, unsigned wid)
+{
+      if (!src) return vvp_vector4_t(wid, BIT4_X);
+      vvp_vector4_t res(wid, BIT4_0);
+      for (size_t i = 0; i < src->get_size(); i += 1) {
+	    vvp_vector4_t vi(wid);
+	    src->get_word(i, vi);
+	    res ^= vi;
+      }
+      return res;
+}
+
+bool of_UPARR_XOR_V(vthread_t thr, vvp_code_t cp)
+{
+      vvp_net_t* net = cp->net;
+      unsigned wid = cp->bit_idx[0];
+      vvp_queue_vec4* qsrc = 0;
+      vvp_darray* dsrc = 0;
+      get_queue_or_darray_vec4_from_net(thr, net, qsrc, dsrc);
+      vvp_vector4_t res;
+      if (qsrc) res = uparr_xor_words_src(qsrc, wid);
+      else if (dsrc) res = uparr_xor_words_src(dsrc, wid);
+      else {
+	    vvp_queue* src_q = get_queue_object<vvp_queue_vec4>(thr, net);
+	    vvp_queue_vec4* src = dynamic_cast<vvp_queue_vec4*>(src_q);
+	    res = uparr_xor_words_src(src, wid);
+      }
+      thr->push_vec4(res);
       return true;
 }
 
@@ -8452,12 +8793,18 @@ bool of_EXEC_UFUNC_REAL(vthread_t thr, vvp_code_t cp)
       __vpiScope*child_scope = cp->ufunc_core_ptr->func_scope();
       assert(child_scope);
 
-	/* Create a temporary thread and run it immediately. */
-      vthread_t child = vthread_new(cp->cptr, child_scope);
-      thr->push_real(0.0);
-      child->args_real.push_back(0);
+      vpiScopeFunction*scope_func = dynamic_cast<vpiScopeFunction*>(child_scope);
+      assert(scope_func);
 
-      return do_exec_ufunc(thr, cp, child);
+      vthread_t child = vthread_new(cp->cptr, child_scope);
+
+      do_init_func_real_ret_val(thr, child, scope_func);
+
+      bool ret = do_exec_ufunc(thr, cp, child);
+
+      do_save_func_real_ret_val(thr, scope_func);
+
+      return ret;
 }
 
 bool of_EXEC_UFUNC_VEC4(vthread_t thr, vvp_code_t cp)
@@ -8468,12 +8815,15 @@ bool of_EXEC_UFUNC_VEC4(vthread_t thr, vvp_code_t cp)
       vpiScopeFunction*scope_func = dynamic_cast<vpiScopeFunction*>(child_scope);
       assert(scope_func);
 
-	/* Create a temporary thread and run it immediately. */
       vthread_t child = vthread_new(cp->cptr, child_scope);
-      thr->push_vec4(vvp_vector4_t(scope_func->get_func_width(), scope_func->get_func_init_val()));
-      child->args_vec4.push_back(0);
 
-      return do_exec_ufunc(thr, cp, child);
+      do_init_func_vec4_ret_val(thr, child, scope_func);
+
+      bool ret = do_exec_ufunc(thr, cp, child);
+
+      do_save_func_vec4_ret_val(thr, scope_func);
+
+      return ret;
 }
 
 /*

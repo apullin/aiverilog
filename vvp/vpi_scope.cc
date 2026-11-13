@@ -25,6 +25,7 @@
 #ifdef CHECK_WITH_VALGRIND
 # include  "vvp_cleanup.h"
 #endif
+# include  <string>
 # include  <vector>
 # include  <cstring>
 # include  <cstdlib>
@@ -60,21 +61,22 @@ static void delete_sub_scopes(__vpiScope *scope)
 {
       for (unsigned idx = 0; idx < scope->intern.size(); idx += 1) {
 	    vpiHandle item = (scope->intern)[idx];
-	    __vpiScope*lscope = static_cast<__vpiScope*>(item);
 	    switch(item->get_type_code()) {
 		case vpiFunction:
 		case vpiTask:
-		  contexts_delete(lscope);
+		  contexts_delete(static_cast<__vpiScope*>(item));
 		  // fallthrough
 		case vpiModule:
 		case vpiGenScope:
 		case vpiNamedBegin:
 		case vpiNamedFork:
-		case vpiClassTypespec:
+		case vpiClassTypespec: {
+		  __vpiScope*lscope = static_cast<__vpiScope*>(item);
 		  delete_sub_scopes(lscope);
 		  vthreads_delete(lscope);
 		  delete item;
 		  break;
+		}
 		case vpiMemory:
 		case vpiNetArray:
 		  memory_delete(item);
@@ -165,19 +167,19 @@ void root_table_delete(void)
 }
 #endif
 
-static void construct_scope_fullname(__vpiScope*ref, char*buf)
+static void construct_scope_fullname(__vpiScope*ref, string&buf)
 {
       if (ref->scope) {
 	    construct_scope_fullname(ref->scope, buf);
 	      // Add a "." separator, unless this is for a package
 	    if (ref->scope->get_type_code() != vpiPackage) {
-		  strcat(buf, ".");
+		  buf += ".";
 	    }
       }
 
-      strcat(buf, ref->scope_name());
+      buf += ref->scope_name();
 	// For a package, add a "::" to the end
-      if (ref->get_type_code() == vpiPackage) strcat(buf, "::");
+      if (ref->get_type_code() == vpiPackage) buf += "::";
 }
 
 static const char* scope_get_type(int code)
@@ -206,7 +208,7 @@ static char* scope_get_str(int code, vpiHandle obj)
       __vpiScope*ref = dynamic_cast<__vpiScope*>(obj);
       assert(ref);
 
-      char buf[4096];  // XXX is a fixed buffer size really reliable?
+      string buf;
       const char *p=0;
       switch (code) {
 	  case vpiDefFile:
@@ -218,9 +220,8 @@ static char* scope_get_str(int code, vpiHandle obj)
 	    break;
 
 	  case vpiFullName:
-	    buf[0] = 0;
 	    construct_scope_fullname(ref, buf);
-	    p = buf;
+	    p = buf.c_str();
 	    break;
 
 	  case vpiName:
@@ -468,7 +469,7 @@ void vpip_attach_to_scope(__vpiScope*scope, vpiHandle obj)
  */
 void
 compile_scope_decl(char*label, char*type, char*name, char*tname,
-                   char*parent, long file_idx, long lineno,
+                   char*func_ret_val, char*parent, long file_idx, long lineno,
                    long def_file_idx, long def_lineno, long is_cell)
 {
       count_vpi_scopes += 1;
@@ -548,6 +549,11 @@ compile_scope_decl(char*label, char*type, char*name, char*tname,
       } else {
 	    scope = new vpiScopeModule(name, tname);
 	    assert(0);
+      }
+      if (func_ret_val) {
+	    vpiScopeFunction*func_scope = dynamic_cast<vpiScopeFunction*>(scope);
+	    assert(func_scope);
+	    functor_ref_lookup(&func_scope->func_ret_val, func_ret_val);
       }
 
       scope->file_idx = (unsigned) file_idx;

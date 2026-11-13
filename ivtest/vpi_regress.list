@@ -82,6 +82,7 @@ callback1		normal			callback1.c		callback1.log
 celldefine		normal			celldefine.c		celldefine.gold
 check_version		normal			check_version.c		check_version.gold
 display_array		normal,-g2009		display_array.c		display_array.gold
+enum_typespec		normal,-g2012		enum_typespec.c		enum_typespec.gold
 event1			normal			event1.c		event1.log
 event2			normal			event2.c		event2.log
 final			normal,-g2009		final.c			final.gold
@@ -100,6 +101,7 @@ hello_poke		normal			hello_poke.c		hello_poke.log
 hello_tf		PLI1			hello_tf.c		hello_tf.log
 hello_vpi		normal			hello_vpi.c		hello.log
 hello_vpi2		normal			hello_vpi2.c		hello2.log		vpi/hello_vpi1.c
+interconnect_readback	normal,-g2012,-gspecify,-ginterconnect,-Ttyp	interconnect_readback.c	interconnect_readback.gold
 listparams		normal			listparams.c		listparams.log
 nextsimtime_cb1		normal			nextsimtime_cb1.c	nextsimtime_cb1.gold
 nextsimtime_cb2		normal			nextsimtime_cb2.c	nextsimtime_cb2.gold
@@ -151,3 +153,5 @@ vpi_control		normal			vpi_control.c		vpi_control.log
 # version or if it uses something not implemented (NI) by other
 # versions of the program it will also need a version specific
 # line above.
+interconnect_reuse	normal,-g2012,-gspecify,-ginterconnect,-Ttyp	interconnect_reuse.c	interconnect_reuse.gold
+interconnect_reuse_bits	normal,-g2012,-gspecify,-ginterconnect,-Ttyp	interconnect_reuse_bits.c	interconnect_reuse_bits.gold

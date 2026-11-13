@@ -242,6 +242,17 @@ static std::ostream& operator << (std::ostream &out, const std::vector<NetExpr*>
       return out;
 }
 
+static std::ostream& operator << (std::ostream&out,
+				 const std::vector<NetExpr::Ptr>&exprs)
+{
+      for (size_t idx = 0 ; idx < exprs.size() ; idx += 1) {
+	    if (idx != 0) out << ", ";
+	    if (exprs[idx]) out << *exprs[idx];
+      }
+
+      return out;
+}
+
 ostream& ivl_type_s::debug_dump(ostream&o) const
 {
       o << typeid(*this).name();
@@ -282,9 +293,16 @@ ostream& netreal_t::debug_dump(ostream&fd) const
       fd << "real";
       return fd;
 }
+
 ostream& netstring_t::debug_dump(ostream&fd) const
 {
       fd << "string";
+      return fd;
+}
+
+ostream& netchandle_t::debug_dump(ostream&fd) const
+{
+      fd << "chandle";
       return fd;
 }
 
@@ -1387,8 +1405,9 @@ void NetForLoop::dump(ostream&fd, unsigned ind) const
       else
 	    fd << "<nil>";
       fd << ", init_expr=";
-      if (init_expr_)
-	    fd << *init_expr_;
+      const NetExpr*init = init_expr();
+      if (init)
+	    fd << *init;
       else
 	    fd << "<nil>";
       fd << ", condition=";

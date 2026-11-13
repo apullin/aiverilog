@@ -1,42 +1,99 @@
-// Test for GitHub issue #1298
-// Conditional (ternary) operator must accept string operands, including
-// a string variable on one side and a string literal on the other.
+module top;
+  reg passed;
+  string strt;
+  string strf;
+  string res;
+  reg cond;
 
-module ivtest;
-  reg failed = 1'b0;
+  initial begin
+    passed = 1'b1;
 
-  task check_eq(input string actual, input string expected, input string label);
-    if (actual != expected) begin
-      $display("FAILED %s: got '%s', expected '%s'", label, actual, expected);
-      failed = 1'b1;
+    strt = "True string";
+    strf = "False string";
+
+    cond = 1'b1;
+    res = cond ? strt : "False const string";
+    if (res != strt) begin
+      $display("Failed: expected the true string '%s', got '%s'", strt, res);
+      passed = 1'b0;
     end
-  endtask
 
-  initial begin : main
-    string svar;
-    string s1, s2;
-    reg cond;
+    cond = 1'b0;
+    res = cond ? strt : "False const string";
+    if (res != "False const string") begin
+      $display("Failed: expected the false string 'False const string', got '%s'", res);
+      passed = 1'b0;
+    end
 
-    svar = "v";
+    cond = 1'bx;
+    res = cond ? strt : "False const string";
+    if (res != "") begin
+      $display("Failed: expected the empty string '', got '%s'", res);
+      passed = 1'b0;
+    end
 
-    // Case A: short literal + string variable
-    cond = 1; check_eq(cond ? "N" : svar,    "N", "A1");
-    cond = 0; check_eq(cond ? "N" : svar,    "v", "A2");
+    cond = 1'b1;
+    res = cond ? "True const string" : strf;
+    if (res != "True const string") begin
+      $display("Failed: expected the true string 'True const string', got '%s'", res);
+      passed = 1'b0;
+    end
 
-    // Case B: longer literal + string variable
-    cond = 1; check_eq(cond ? "None" : svar, "None", "B1");
-    cond = 0; check_eq(cond ? "None" : svar, "v",    "B2");
+    cond = 1'b0;
+    res = cond ? "True const string" : strf;
+    if (res != strf) begin
+      $display("Failed: expected the false string '%s', got '%s'", strf, res);
+      passed = 1'b0;
+    end
 
-    // Case C: literal on the false side
-    cond = 1; check_eq(cond ? svar : "Y",    "v", "C1");
-    cond = 0; check_eq(cond ? svar : "Y",    "Y", "C2");
+    cond = 1'bx;
+    res = cond ? "True const string" : strf;
+    if (res != "") begin
+      $display("Failed: expected the empty string '', got '%s'", res);
+      passed = 1'b0;
+    end
 
-    // Case D: two string variables on both sides
-    s1 = "First";
-    s2 = "Second";
-    cond = 1; check_eq(cond ? s1 : s2, "First",  "D1");
-    cond = 0; check_eq(cond ? s1 : s2, "Second", "D2");
+    cond = 1'b1;
+    res = cond ? strt : strf;
+    if (res != strt) begin
+      $display("Failed: expected the true string '%s', got '%s'", strt, res);
+      passed = 1'b0;
+    end
 
-    if (!failed) $display("PASSED");
+    cond = 1'b0;
+    res = cond ? strt : strf;
+    if (res != strf) begin
+      $display("Failed: expected the false string '%s', got '%s'", strf, res);
+      passed = 1'b0;
+    end
+
+    cond = 1'bx;
+    res = cond ? strt : strf;
+    if (res != "") begin
+      $display("Failed: expected the empty string '', got '%s'", res);
+      passed = 1'b0;
+    end
+
+    strt = "matching string";
+    strf = "matching string";
+    res = cond ? strt : strf;
+    if (res != "matching string") begin
+      $display("Failed: expected the string 'matching string', got '%s'", res);
+      passed = 1'b0;
+    end
+
+    res = cond ? strt : "matching string";
+    if (res != "matching string") begin
+      $display("Failed: expected the string 'matching string', got '%s'", res);
+      passed = 1'b0;
+    end
+
+    res = cond ? "matching string" : strf;
+    if (res != "matching string") begin
+      $display("Failed: expected the string 'matching string', got '%s'", res);
+      passed = 1'b0;
+    end
+
+    if  (passed) $display("PASSED");
   end
 endmodule
