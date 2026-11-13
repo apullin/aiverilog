@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2007-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2007-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -19,6 +19,7 @@
 
 # include  "sys_priv.h"
 # include  "sdf_priv.h"
+# include  <math.h>
 # include  <stdlib.h>
 # include  <string.h>
 # include  <assert.h>
@@ -36,13 +37,69 @@ static vpiHandle sdf_scope;
 static vpiHandle sdf_callh = 0;
   /* The cell in process. */
 static vpiHandle sdf_cur_cell;
+
+/* Timescale from the SDF file header, in seconds. IEEE 1497 makes 1ns the
+   default when the header carries no (TIMESCALE ...) entry. */
+double sdf_timescale = 1.0e-9;
+
+/* SDF delay values are expressed in the SDF file's own timescale, but
+   vpi_put_delays() with vpiScaledRealTime interprets them in the time units
+   of the module that contains the annotated object, so convert between the
+   two. IOPATH uses the CELL being processed; INTERCONNECT uses the module
+   containing its destination port. Neither need have the same `timescale
+   as the scope passed to $sdf_annotate. */
+static double sdf_delay_scale(vpiHandle scope)
+{
+      if (scope == 0) scope = sdf_scope;
+      int unit = vpi_get(vpiTimeUnit, scope);
+      return sdf_timescale / pow(10.0, (double)unit);
+}
+
+/* Check accumulated INTERCONNECT values using the receiver's rounding and
+   global scaling. The runtime also validates real writes; this preflight
+   preserves the SDF filename and line in its out-of-range diagnostic. */
+static bool interconnect_increment_fits(double value, vpiHandle scope)
+{
+      if (!isfinite(value)) return false;
+      /* Retain negative totals; only their effective scheduling ticks clamp. */
+      if (value < 0.0) return true;
+      int precision = vpi_get(vpiTimePrecision, scope);
+      int shift = vpi_get(vpiTimeUnit, scope) - precision;
+      double rounded = value * pow(10.0, shift) + 0.5;
+      if (!isfinite(rounded) || rounded >= 18446744073709551616.0)
+            return false;
+      PLI_UINT64 ticks = (PLI_UINT64)rounded;
+      shift = precision - vpi_get(vpiTimePrecision, 0);
+      for (int idx = 0; idx < shift; idx += 1) {
+            if (ticks > (~(PLI_UINT64)0) / 10) return false;
+            ticks *= 10;
+      }
+      return true;
+}
 static char* sdf_fname = NULL;
 
-static vpiHandle find_scope(vpiHandle scope, const char*name)
+/* Hierarchy separators have been normalized to dots by the parser. Split
+   before decoding escapes so a literal dot remains part of its local name.
+   The lexer guarantees that a backslash is followed by a character. */
+static char* next_component(char**cursor)
 {
-      vpiHandle idx = vpi_iterate(vpiModule, scope);
-	/* If this scope has no modules then it can't have the one we
-	 * are looking for so just return 0. */
+      char*name = *cursor;
+      char*src = name;
+      char*dst = name;
+      while (*src && *src != '.') {
+	    if (*src == '\\') src += 1;
+	    *dst++ = *src++;
+      }
+      *cursor = *src ? src + 1 : 0;
+      *dst = 0;
+      return name;
+}
+
+static vpiHandle find_scope(vpiHandle scope, const char*name, int type)
+{
+      vpiHandle idx = vpi_iterate(type, scope);
+	/* If this scope has no children of this type, it cannot contain
+	 * the requested name. */
       if (idx == 0) return 0;
 
       vpiHandle cur;
@@ -72,8 +129,6 @@ void sdf_warn_file_line(const int sdf_lineno)
 
 void sdf_select_instance(const char*celltype, const char*cellinst, const int sdf_lineno)
 {
-      char buffer[128];
-
 	/* Test for wildcard character */
       if (cellinst == NULL) {
 	    if (sdf_flag_warning) {
@@ -88,35 +143,27 @@ void sdf_select_instance(const char*celltype, const char*cellinst, const int sdf
 	/* First follow the hierarchical parts of the cellinst name to
 	   get to the cell that I'm looking for. */
       vpiHandle scope = sdf_scope;
+      char*buffer = strdup(cellinst);
+      char*cursor = cellinst[0] ? buffer : 0;
       const char*src = cellinst;
-      const char*dp;
-      while ( (dp=strchr(src, '.')) ) {
-	    unsigned len = dp - src;
-	    assert(dp >= src);
-	    assert(len < sizeof buffer);
-	    strncpy(buffer, src, len);
-	    buffer[len] = 0;
-
-	    vpiHandle tmp_scope = find_scope(scope, buffer);
+      while (cursor) {
+	    src = next_component(&cursor);
+	    vpiHandle tmp_scope = find_scope(scope, src, vpiModule);
 	    if (tmp_scope == 0) {
 		  vpi_printf("SDF ERROR: %s:%d: Cannot find %s in scope %s.\n",
-		             sdf_fname, sdf_lineno, buffer, vpi_get_str(vpiFullName, scope));
+		             sdf_fname, sdf_lineno, src, vpi_get_str(vpiFullName, scope));
+		  scope = 0;
 		  break;
 	    }
 	    assert(tmp_scope);
 	    scope = tmp_scope;
-
-	    src = dp + 1;
       }
 
-	/* Now find the cell. */
-      if (src[0] == 0)
-	    sdf_cur_cell = sdf_scope;
-      else
-	    sdf_cur_cell = find_scope(scope, src);
+      sdf_cur_cell = scope;
       if (sdf_cur_cell == 0) {
 	    vpi_printf("SDF ERROR: %s:%d: Unable to find %s in scope %s.\n",
-	               sdf_fname, sdf_lineno, src, vpi_get_str(vpiFullName, scope));
+	               sdf_fname, sdf_lineno, cellinst, vpi_get_str(vpiFullName, sdf_scope));
+	    free(buffer);
 	    return;
       }
 
@@ -132,7 +179,7 @@ void sdf_select_instance(const char*celltype, const char*cellinst, const int sdf
 	               sdf_fname, sdf_lineno, src, vpi_get_str(vpiFullName, scope), celltype);
 	    vpi_printf("%s\n", vpi_get_str(vpiDefName, sdf_cur_cell));
       }
-
+      free(buffer);
 }
 
 static const char*edge_str(int vpi_edge)
@@ -149,31 +196,26 @@ static const char*edge_str(int vpi_edge)
 static vpiHandle get_port_handle(char* port_name, const int sdf_lineno)
 {
       vpiHandle scope = sdf_cur_cell;
+      if (!scope) return 0;
+      char*cursor = port_name;
+      char*token = next_component(&cursor);
 
-	// Get occurences of '.' in the name
-      int submodules = 0;
-
-      for (int i=0; port_name[i] != '\0'; i++) {
-	    if (port_name[i] == '.') submodules++;
-      }
-
-	// Extract the first token
-      char* token = strtok(port_name, ".");;
-
-	// Change scope into submodule
-      while (submodules--) {
-	    scope = vpi_handle_by_name(token, scope);
-
-	    if (!scope) vpi_printf("SDF ERROR: %s:%d: Submodule %s in port path not found!\n", sdf_fname, sdf_lineno, token);
-
-	      // Extract next token
-	    token = strtok(NULL, ".");
+	// Resolve exact local scope names without parsing literal dots again.
+      while (cursor) {
+	    scope = find_scope(scope, token, vpiInternalScope);
+	    if (!scope) {
+		  vpi_printf("SDF ERROR: %s:%d: Submodule %s in port path not found!\n", sdf_fname, sdf_lineno, token);
+		  return 0;
+	    }
+	    token = next_component(&cursor);
       }
 
 	// Iterate over ports
       vpiHandle port_i = vpi_iterate(vpiPort, scope) ;
       vpiHandle port;
       vpiHandle port_handle = NULL;
+
+      if (!port_i) return 0;
 
       while ((port=vpi_scan(port_i)) != NULL) {
 	    const char *port_name_ = vpi_get_str(vpiName, port) ;
@@ -190,15 +232,71 @@ static vpiHandle get_port_handle(char* port_name, const int sdf_lineno)
 }
 
 
+/* Expand the increment, not the sum with the existing delays. In particular,
+ * min(old_a + inc_a, old_b + inc_b) is not old_x + min(inc_a, inc_b).
+ * A derived increment needs both operands; a null operand supplies no data,
+ * so leave that transition unchanged rather than treating null as zero.
+ */
+static void expand_interconnect_increment(const struct sdf_delval_list_s*in,
+                                         struct sdf_delval_list_s*out)
+{
+      static const unsigned map1[6] = {0, 0, 0, 0, 0, 0};
+      static const unsigned map2[6] = {0, 1, 0, 0, 1, 1};
+      static const unsigned map3[6] = {0, 1, 2, 0, 2, 1};
+      static const unsigned map6[6] = {0, 1, 2, 3, 4, 5};
+      /* 0X, X1, 1X, X0, XZ, ZX from the six non-X transitions. */
+      static const unsigned left[6] = {0, 0, 1, 1, 2, 3};
+      static const unsigned right[6] = {2, 3, 4, 5, 4, 5};
+      static const bool use_max[6] = {false, true, false, true, true, false};
+      const unsigned*map = 0;
+
+      switch (in->count) {
+          case 1: map = map1; break;
+          case 2: map = map2; break;
+          case 3: map = map3; break;
+          case 6: map = map6; break;
+          case 12: *out = *in; return;
+          default: assert(0); return;
+      }
+      out->count = 12;
+      for (unsigned idx = 0; idx < 6; idx += 1)
+            out->val[idx] = in->val[map[idx]];
+      for (unsigned idx = 0; idx < 6; idx += 1) {
+            struct sdf_delay_s a = out->val[left[idx]];
+            struct sdf_delay_s b = out->val[right[idx]];
+            struct sdf_delay_s*value = &out->val[6 + idx];
+            value->defined = a.defined && b.defined;
+            value->value = 0.0;
+            if (value->defined)
+                  value->value = use_max[idx] ? fmax(a.value, b.value)
+                                             : fmin(a.value, b.value);
+      }
+}
+
 void sdf_interconnect_delays(struct interconnect_port_s port1, struct interconnect_port_s port2,
                              const struct sdf_delval_list_s*delval_list,
+                             bool increment,
                              const int sdf_lineno)
 {
+      struct sdf_delval_list_s expanded;
+      bool any_defined = true;
+      if (increment) {
+            any_defined = false;
+            expand_interconnect_increment(delval_list, &expanded);
+            for (int idx = 0; idx < expanded.count; idx += 1)
+                  any_defined |= expanded.val[idx].defined;
+            delval_list = &expanded;
+      }
+
 
 	// Get handles for both ports
 	// After calling get_port_handle, the name is invalid
       vpiHandle port1_handle = get_port_handle(port1.name, sdf_lineno);
       vpiHandle port2_handle = get_port_handle(port2.name, sdf_lineno);
+      if (!port1_handle || !port2_handle) {
+	    vpi_printf("SDF ERROR: %s:%d: Could not find handles for both ports!\n", sdf_fname, sdf_lineno);
+	    return;
+      }
 
 	// Check whether we have a single bit of a port for port1
       if (port1.has_index) {
@@ -246,12 +344,20 @@ void sdf_interconnect_delays(struct interconnect_port_s port1, struct interconne
 	    }
       }
 
+      /* Keep endpoint/index validation even when there is nothing to update.
+       * Do not create or rewrite a delay object for an all-null increment. */
+      if (!any_defined) return;
+
       if (port1_handle && port2_handle) {
 	      // Get interModPath for the two ports
 	    vpiHandle intermodpath = vpi_handle_multi(vpiInterModPath, port1_handle, port2_handle);
 
 	    if (intermodpath) {
 		  if (sdf_flag_inform) vpi_printf("SDF INFO: %s:%d: Created a vpiInterModPath\n", sdf_fname, sdf_lineno);
+
+		    // INTERCONNECT is applied at the receiving port. Its module
+		    // can have different units from the CELL naming the path.
+		  vpiHandle delay_scope = vpi_handle(vpiScope, intermodpath);
 
 		  s_vpi_delay delays;
 		  struct t_vpi_time delay_vals[12];
@@ -268,13 +374,27 @@ void sdf_interconnect_delays(struct interconnect_port_s port1, struct interconne
 		  for (int idx = 0 ; idx < delval_list->count ; idx += 1) {
 			delay_vals[idx].type = vpiScaledRealTime;
 			if (delval_list->val[idx].defined) {
+			      double val = delval_list->val[idx].value * sdf_delay_scale(delay_scope);
+			      // Accumulate before validation: SDF performs read/modify/write.
+			      if (increment) val += delay_vals[idx].real;
 			      if (sdf_flag_inform) vpi_printf("SDF INFO: %s:%d: Putting delay: %f for index %d\n",
-			                                      sdf_fname, sdf_lineno, delval_list->val[idx].value, idx);
-			      delay_vals[idx].real = delval_list->val[idx].value;
+			                                      sdf_fname, sdf_lineno, val, idx);
+			      delay_vals[idx].real = val;
 			}
 		  }
 
-		    // Put the new delays
+		    // Validate accumulated totals, not the individual increments.
+		  if (increment) {
+			for (int idx = 0; idx < delval_list->count; idx += 1) {
+			      if (!interconnect_increment_fits(delay_vals[idx].real, delay_scope)) {
+				    vpi_printf("SDF WARNING: %s:%d: INTERCONNECT increment "
+				               "is outside the simulation time range; delays unchanged.\n",
+				               sdf_fname, sdf_lineno);
+				    return;
+			      }
+			}
+		  }
+		    // Replace with the computed totals; append_flag remains zero.
 		  vpi_put_delays(intermodpath, &delays);
 	    } else {
 		  vpi_printf("SDF ERROR: %s:%d: Could not find intermodpath!\n", sdf_fname, sdf_lineno);
@@ -284,7 +404,7 @@ void sdf_interconnect_delays(struct interconnect_port_s port1, struct interconne
       }
 }
 
-void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
+void sdf_cond_iopath_delays(const char*key, int vpi_edge, const char*src, const char*dst,
                        const struct sdf_delval_list_s*delval_list,
                        const int sdf_lineno)
 {
@@ -330,6 +450,13 @@ void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
 	    if (strcmp(dst,vpi_get_str(vpiName,path_out)) != 0)
 		  continue;
 
+            /* A COND names the original source condition, independently of
+               its current value. Never fall back to an endpoint-only match. */
+            if (key) {
+                  const char*condition = vpi_get_str(_vpiModPathCondition, path);
+                  if (!condition || strcmp(key, condition) != 0) continue;
+            }
+
 	      /* Ah, this must be a match! */
 	    delays.da = delay_vals;
 	    delays.no_of_delays = delval_list->count;
@@ -342,7 +469,8 @@ void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
 	    for (idx = 0 ; idx < delval_list->count ; idx += 1) {
 		  delay_vals[idx].type = vpiScaledRealTime;
 		  if (delval_list->val[idx].defined) {
-			delay_vals[idx].real = delval_list->val[idx].value;
+			delay_vals[idx].real = delval_list->val[idx].value
+			                       * sdf_delay_scale(sdf_cur_cell);
 		  }
 	    }
 
@@ -356,6 +484,13 @@ void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
 	               edge_str(vpi_edge), src, dst,
 	               vpi_get_str(vpiFullName, sdf_cur_cell));
       }
+}
+
+void sdf_iopath_delays(int vpi_edge, const char*src, const char*dst,
+                       const struct sdf_delval_list_s*delval_list,
+                       const int sdf_lineno)
+{
+      sdf_cond_iopath_delays(0, vpi_edge, src, dst, delval_list, sdf_lineno);
 }
 
 static void check_command_line_args(void)
@@ -436,6 +571,11 @@ static PLI_INT32 sys_sdf_annotate_compiletf(ICARUS_VPI_CONST PLI_BYTE8*name)
 
 static PLI_INT32 sys_sdf_annotate_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 {
+	/* IEEE 1497: a file with no (TIMESCALE ...) entry defaults to 1ns. Reset
+	   here so a second $sdf_annotate cannot inherit the previous file's
+	   timescale. */
+      sdf_timescale = 1.0e-9;
+
       vpiHandle callh = vpi_handle(vpiSysTfCall, 0);
       vpiHandle argv = vpi_iterate(vpiArgument, callh);
       FILE *sdf_fd;

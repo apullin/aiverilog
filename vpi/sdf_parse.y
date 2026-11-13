@@ -1,7 +1,7 @@
 
 %{
 /*
- * Copyright (c) 1998-2023 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 1998-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -29,6 +29,108 @@ static void yyerror(const char*msg);
 # include  <stdlib.h>
 # include  "ivl_alloc.h"
 
+/* Each delay block selects its INTERCONNECT update mode before its entries
+   are reduced. A following ABSOLUTE block restores replacement semantics. */
+static bool interconnect_increment;
+
+/* Decode a local name in place. Hierarchical names retain their escapes
+   until sys_sdf.c splits them into individual components. */
+static char* unescape_identifier(char*text)
+{
+      char*src = text;
+      char*dst = text;
+      while (*src) {
+	    if (*src == '\\') src += 1;
+	    *dst++ = *src++;
+      }
+      *dst = 0;
+      return text;
+}
+
+/* Convert an SDF (TIMESCALE <number> <unit>) entry into seconds. The unit is
+   one of s, ms, us, ns, ps or fs, and IEEE 1497 restricts the number to 1, 10
+   or 100. */
+static void set_timescale(double mult, const char*unit, int lineno)
+{
+      double base;
+      if      (strcmp(unit, "s")  == 0) base = 1.0;
+      else if (strcmp(unit, "ms") == 0) base = 1.0e-3;
+      else if (strcmp(unit, "us") == 0) base = 1.0e-6;
+      else if (strcmp(unit, "ns") == 0) base = 1.0e-9;
+      else if (strcmp(unit, "ps") == 0) base = 1.0e-12;
+      else if (strcmp(unit, "fs") == 0) base = 1.0e-15;
+      else {
+	    vpi_printf("SDF ERROR: %s:%d: Unknown TIMESCALE unit \"%s\"; "
+	               "assuming 1ns.\n", sdf_parse_path, lineno, unit);
+	    sdf_timescale = 1.0e-9;
+	    return;
+      }
+      if (mult != 1.0 && mult != 10.0 && mult != 100.0)
+	    vpi_printf("SDF WARNING: %s:%d: TIMESCALE multiplier %g is not 1, 10 "
+	               "or 100.\n", sdf_parse_path, lineno, mult);
+      sdf_timescale = mult * base;
+}
+
+/* The hierarchy production preserves escaped characters and joins components
+   with an unescaped dot. A local condition may itself contain an escaped dot;
+   do not turn an unsupported hierarchical condition into that local name. */
+static char* local_condition_name(char*text)
+{
+      const char*cp;
+      for (cp = text; *cp; cp += 1) {
+            if (*cp == '\\' && cp[1]) cp += 1;
+            else if (*cp == '.') {
+                  free(text);
+                  return 0;
+            }
+      }
+      return unescape_identifier(text);
+}
+
+/* Match the compiler's source identity without evaluating the condition.
+   Leading space distinguishes expression keys from all identifier names.
+   Length-delimited names and binary nodes preserve operand order and grouping.
+   This helper consumes both input keys, including on unsupported expressions. */
+static struct sdf_cond_expr_s condition_binary(char op,
+                                              struct sdf_cond_expr_s left,
+                                              struct sdf_cond_expr_s right)
+{
+      struct sdf_cond_expr_s result = {SDF_COND_UNSUPPORTED, 0, 0};
+      if ((op == 'e' || op == 'c') && left.kind == SDF_COND_NAME
+          && right.kind == SDF_COND_CONSTANT) {
+            char length[3*sizeof(size_t)+1];
+            size_t name_len = strlen(left.key);
+            size_t length_len;
+            sprintf(length, "%zu", name_len);
+            length_len = strlen(length);
+            if (name_len <= (size_t)-1 - length_len - 5) {
+                  result.key = malloc(name_len + length_len + 5);
+                  if (result.key) {
+                        sprintf(result.key, " %c%s:%s%c", op == 'c' ? 'C' : 'E', length, left.key,
+                                right.value ? '1' : '0');
+                        result.kind = SDF_COND_EXPRESSION;
+                  }
+            }
+      } else if ((op == 'a' || op == 'o') && left.kind == SDF_COND_EXPRESSION
+                 && right.kind == SDF_COND_EXPRESSION) {
+            size_t left_len = strlen(left.key);
+            size_t right_len = strlen(right.key);
+            if (right_len <= (size_t)-1 - 3
+                && left_len <= (size_t)-1 - right_len - 3) {
+                  result.key = malloc(left_len + right_len + 3);
+                  if (result.key) {
+                        memcpy(result.key, op == 'o' ? " O" : " A", 2);
+                        memcpy(result.key + 2, left.key, left_len);
+                        memcpy(result.key + 2 + left_len, right.key, right_len + 1);
+                        result.kind = SDF_COND_EXPRESSION;
+                  }
+            }
+      }
+      free(left.key);
+      free(right.key);
+      return result;
+}
+
 /* This is the hierarchy separator to use. */
 char sdf_use_hchar = '.';
 
@@ -43,6 +145,7 @@ char sdf_use_hchar = '.';
       struct port_with_edge_s port_with_edge;
       struct sdf_delval_list_s delval_list;
       struct interconnect_port_s interconnect_port;
+      struct sdf_cond_expr_s condition;
 };
 
 %token K_ABSOLUTE K_CELL K_CELLTYPE K_COND K_CONDELSE K_DATE K_DELAYFILE
@@ -61,6 +164,9 @@ char sdf_use_hchar = '.';
 %token <real_val> REAL_NUMBER
 %token <int_val> INTEGER
 
+%type <condition> conditional_port_expr
+%destructor { free($$.key); } conditional_port_expr
+%type <int_val> scalar_constant
 %type <string_val> celltype
 %type <string_val> cell_instance
 %type <string_val> hierarchical_identifier
@@ -233,13 +339,17 @@ temperature
 
 time_scale
   : '(' K_TIMESCALE REAL_NUMBER IDENTIFIER ')'
-      { if (sdf_flag_inform) vpi_printf("SDF INFO: %s:%d: Timescale: %f%s\n",
+      { unescape_identifier($4);
+	if (sdf_flag_inform) vpi_printf("SDF INFO: %s:%d: Timescale: %f%s\n",
 	                                sdf_parse_path, @2.first_line, $3, $4);
+	set_timescale($3, $4, @2.first_line);
 	free($4);
       }
   | '(' K_TIMESCALE INTEGER IDENTIFIER ')'
-      { if (sdf_flag_inform) vpi_printf("SDF INFO: %s:%d: Timescale: %lu%s\n",
+      { unescape_identifier($4);
+	if (sdf_flag_inform) vpi_printf("SDF INFO: %s:%d: Timescale: %lu%s\n",
 	                                sdf_parse_path, @2.first_line, $3, $4);
+	set_timescale((double)$3, $4, @2.first_line);
 	free($4);
       }
   ;
@@ -306,8 +416,8 @@ deltype_list
 deltype
   : '(' K_PATHPULSE input_output_path_opt rvalue rvalue_opt ')'
   | '(' K_PATHPULSEPERCENT input_output_path_opt rvalue rvalue_opt ')'
-  | '(' K_ABSOLUTE del_def_list ')'
-  | '(' K_INCREMENT del_def_list ')'
+  | '(' K_ABSOLUTE { interconnect_increment = false; } del_def_list ')'
+  | '(' K_INCREMENT { interconnect_increment = true; } del_def_list ')'
   | '(' error ')'
     { vpi_printf("SDF ERROR: %s:%d: Invalid/malformed delay type\n",
 	         sdf_parse_path, @1.first_line); }
@@ -329,20 +439,21 @@ del_def
 	           sdf_parse_path, @2.first_line); }
   | '(' K_COND conditional_port_expr
     '(' K_IOPATH port_spec port_instance delval_list ')' ')'
-      { if (sdf_flag_warning) vpi_printf("SDF WARNING: %s:%d: "
-	                                 "COND not supported.\n",
-	                                 sdf_parse_path, @2.first_line);
-	free($6.string_val);
-	free($7);
+      { if ($3.key)
+            sdf_cond_iopath_delays($3.key, $6.vpi_edge, $6.string_val, $7, &$8, @2.first_line);
+        else if (sdf_flag_warning) vpi_printf("SDF WARNING: %s:%d: "
+                                             "COND not supported.\n",
+                                             sdf_parse_path, @2.first_line);
+        free($3.key); free($6.string_val); free($7);
       }
   | '(' K_COND QSTRING conditional_port_expr
     '(' K_IOPATH port_spec port_instance delval_list ')' ')'
-      { if (sdf_flag_warning) vpi_printf("SDF WARNING: %s:%d: "
-	                                 "COND not supported.\n",
-	                                 sdf_parse_path, @2.first_line);
-	free($3);
-	free($7.string_val);
-	free($8);
+      { if ($4.key)
+            sdf_cond_iopath_delays($4.key, $7.vpi_edge, $7.string_val, $8, &$9, @2.first_line);
+        else if (sdf_flag_warning) vpi_printf("SDF WARNING: %s:%d: "
+                                             "COND not supported.\n",
+                                             sdf_parse_path, @2.first_line);
+        free($4.key); free($7.string_val); free($8); free($3);
       }
   | '(' K_COND error ')'
       { vpi_printf("SDF ERROR: %s:%d: Invalid/malformed COND\n",
@@ -364,7 +475,7 @@ del_def
 	                 "port1 = %s index = %d, port2 = %s index = %d\n",
 	                 sdf_parse_path, @2.first_line, $3.name, $3.index, $4.name, $4.index);
 	}
-	sdf_interconnect_delays($3, $4, &$5, @2.first_line);
+	sdf_interconnect_delays($3, $4, &$5, interconnect_increment, @2.first_line);
 	free($3.name);
 	free($4.name);
       }
@@ -435,16 +546,20 @@ timing_check_condition
 
   /* This is not complete! */
 conditional_port_expr
-  : port
-      { free($1); }
+  : hierarchical_identifier
+      { $$.key = local_condition_name($1);
+        $$.kind = $$.key ? SDF_COND_NAME : SDF_COND_UNSUPPORTED;
+        $$.value = 0;
+      }
   | scalar_constant
-  | '(' conditional_port_expr ')'
-  | conditional_port_expr K_LAND conditional_port_expr
-  | conditional_port_expr K_LOR conditional_port_expr
-  | conditional_port_expr K_EQ conditional_port_expr
-  | conditional_port_expr K_NE conditional_port_expr
-  | conditional_port_expr K_CEQ conditional_port_expr
-  | conditional_port_expr K_CNE conditional_port_expr
+      { $$.kind = SDF_COND_CONSTANT; $$.key = 0; $$.value = $1; }
+  | '(' conditional_port_expr ')' { $$ = $2; }
+  | conditional_port_expr K_LAND conditional_port_expr { $$ = condition_binary('a', $1, $3); }
+  | conditional_port_expr K_LOR conditional_port_expr { $$ = condition_binary('o', $1, $3); }
+  | conditional_port_expr K_EQ conditional_port_expr { $$ = condition_binary('e', $1, $3); }
+  | conditional_port_expr K_NE conditional_port_expr { $$ = condition_binary(0, $1, $3); }
+  | conditional_port_expr K_CEQ conditional_port_expr { $$ = condition_binary('c', $1, $3); }
+  | conditional_port_expr K_CNE conditional_port_expr { $$ = condition_binary(0, $1, $3); }
   ;
 
 equality_operator
@@ -455,8 +570,8 @@ equality_operator
   ;
 
 scalar_constant
-  : K_LOGICAL_ONE
-  | K_LOGICAL_ZERO
+  : K_LOGICAL_ONE { $$ = 1; }
+  | K_LOGICAL_ZERO { $$ = 0; }
   ;
 
 input_output_path_opt
@@ -479,7 +594,7 @@ port_instance
 
 port
   : hierarchical_identifier
-      { $$ = $1; }
+      { $$ = unescape_identifier($1); }
     /* | hierarchical_identifier '[' INTEGER ']' */
   ;
 

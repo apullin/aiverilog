@@ -36,6 +36,7 @@ class NetNet;
 class NetExpr;
 class NetScope;
 class PPackage;
+class netsarray_t;
 struct symbol_search_results;
 class netclass_t;
 
@@ -53,7 +54,8 @@ class PExpr : public LineInfo {
 
       enum class type_elaboration_context_t {
 	    DEFAULT,
-	    CAST_TARGET
+	    CAST_TARGET,
+	    REQUIRED_TYPE
       };
 
         // Flag values that can be passed to elaborate_expr().
@@ -61,6 +63,7 @@ class PExpr : public LineInfo {
       static const unsigned NEED_CONST   = 0x1;
       static const unsigned SYS_TASK_ARG = 0x2;
       static const unsigned ANNOTATABLE  = 0x4;
+      static const unsigned WHOLE_VARIABLE = 0x8;
 
 	// Convert width mode to human-readable form.
       static const char*width_mode_name(width_mode_t mode);
@@ -217,10 +220,22 @@ class PExpr : public LineInfo {
 
 std::ostream& operator << (std::ostream&, const PExpr&);
 
+/*
+ * An item of a keyed assignment pattern, `key : value`. The key is null for
+ * a `default : value` item.
+ */
+struct pattern_item_t {
+      PExpr*key;
+      PExpr*value;
+};
+
 class PEAssignPattern : public PExpr {
     public:
       explicit PEAssignPattern();
       explicit PEAssignPattern(const std::list<PExpr*>&p);
+      explicit PEAssignPattern(const std::list<pattern_item_t>&p);
+	// A replication pattern, `'{r{p}}`, where the items p are repeated r times.
+      PEAssignPattern(PExpr*r, const std::list<PExpr*>&p);
       ~PEAssignPattern() override;
 
       void dump(std::ostream&) const override;
@@ -235,6 +250,18 @@ class PEAssignPattern : public PExpr {
 				     unsigned expr_wid,
                                      unsigned flags) const override;
     private:
+      bool is_keyed_() const { return !keyed_.empty() || default_; }
+	// Repeat the items of a replication pattern. Return false after
+	// reporting an error.
+      bool expand_repeat_(Design *des, NetScope *scope, size_t limit,
+			  std::vector<PExpr*> &items) const;
+	// Map a keyed pattern onto the positional list of items for an array
+	// dimension or a struct. Return false after reporting an error.
+      bool expand_keyed_array_(Design *des, NetScope *scope,
+			       const netrange_t &range,
+			       std::vector<PExpr*> &items) const;
+      bool expand_keyed_struct_(Design *des, const netstruct_t *struct_type,
+				std::vector<PExpr*> &items) const;
       NetExpr* elaborate_expr_packed_(Design *des, NetScope *scope,
 				      ivl_variable_type_t base_type,
 				      unsigned int width,
@@ -246,6 +273,7 @@ class PEAssignPattern : public PExpr {
 				      bool need_const) const;
       NetExpr* elaborate_expr_array_(Design *des, NetScope *scope,
 				     const netarray_t *array_type,
+				     const std::vector<PExpr*> &parms,
 				     bool need_const, bool up) const;
       NetExpr* elaborate_expr_uarray_(Design *des, NetScope *scope,
 				      const netuarray_t *uarray_type,
@@ -255,6 +283,12 @@ class PEAssignPattern : public PExpr {
 
     private:
       std::vector<PExpr*>parms_;
+      PExpr*repeat_ = nullptr;
+      std::vector<pattern_item_t>keyed_;
+      PExpr*default_ = nullptr;
+	// Set for the default-only pattern made for a struct member, where
+	// the default is applied to the elements of the member.
+      bool recurse_default_ = false;
 };
 
 class PEConcat : public PExpr {
@@ -290,6 +324,10 @@ class PEConcat : public PExpr {
 					 bool is_init = false) const override;
       virtual bool is_collapsible_net(Design*des, NetScope*scope,
                                       NetNet::PortType port_type) const override;
+
+	// The operands and the repeat count (null if none) of the concatenation.
+      const std::vector<PExpr*>& items() const { return parms_; }
+      PExpr* repeat() const { return repeat_; }
     private:
       NetNet* elaborate_lnet_common_(Design*des, NetScope*scope,
 				     bool bidirectional_flag,
@@ -361,7 +399,7 @@ class PEIdent : public PExpr {
 
     public:
       explicit PEIdent(perm_string, unsigned lexical_pos, bool no_implicit_sig=false);
-      explicit PEIdent(PPackage*pkg, const pform_name_t&name);
+      explicit PEIdent(const pform_scoped_name_t&name);
       explicit PEIdent(const pform_name_t&, unsigned lexical_pos,
 		       bool no_implicit_sig = false);
       ~PEIdent() override;
@@ -411,6 +449,11 @@ class PEIdent : public PExpr {
 	// expressions can can be unpacked arrays.
       NetNet* elaborate_unpacked_net(Design*des, NetScope*sc) const;
 
+	// Elaborate a reference to the complete variable without applying an
+	// expression width context.
+      std::unique_ptr<NetExpr> elaborate_variable(Design*des,
+					  NetScope*scope);
+
       virtual bool is_collapsible_net(Design*des, NetScope*scope,
                                       NetNet::PortType port_type) const override;
 
@@ -431,7 +474,8 @@ class PEIdent : public PExpr {
       type_lookup_t type_lookup_;
 
 	bool find_type_(Design *des, NetScope *scope,
-			struct symbol_search_results &search_results) const;
+			struct symbol_search_results &search_results,
+			bool strict_declaration_order) const;
 
 	// Common functions to calculate parts of part/bit
 	// selects. These methods return true if the expressions
@@ -478,8 +522,10 @@ class PEIdent : public PExpr {
       NetAssign_ *elaborate_lval_var_(Design *des, NetScope *scope,
 				      bool is_force, bool is_cassign,
 				      NetNet *reg, ivl_type_t data_type,
-				      pform_name_t tail_path) const;
+				      pform_name_t base_path,
+				      pform_name_t member_path) const;
       NetAssign_*elaborate_lval_net_word_(Design*, NetScope*, NetNet*,
+				          pform_name_t base_path,
 					  bool need_const_idx, bool is_force) const;
       bool elaborate_lval_net_bit_(Design*, NetScope*, NetAssign_*,
 				   bool need_const_idx, bool is_force) const;
@@ -489,8 +535,10 @@ class PEIdent : public PExpr {
                                    index_component_t::ctype_t,
 				   bool need_const_idx, bool is_force) const;
       NetAssign_*elaborate_lval_net_class_member_(Design*, NetScope*,
+						   bool is_force,
+						   bool is_cassign,
 						   const netclass_t *class_type,
-						   NetNet*,
+						   NetAssign_*,
 						   pform_name_t) const;
       bool elaborate_lval_net_packed_member_(Design*, NetScope*,
 					     NetAssign_*,
@@ -534,6 +582,21 @@ class PEIdent : public PExpr {
 					      const NetScope*found_in,
 					      ivl_type_t par_type,
 					      bool up, bool need_const) const;
+      NetExpr*elaborate_expr_param_slice_(const NetEConst*par_ex,
+					  const NetScope*found_in,
+					  long msb0, long lsb0,
+					  unsigned long elem_w,
+					  bool packed_layout,
+					  NetExpr*sel,
+					  perm_string name,
+					  long slice_off =0) const;
+      NetExpr*elaborate_expr_param_uarray_(Design*des,
+					   NetScope*scope,
+					   const NetEConst*par_ex,
+					   const NetScope*found_in,
+					   const netsarray_t*par_arr,
+					   bool need_const,
+					   perm_string name) const;
       NetExpr*elaborate_expr_net(Design*des,
 				 NetScope*scope,
 				 NetNet*net,
@@ -582,6 +645,11 @@ class PEIdent : public PExpr {
 				     bool bidirectional_flag,
 				     bool var_allowed_in_sv) const;
 
+      bool elaborate_lnet_packed_member_(Design*des, NetScope*scope,
+					 const NetNet*sig,
+					 const pform_name_t&base_path,
+					 const pform_name_t&member_path,
+					 unsigned&midx, unsigned&lidx) const;
 
       bool eval_part_select_(Design*des, NetScope*scope, const NetNet*sig,
 			     long&midx, long&lidx) const;
@@ -796,6 +864,10 @@ class PEBinary : public PExpr {
       explicit PEBinary(char op, PExpr*l, PExpr*r);
       ~PEBinary() override;
 
+      char peek_opcode() const { return op_; }
+      const PExpr* peek_left() const { return left_; }
+      const PExpr* peek_right() const { return right_; }
+
       virtual void dump(std::ostream&out) const override;
 
       virtual void declare_implicit_nets(LexicalScope*scope, NetNet::Type type) override;
@@ -952,11 +1024,13 @@ class PETernary : public PExpr {
 class PECallFunction : public PExpr {
     public:
       explicit PECallFunction(const pform_name_t &n, const std::vector<named_pexpr_t> &parms);
-	// Call function defined in package.
-      explicit PECallFunction(PPackage *pkg, const pform_name_t &n, const std::list<named_pexpr_t> &parms);
+	// Call a function with a scoped name.
+      explicit PECallFunction(const pform_scoped_name_t &n,
+			      const std::list<named_pexpr_t> &parms);
 
-	// Used to convert a user function called as a task
-      explicit PECallFunction(PPackage *pkg, const pform_name_t &n, const std::vector<named_pexpr_t> &parms);
+	// Used to convert a user function called as a task.
+      explicit PECallFunction(const pform_scoped_name_t &n,
+			      const std::vector<named_pexpr_t> &parms);
 
 	// Call of system function (name is not hierarchical)
       explicit PECallFunction(perm_string n, const std::vector<named_pexpr_t> &parms);
@@ -1018,7 +1092,7 @@ class PECallFunction : public PExpr {
       NetExpr* elaborate_expr_method_(Design*des, NetScope*scope,
 				      symbol_search_results&search_results)
 				      const;
-      NetExpr* elaborate_expr_method_par_(Design*des, const NetScope*scope,
+      NetExpr* elaborate_expr_method_par_(Design*des, NetScope*scope,
 					  const symbol_search_results&search_results)
 					  const;
 
@@ -1046,13 +1120,15 @@ class PECallFunction : public PExpr {
       NetExpr* elaborate_class_method_net_(Design*des, NetScope*scope,
 					   NetNet*net, const netclass_t*class_type,
 					   perm_string method_name,
-					   const std::vector<named_pexpr_t>*src_parms) const;
+					   const std::vector<named_pexpr_t>*src_parms,
+					   bool nonvirtual = false) const;
 
       NetExpr* elaborate_class_method_net_this_(Design*des, NetScope*scope,
 						NetExpr* this_expr,
 						const netclass_t*class_type,
 						perm_string method_name,
-						const std::vector<named_pexpr_t>*src_parms) const;
+						const std::vector<named_pexpr_t>*src_parms,
+						bool nonvirtual = false) const;
 
       NetExpr* elaborate_expr_method_chained_(Design*des, NetScope*scope,
 					     symbol_search_results&search_results) const;

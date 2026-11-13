@@ -480,14 +480,24 @@ uint64_t verinum::as_ulong64() const
  */
 signed long verinum::as_long() const
 {
+      long val;
+      convert_long(val, true);
+      return val;
+}
+
+bool verinum::try_long(long&value) const
+{
+      return convert_long(value, false);
+}
+
+bool verinum::convert_long(long&val, bool warn) const
+{
 #define IVLLBITS (8 * sizeof(long) - 1)
-      if (nbits_ == 0)
-	    return 0;
+      val = 0;
+      if (nbits_ == 0) return true;
+      if (!is_defined()) return false;
 
-      if (!is_defined())
-	    return 0;
-
-      unsigned long val = 0;
+      unsigned long uval = 0;
       unsigned diag_top = 0;
 
       unsigned top = nbits_;
@@ -498,10 +508,10 @@ signed long verinum::as_long() const
       int lost_bits=0;
 
       if (has_sign_ && (bits_[nbits_-1] == V1)) {
-	    val = ~0UL;
+	    uval = ~0UL;
 	    unsigned long mask = ~1UL;
 	    for (unsigned idx = 0 ;  idx < top ;  idx += 1) {
-		  if (bits_[idx] == V0) val &= mask;
+		  if (bits_[idx] == V0) uval &= mask;
 		  mask = (mask << 1) | 1UL;
 	    }
 	    if (diag_top) {
@@ -512,7 +522,7 @@ signed long verinum::as_long() const
       } else {
 	    unsigned long mask = 1;
 	    for (unsigned idx = 0 ;  idx < top ;  idx += 1, mask <<= 1) {
-		  if (bits_[idx] == V1) val |= mask;
+		  if (bits_[idx] == V1) uval |= mask;
 	    }
 	    if (diag_top) {
 		  for (unsigned idx = top; idx < diag_top; idx += 1) {
@@ -521,10 +531,12 @@ signed long verinum::as_long() const
 	    }
       }
 
-      signed long result = static_cast<signed long>(val);
-      if (lost_bits) cerr << "warning: verinum::as_long() truncated " <<
-	  diag_top << " bits to " << IVLLBITS << ", returns " << result << endl;
-      return result;
+      val = static_cast<long>(uval);
+      if (lost_bits && warn) {
+	    cerr << "warning: verinum::as_long() truncated " << diag_top
+		 << " bits to " << IVLLBITS << ", returns " << val << endl;
+      }
+      return !lost_bits;
 #undef IVLLBITS
 }
 

@@ -189,6 +189,7 @@ extern void pform_class_property(const struct vlltype&loc,
 				 data_type_t*data_type,
 				 std::list<decl_assignment_t*>*decls);
 extern void pform_set_this_class(const struct vlltype&loc, PTaskFunc*net);
+extern void pform_set_method_virtual(bool flag);
 extern void pform_set_constructor_return(PFunction*net);
 
 extern void pform_end_class_declaration(const struct vlltype&loc);
@@ -330,8 +331,6 @@ extern void pform_set_typedef(const struct vlltype&loc, perm_string name,
 extern void pform_forward_typedef(const struct vlltype&loc, perm_string name,
 			      type_restrict_t basic_type);
 
-extern void pform_set_type_referenced(const struct vlltype&loc, const char*name);
-
 /*
  * This function makes a PECallFunction of the named function.
  */
@@ -349,7 +348,7 @@ extern PCallTask* pform_make_call_task(const struct vlltype&loc,
 extern void pform_make_foreach_declarations(const struct vlltype&loc,
 					    std::list<perm_string>*loop_vars);
 extern PForeach* pform_make_foreach(const struct vlltype&loc,
-				    char*ident,
+				    PEIdent*array_ident,
 				    std::list<perm_string>*loop_vars,
 				    Statement*stmt);
 
@@ -419,7 +418,7 @@ extern void pform_set_parameter(const struct vlltype&loc,
                                 PExpr*expr, LexicalScope::range_t*value_range);
 extern void pform_set_specparam(const struct vlltype&loc,
 				 perm_string name,
-				 std::list<pform_range_t> *range,
+				 vector_type_t*data_type,
 				 PExpr *expr, bool check_decl_order);
 extern void pform_set_defparam(const pform_name_t&name, PExpr*expr);
 

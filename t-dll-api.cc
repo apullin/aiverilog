@@ -422,6 +422,13 @@ extern "C" ivl_branch_t ivl_expr_branch(ivl_expr_t net)
       return net->u_.branch_.branch;
 }
 
+extern "C" unsigned ivl_expr_nonvirtual(ivl_expr_t net)
+{
+      assert(net);
+      assert(net->type_ == IVL_EX_UFUNC);
+      return net->u_.ufunc_.nonvirtual;
+}
+
 extern "C" ivl_scope_t ivl_expr_def(ivl_expr_t net)
 {
       assert(net);
@@ -703,6 +710,9 @@ extern "C" ivl_signal_t ivl_expr_signal(ivl_expr_t net)
 	    return net->u_.property_.sig;
 
 	  default:
+	    cerr << ivl_expr_file(net) << ":" << ivl_expr_lineno(net)
+	         << ": Internal error: Net type " << net->type_
+		 << " is not supported." << endl;
 	    assert(0);
 	    return 0;
       }
@@ -1945,6 +1955,18 @@ extern "C" ivl_scope_t ivl_parameter_scope(ivl_parameter_t net)
       return net->scope;
 }
 
+extern "C" const char* ivl_path_condition_key(ivl_delaypath_t obj)
+{
+      assert(obj);
+      return obj->sdf_condition.c_str();
+}
+
+extern "C" const char* ivl_path_condition_text(ivl_delaypath_t obj)
+{
+      assert(obj);
+      return obj->sdf_condition_text.c_str();
+}
+
 extern "C" ivl_nexus_t ivl_path_condit(ivl_delaypath_t obj)
 {
       assert(obj);
@@ -2183,6 +2205,12 @@ extern "C" unsigned ivl_scope_is_auto(ivl_scope_t net)
 {
       assert(net);
       return net->is_auto;
+}
+
+extern "C" ivl_scope_t ivl_scope_virtual_root(ivl_scope_t net)
+{
+      assert(net);
+      return net->virtual_root;
 }
 
 extern "C" unsigned ivl_scope_is_cell(ivl_scope_t net)
@@ -2731,6 +2759,13 @@ extern "C" ivl_statement_t ivl_stmt_block_stmt(ivl_statement_t net,
 	    assert(0);
 	    return 0;
       }
+}
+
+extern "C" unsigned ivl_stmt_nonvirtual(ivl_statement_t net)
+{
+      assert(net);
+      assert(net->type_ == IVL_ST_UTASK);
+      return net->u_.utask_.nonvirtual;
 }
 
 extern "C" ivl_scope_t ivl_stmt_call(ivl_statement_t net)
@@ -3317,6 +3352,11 @@ extern "C" int ivl_type_packed_msb(ivl_type_t net, unsigned dim)
       return slice[dim].get_msb();
 }
 
+extern "C" ivl_enumtype_t ivl_type_enumtype(ivl_type_t net)
+{
+      return dynamic_cast<const netenum_t*>(net);
+}
+
 extern "C" const char* ivl_type_name(ivl_type_t net)
 {
       if (const netclass_t*class_type = dynamic_cast<const netclass_t*>(net))
@@ -3348,6 +3388,28 @@ extern "C" ivl_type_t ivl_type_prop_type(ivl_type_t net, int idx)
       assert(class_type);
 
       return class_type->get_prop_type(idx);
+}
+
+extern "C" ivl_type_t ivl_type_super(ivl_type_t net)
+{
+      const netclass_t*class_type = dynamic_cast<const netclass_t*>(net);
+      assert(class_type);
+      return class_type->get_super();
+}
+
+extern "C" unsigned ivl_type_virtuals(ivl_type_t net)
+{
+      const netclass_t*class_type = dynamic_cast<const netclass_t*>(net);
+      assert(class_type);
+      return class_type->virtual_scopes().size();
+}
+
+extern "C" ivl_scope_t ivl_type_virtual(ivl_type_t net, unsigned idx)
+{
+      const netclass_t*class_type = dynamic_cast<const netclass_t*>(net);
+      assert(class_type);
+      assert(idx < class_type->virtual_scopes().size());
+      return class_type->virtual_scopes()[idx];
 }
 
 extern "C" unsigned ivl_type_queue_max(ivl_type_t net)

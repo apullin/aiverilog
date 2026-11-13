@@ -36,158 +36,81 @@
  * nexus.
  */
 
-enum slice_type_e {
-      SLICE_NO_TYPE = 0,
-      SLICE_SIMPLE_VECTOR,
-      SLICE_PART_SELECT_STATIC,
-      SLICE_PART_SELECT_DYNAMIC,
-      SLICE_MEMORY_WORD_STATIC,
-      SLICE_MEMORY_WORD_DYNAMIC
-};
-
 struct vec_slice_info {
-      enum slice_type_e type;
-
-      union {
-	    struct {
-		  unsigned long use_word;
-	    } simple_vector;
-
-	    struct {
-		  unsigned long part_off;
-	    } part_select_static;
-
-	    struct {
-		    /* Index reg that holds the memory word index */
-		  int word_idx_reg;
-		    /* Stored x/non-x flag */
-		  unsigned x_flag;
-	    } part_select_dynamic;
-
-	    struct {
-		  unsigned long use_word;
-	    } memory_word_static;
-
-	    struct {
-		    /* Index reg that holds the memory word index */
-		  int word_idx_reg;
-		    /* Stored x/non-x flag */
-		  unsigned x_flag;
-	    } memory_word_dynamic;
-      } u_;
+      unsigned long use_word;
+      long part_off;
+      int word_idx_reg;
+      int part_idx_reg;
+      unsigned int x_flag;
 };
 
 static void get_vec_from_lval_slice(ivl_lval_t lval, struct vec_slice_info*slice,
-				    unsigned wid)
+				    unsigned int wid)
 {
       ivl_signal_t sig = ivl_lval_sig(lval);
-      ivl_expr_t part_off_ex = ivl_lval_part_off(lval);
-      unsigned long part_off = 0;
+      ivl_expr_t word_ex = ivl_lval_idx(lval);
 
-	/* Although Verilog doesn't support it, we'll handle
-	   here the case of an l-value part select of an array
-	   word if the address is constant. */
-      ivl_expr_t word_ix = ivl_lval_idx(lval);
-      unsigned long use_word = 0;
-
-      if (part_off_ex == 0) {
-	    part_off = 0;
-      } else if (number_is_immediate(part_off_ex, IMM_WID, 0) &&
-                 !number_is_unknown(part_off_ex)) {
-	    part_off = get_number_immediate(part_off_ex);
-	    part_off_ex = 0;
-      }
-
-	/* If the word index is a constant expression, then evaluate
-	   it to select the word, and pay no further heed to the
-	   expression itself. */
-      if (word_ix && number_is_immediate(word_ix, IMM_WID, 0)) {
-	    if (number_is_unknown(word_ix))
-		  use_word = ULONG_MAX; // The largest valid index is ULONG_MAX - 1
-	    else
-		  use_word = get_number_immediate(word_ix);
-	    word_ix = 0;
-      }
-
-      if (ivl_signal_dimensions(sig)==0 && part_off_ex==0 && word_ix==0
-	  && part_off==0 && wid==ivl_signal_width(sig)) {
-
-	    slice->type = SLICE_SIMPLE_VECTOR;
-	    slice->u_.simple_vector.use_word = use_word;
+	/* Load the complete vector or array word. */
+      assert(ivl_signal_dimensions(sig) == 0 || !signal_is_return_value(sig));
+      if (ivl_signal_dimensions(sig) == 0) {
+	    assert(word_ex == NULL);
 	    if (signal_is_return_value(sig)) {
-		  assert(use_word==0);
 		  fprintf(vvp_out, "    %%retload/vec4 0;\n");
 	    } else {
-		  fprintf(vvp_out, "    %%load/vec4 v%p_%lu;\n", sig, use_word);
+		  fprintf(vvp_out, "    %%load/vec4 v%p_0;\n", sig);
 	    }
-
-      } else if (ivl_signal_dimensions(sig)==0 && part_off_ex==0 && word_ix==0) {
-
-	    assert(use_word == 0);
-
-	    slice->type = SLICE_PART_SELECT_STATIC;
-	    slice->u_.part_select_static.part_off = part_off;
-
-	    if (signal_is_return_value(sig)) {
-		  assert(use_word==0);
-		  fprintf(vvp_out, "    %%retload/vec4 0;\n");
-	    } else {
-		  fprintf(vvp_out, "    %%load/vec4 v%p_%lu;\n", sig, use_word);
+      } else if (word_ex != NULL &&
+		 !number_is_immediate(word_ex, IMM_WID, 0)) {
+	    slice->word_idx_reg = allocate_word();
+	    slice->x_flag = allocate_flag();
+	    draw_eval_expr_into_integer(word_ex, slice->word_idx_reg);
+	    fprintf(vvp_out, "    %%flag_mov %u, 4;\n", slice->x_flag);
+	    fprintf(vvp_out, "    %%load/vec4a v%p, %d;\n",
+		    sig, slice->word_idx_reg);
+      } else {
+	    if (word_ex != NULL) {
+		  slice->use_word = number_is_unknown(word_ex)
+			? ULONG_MAX
+			: (unsigned long)get_number_immediate(word_ex);
 	    }
-	    fprintf(vvp_out, "    %%parti/u %u, %lu, 32;\n", wid, part_off);
-
-      } else if (ivl_signal_dimensions(sig)==0 && part_off_ex!=0 && word_ix==0) {
-
-	    assert(use_word == 0);
-	    assert(part_off == 0);
-	    assert(!signal_is_return_value(sig)); // NOT IMPLEMENTED
-
-	    slice->type = SLICE_PART_SELECT_DYNAMIC;
-
-	    slice->u_.part_select_dynamic.word_idx_reg = allocate_word();
-	    slice->u_.part_select_dynamic.x_flag = allocate_flag();
-
-	    fprintf(vvp_out, "    %%load/vec4 v%p_%lu;\n", sig, use_word);
-	    draw_eval_vec4(part_off_ex);
-	    fprintf(vvp_out, "    %%dup/vec4;\n");
-	    fprintf(vvp_out, "    %%ix/vec4 %d;\n", slice->u_.part_select_dynamic.word_idx_reg);
-	    fprintf(vvp_out, "    %%flag_mov %u, 4;\n", slice->u_.part_select_dynamic.x_flag);
-	    fprintf(vvp_out, "    %%part/u %u;\n", wid);
-
-      } else if (ivl_signal_dimensions(sig) > 0 && word_ix == 0) {
-
-	    assert(!signal_is_return_value(sig)); // NOT IMPLEMENTED
-
-	    slice->type = SLICE_MEMORY_WORD_STATIC;
-	    slice->u_.memory_word_static.use_word = use_word;
-	    if (use_word < ivl_signal_array_count(sig)) {
-		  fprintf(vvp_out, "    %%ix/load 3, %lu, 0;\n",
-			  use_word);
+	    if (slice->use_word < ivl_signal_array_count(sig)) {
+		  fprintf(vvp_out, "    %%ix/load 3, %lu, 0;\n", slice->use_word);
 		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
 		  fprintf(vvp_out, "    %%load/vec4a v%p, 3;\n", sig);
 	    } else {
-		  if (wid <= 32) {
-			fprintf(vvp_out, "    %%pushi/vec4 4294967295, 4294967295, %u;\n", wid);
-		  } else {
-			fprintf(vvp_out, "    %%pushi/vec4 4294967295, 4294967295, 32;\n");
-			fprintf(vvp_out, "    %%pad/s %u;\n", wid);
+		  unsigned int word_wid = ivl_signal_width(sig);
+		  fprintf(vvp_out, "    %%pushi/vec4 4294967295, 4294967295, %u;\n",
+			  word_wid <= 32 ? word_wid : 32);
+		  if (word_wid > 32) {
+			fprintf(vvp_out, "    %%pad/s %u;\n", word_wid);
 		  }
 	    }
+      }
 
-      } else if (ivl_signal_dimensions(sig) > 0 && word_ix != 0) {
-
-	    assert(!signal_is_return_value(sig)); // NOT IMPLEMENTED
-	    slice->type = SLICE_MEMORY_WORD_DYNAMIC;
-
-	    slice->u_.memory_word_dynamic.word_idx_reg = allocate_word();
-	    slice->u_.memory_word_dynamic.x_flag = allocate_flag();
-
-	    draw_eval_expr_into_integer(word_ix, slice->u_.memory_word_dynamic.word_idx_reg);
-	    fprintf(vvp_out, "    %%flag_mov %u, 4;\n", slice->u_.memory_word_dynamic.x_flag);
-	    fprintf(vvp_out, "    %%load/vec4a v%p, %d;\n", sig, slice->u_.memory_word_dynamic.word_idx_reg);
-
+	/* Apply any packed selection and save its offset for writeback. */
+      ivl_expr_t part_ex = ivl_lval_part_off(lval);
+      if (part_ex == NULL ||
+	  (number_is_immediate(part_ex, 32, 1) &&
+	   !number_is_unknown(part_ex))) {
+	    slice->part_off = part_ex ? get_number_immediate(part_ex) : 0;
+	    if (slice->part_off != 0 || wid != ivl_signal_width(sig)) {
+		  fprintf(vvp_out, "    %%parti/u %u, %lu, 32;\n",
+			  wid, (unsigned long)slice->part_off);
+	    }
       } else {
-	    assert(0);
+	    const char*sign = ivl_expr_signed(part_ex) ? "/s" : "";
+	    slice->part_idx_reg = allocate_word();
+	    if (slice->x_flag == 0) slice->x_flag = allocate_flag();
+	    draw_eval_vec4(part_ex);
+	    fprintf(vvp_out, "    %%dup/vec4;\n");
+	    fprintf(vvp_out, "    %%ix/vec4%s %d;\n", sign, slice->part_idx_reg);
+	      /* Keep either unknown index from enabling the write. */
+	    if (slice->word_idx_reg) {
+		  fprintf(vvp_out, "    %%flag_or 4, %u;\n", slice->x_flag);
+	    }
+	    fprintf(vvp_out, "    %%flag_mov %u, 4;\n", slice->x_flag);
+	    fprintf(vvp_out, "    %%part/%c %u;\n",
+		    ivl_expr_signed(part_ex) ? 's' : 'u', wid);
       }
 }
 
@@ -221,49 +144,6 @@ static void get_vec_from_lval(ivl_statement_t net, struct vec_slice_info*slices)
 	    cur_bit += bit_limit;
       }
 
-}
-
-static void put_vec_to_ret_slice(ivl_signal_t sig, struct vec_slice_info*slice,
-				 unsigned wid)
-{
-      int part_off_idx;
-
-	/* If the slice of the l-value is a BOOL variable, then cast
-	   the data to a BOOL vector so that the stores can be valid. */
-      if (ivl_signal_data_type(sig) == IVL_VT_BOOL) {
-	    fprintf(vvp_out, "    %%cast2;\n");
-      }
-
-      switch (slice->type) {
-	  default:
-	    fprintf(vvp_out, " ; XXXX slice->type=%d\n", slice->type);
-	    assert(0);
-	    break;
-
-	  case SLICE_SIMPLE_VECTOR:
-	    assert(slice->u_.simple_vector.use_word == 0);
-	    fprintf(vvp_out, "    %%ret/vec4 0, 0, %u;\n", wid);
-	    break;
-
-	  case SLICE_PART_SELECT_STATIC:
-	    part_off_idx = allocate_word();
-	    fprintf(vvp_out, "    %%ix/load %d, %lu, 0;\n",
-		    part_off_idx, slice->u_.part_select_static.part_off);
-	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-	    fprintf(vvp_out, "    %%ret/vec4 0, %d, %u;\n", part_off_idx, wid);
-	    clr_word(part_off_idx);
-	    break;
-
-	  case SLICE_PART_SELECT_DYNAMIC:
-	    fprintf(vvp_out, "    %%flag_mov 4, %u;\n",
-		    slice->u_.part_select_dynamic.x_flag);
-	    fprintf(vvp_out, "    %%ret/vec4 0, %d, %u;\n",
-		    slice->u_.part_select_dynamic.word_idx_reg, wid);
-	    clr_word(slice->u_.part_select_dynamic.word_idx_reg);
-	    clr_flag(slice->u_.part_select_dynamic.x_flag);
-	    break;
-
-      }
 }
 
 static bool nexuses_share_consumer(ivl_nexus_t left, ivl_nexus_t right)
@@ -327,80 +207,55 @@ static const char* event_aware_store_op(ivl_signal_t sig)
 }
 
 static void put_vec_to_lval_slice(ivl_lval_t lval, struct vec_slice_info*slice,
-				  unsigned wid)
+				  unsigned int wid)
 {
-	//unsigned skip_set = transient_id++;
       ivl_signal_t sig = ivl_lval_sig(lval);
-      int part_off_idx;
+      bool is_array = ivl_signal_dimensions(sig) > 0;
+      int word_idx = slice->word_idx_reg;
+      int part_idx = slice->part_idx_reg;
 
-      const char*store_op = event_aware_store_op(sig);
-
-
-	/* Special Case: If the l-value signal is named after its scope,
-	   and the scope is a function, then this is an assign to a return
-	   value and should be handled differently. */
-      if (signal_is_return_value(sig)) {
-	    put_vec_to_ret_slice(sig, slice, wid);
-	    return;
-      }
-
-	/* If the slice of the l-value is a BOOL variable, then cast
-	   the data to a BOOL vector so that the stores can be valid. */
       if (ivl_signal_data_type(sig) == IVL_VT_BOOL) {
 	    fprintf(vvp_out, "    %%cast2;\n");
       }
 
-      switch (slice->type) {
-	  default:
-	    fprintf(vvp_out, " ; XXXX slice->type=%d\n", slice->type);
-	    assert(0);
-	    break;
-
-	  case SLICE_SIMPLE_VECTOR:
-	    fprintf(vvp_out, "    %s v%p_%lu, 0, %u;\n", store_op, sig,
-		    slice->u_.simple_vector.use_word, wid);
-	    break;
-
-	  case SLICE_PART_SELECT_STATIC:
-	    part_off_idx = allocate_word();
-	    fprintf(vvp_out, "    %%ix/load %d, %lu, 0;\n",
-		    part_off_idx, slice->u_.part_select_static.part_off);
-	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-	    fprintf(vvp_out, "    %s v%p_0, %d, %u;\n", store_op, sig,
-		    part_off_idx, wid);
-	    clr_word(part_off_idx);
-	    break;
-
-	  case SLICE_PART_SELECT_DYNAMIC:
-	    fprintf(vvp_out, "    %%flag_mov 4, %u;\n",
-		    slice->u_.part_select_dynamic.x_flag);
-	    fprintf(vvp_out, "    %s v%p_0, %d, %u;\n", store_op, sig,
-		    slice->u_.part_select_dynamic.word_idx_reg, wid);
-	    clr_word(slice->u_.part_select_dynamic.word_idx_reg);
-	    clr_flag(slice->u_.part_select_dynamic.x_flag);
-	    break;
-
-	  case SLICE_MEMORY_WORD_STATIC:
-	    if (slice->u_.memory_word_static.use_word < ivl_signal_array_count(sig)) {
-		  int word_idx = allocate_word();
-		  fprintf(vvp_out,"    %%flag_set/imm 4, 0;\n");
-		  fprintf(vvp_out,"    %%ix/load %d, %lu, 0;\n", word_idx, slice->u_.memory_word_static.use_word);
-		  fprintf(vvp_out,"    %%store/vec4a v%p, %d, 0;\n", sig, word_idx);
-		  clr_word(word_idx);
-	    } else {
-		  fprintf(vvp_out," ; Skip this slice write to v%p [%lu]\n", sig, slice->u_.memory_word_static.use_word);
-		  fprintf(vvp_out,"    %%pop/vec4 1;\n");
-	    }
-	    break;
-
-	  case SLICE_MEMORY_WORD_DYNAMIC:
-	    fprintf(vvp_out, "    %%flag_mov 4, %u;\n", slice->u_.memory_word_dynamic.x_flag);
-	    fprintf(vvp_out, "    %%store/vec4a v%p, %d, 0;\n", sig, slice->u_.memory_word_dynamic.word_idx_reg);
-	    clr_word(slice->u_.memory_word_dynamic.word_idx_reg);
-	    clr_flag(slice->u_.memory_word_dynamic.x_flag);
-	    break;
-
+      if (is_array && word_idx == 0 &&
+	  slice->use_word >= ivl_signal_array_count(sig)) {
+	    fprintf(vvp_out, "    %%pop/vec4 1;\n");
+	    if (part_idx) clr_word(part_idx);
+	    if (slice->x_flag) clr_flag(slice->x_flag);
+	    return;
       }
+
+      if (is_array && word_idx == 0) {
+	    word_idx = allocate_word();
+	    fprintf(vvp_out, "    %%ix/load %d, %lu, 0;\n", word_idx, slice->use_word);
+      }
+      if (part_idx == 0 && slice->part_off != 0) {
+	    uint64_t part_off = slice->part_off;
+	    unsigned long low = part_off % UINT64_C(0x100000000);
+	    unsigned long high = part_off / UINT64_C(0x100000000);
+	    part_idx = allocate_word();
+	    fprintf(vvp_out, "    %%ix/load %d, %lu, %lu;\n", part_idx, low, high);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+      }
+      if (slice->x_flag) {
+	    fprintf(vvp_out, "    %%flag_mov 4, %u;\n", slice->x_flag);
+      } else if (is_array && part_idx == 0) {
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+      }
+
+      if (is_array) {
+	    fprintf(vvp_out, "    %%store/vec4a v%p, %d, %d;\n", sig, word_idx, part_idx);
+      } else if (signal_is_return_value(sig)) {
+	    fprintf(vvp_out, "    %%ret/vec4 0, %d, %u;\n", part_idx, wid);
+      } else {
+	    const char*store_op = event_aware_store_op(sig);
+	    fprintf(vvp_out, "    %s v%p_0, %d, %u;\n", store_op, sig, part_idx, wid);
+      }
+
+      if (word_idx) clr_word(word_idx);
+      if (part_idx) clr_word(part_idx);
+      if (slice->x_flag) clr_flag(slice->x_flag);
 }
 
 static void put_vec_to_lval(ivl_statement_t net, struct vec_slice_info*slices)
@@ -660,6 +515,67 @@ static void draw_stmt_assign_vector_opcode(unsigned char opcode, bool is_signed)
       }
 }
 
+/*
+ * Copy a whole unpacked array into another, element by element.
+ *
+ * The run-time has no bulk array-copy opcode, but it does have indexed word
+ * access, so emit the same %ix/load + %store/vec4a idiom draw_array_pattern
+ * uses, reading each word with %load/vec4a instead of evaluating a pattern
+ * element. Both arrays are known to have the same shape and element type:
+ * the elaborator checks that (IEEE 1800-2023 7.6) before we get here.
+ *
+ * Emitted straight-line rather than as a loop. That keeps this independent of
+ * the label allocator, and matches draw_array_pattern, which unrolls too.
+ */
+int draw_array_copy(ivl_signal_t dst, ivl_expr_t rval)
+{
+      ivl_signal_t src = ivl_expr_signal(rval);
+      unsigned count = ivl_signal_array_count(dst);
+
+      if (src == 0) {
+	    fprintf(stderr, "%s:%u: sorry: only a whole array variable can be "
+		    "copied to an unpacked array.\n",
+		    ivl_expr_file(rval), ivl_expr_lineno(rval));
+	    return 1;
+      }
+      if (ivl_signal_array_count(src) != count) {
+	    fprintf(stderr, "%s:%u: error: unpacked array copy needs matching "
+		    "sizes (%u versus %u).\n",
+		    ivl_expr_file(rval), ivl_expr_lineno(rval),
+		    ivl_signal_array_count(src), count);
+	    return 1;
+      }
+
+      switch (ivl_signal_data_type(dst)) {
+	  case IVL_VT_BOOL:
+	  case IVL_VT_LOGIC:
+	    for (unsigned idx = 0 ; idx < count ; idx += 1) {
+		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
+		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+		  fprintf(vvp_out, "    %%load/vec4a v%p, 3;\n", src);
+		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
+		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+		  fprintf(vvp_out, "    %%store/vec4a v%p, 3, 0;\n", dst);
+	    }
+	    return 0;
+	  case IVL_VT_REAL:
+	    for (unsigned idx = 0 ; idx < count ; idx += 1) {
+		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
+		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+		  fprintf(vvp_out, "    %%load/ar v%p, 3;\n", src);
+		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
+		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+		  fprintf(vvp_out, "    %%store/reala v%p, 3;\n", dst);
+	    }
+	    return 0;
+	  default:
+	    fprintf(stderr, "%s:%u: sorry: copying an unpacked array of this "
+		    "element type is not supported.\n",
+		    ivl_expr_file(rval), ivl_expr_lineno(rval));
+	    return 1;
+      }
+}
+
 static int show_stmt_assign_vector(ivl_statement_t net)
 {
       ivl_expr_t rval = ivl_stmt_rval(net);
@@ -669,6 +585,14 @@ static int show_stmt_assign_vector(ivl_statement_t net)
 	    ivl_signal_t sig = ivl_lval_sig(lval);
 	    draw_array_pattern(sig, rval, 0);
 	    return 0;
+      }
+
+	/* A whole unpacked array as the r-value (IVL_EX_ARRAY with no index)
+	   is an array-to-array copy. There is no bulk opcode for it, so copy
+	   word by word. */
+      if (ivl_expr_type(rval) == IVL_EX_ARRAY) {
+	    ivl_lval_t lval = ivl_stmt_lval(net, 0);
+	    return draw_array_copy(ivl_lval_sig(lval), rval);
       }
 
       unsigned wid = ivl_stmt_lwidth(net);
@@ -924,6 +848,11 @@ static int show_stmt_assign_sig_real(ivl_statement_t net)
 	    ivl_signal_t sig = ivl_lval_sig(lval);
 	    draw_array_pattern(sig, rval, 0);
 	    return 0;
+      }
+
+	/* A whole real array as the r-value is an array-to-array copy. */
+      if (ivl_expr_type(rval) == IVL_EX_ARRAY) {
+	    return draw_array_copy(ivl_lval_sig(lval), rval);
       }
 
 	/* If this is a compressed assignment, then get the contents
@@ -1256,11 +1185,16 @@ static int show_stmt_assign_queue_pattern(ivl_signal_t var, ivl_expr_t rval,
 	                    max_elems, ivl_signal_basename(var), max_size, max_size);
 	    max_elems = max_size;
       }
-      for (idx = 0 ; idx < max_elems ; idx += 1) {
+	/* Discard excess values only after evaluating their expressions. */
+      for (idx = 0 ; idx < ivl_expr_parms(rval) ; idx += 1) {
 	    switch (ivl_type_base(element_type)) {
 		case IVL_VT_BOOL:
 		case IVL_VT_LOGIC:
 		  draw_eval_vec4(ivl_expr_parm(rval,idx));
+		  if (idx >= max_elems) {
+			fprintf(vvp_out, "    %%pop/vec4 1;\n");
+			break;
+		  }
 		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
 		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
 		  fprintf(vvp_out, "    %%store/qdar/v v%p_0, %d, %u;\n", var, max_idx,
@@ -1269,6 +1203,10 @@ static int show_stmt_assign_queue_pattern(ivl_signal_t var, ivl_expr_t rval,
 
 		case IVL_VT_REAL:
 		  draw_eval_real(ivl_expr_parm(rval,idx));
+		  if (idx >= max_elems) {
+			fprintf(vvp_out, "    %%pop/real 1;\n");
+			break;
+		  }
 		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
 		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
 		  fprintf(vvp_out, "    %%store/qdar/r v%p_0, %d;\n", var, max_idx);
@@ -1276,6 +1214,10 @@ static int show_stmt_assign_queue_pattern(ivl_signal_t var, ivl_expr_t rval,
 
 		case IVL_VT_STRING:
 		  draw_eval_string(ivl_expr_parm(rval,idx));
+		  if (idx >= max_elems) {
+			fprintf(vvp_out, "    %%pop/str 1;\n");
+			break;
+		  }
 		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
 		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
 		  fprintf(vvp_out, "    %%store/qdar/str v%p_0, %d;\n", var, max_idx);
@@ -1479,7 +1421,7 @@ static int show_stmt_assign_sig_cobject(ivl_statement_t net)
 		 variable. */
 	    errors += draw_eval_object(rval);
 
-	    if (ivl_signal_array_count(sig) > 1) {
+	    if (ivl_signal_dimensions(sig) > 0) {
 		  unsigned ix;
 		  ivl_expr_t aidx = ivl_lval_idx(lval);
 

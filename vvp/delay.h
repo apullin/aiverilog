@@ -163,6 +163,8 @@ class vvp_fun_delay  : public vvp_net_fun_t, private vvp_gen_event_s {
 class vvp_fun_modpath;
 class vvp_fun_modpath_event;
 class vvp_fun_modpath_src;
+struct modpath_scalar_event;
+struct modpath_scalar_state;
 
 class vvp_fun_modpath  : public vvp_net_fun_t {
 
@@ -177,7 +179,10 @@ class vvp_fun_modpath  : public vvp_net_fun_t {
 
     private:
       friend class vvp_fun_modpath_event;
+      friend struct modpath_scalar_event;
 
+      void scalar_request_(vvp_bit4_t value, vvp_time64_t delay,
+                           vvp_time64_t reject_limit);
       void cancel_bit_(unsigned idx);
       void schedule_bit_(unsigned idx, vvp_bit4_t value,
                          vvp_time64_t delay);
@@ -188,6 +193,7 @@ class vvp_fun_modpath  : public vvp_net_fun_t {
       vvp_vector4_t input_vec4_;
       vvp_vector4_t output_vec4_;
 
+      modpath_scalar_state*scalar_;
       struct state_t;
       state_t*state_;
 
@@ -204,7 +210,7 @@ class vvp_fun_modpath_src  : public vvp_net_fun_t {
       friend class vvp_fun_modpath;
 
     public:
-      explicit vvp_fun_modpath_src(vvp_time64_t const del[12]);
+      explicit vvp_fun_modpath_src(vvp_time64_t const del[12], bool wait_for_edge = false);
     protected:
       ~vvp_fun_modpath_src() override;
 
@@ -224,6 +230,7 @@ class vvp_fun_modpath_src  : public vvp_net_fun_t {
 
       vvp_time64_t wake_time_;
       bool condition_flag_;
+      bool waiting_for_edge_;
 
     private:
       vvp_fun_modpath_src(const vvp_fun_modpath_src&);
@@ -248,6 +255,9 @@ class vvp_fun_modpath_edge  : public vvp_fun_modpath_src {
 * Upon a (INTERCONNECT ...) statement an intermodpath will be inserted
 * between port1 and port2 and its delay can be annotated
 */
+struct intermodpath_scalar_event;
+struct intermodpath_scalar_state;
+
 class vvp_fun_intermodpath  : public vvp_net_fun_t, private vvp_gen_event_s {
 
     public:
@@ -258,17 +268,24 @@ class vvp_fun_intermodpath  : public vvp_net_fun_t, private vvp_gen_event_s {
                      vvp_context_t) override;
 
       void get_delay12(vvp_time64_t out[12]) const;
-      void put_delay12(const vvp_time64_t in[12]);
+      void get_delay_real12(double out[12]) const;
+      void put_delay12(const vvp_time64_t in[12], const double real[12]);
 
     private:
       void run_run() override;
+      void scalar_request_(vvp_bit4_t value, vvp_time64_t delay);
+      friend struct intermodpath_scalar_event;
 
     private:
       vvp_net_t*net_;
 
       vvp_vector4_t cur_vec4_;
+      intermodpath_scalar_state*scalar_;
+      bool width_known_;
 
       vvp_time64_t delay_[12];
+      // Retain annotation values independently of the effective event delays.
+      double delay_real_[12];
 
     private: // not implemented
       vvp_fun_intermodpath(const vvp_fun_intermodpath&);

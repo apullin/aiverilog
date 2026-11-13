@@ -856,6 +856,30 @@ void vvp_vpi_callback::add_vpi_callback(value_callback*cb)
       vpi_callbacks_ = cb;
 }
 
+void vvp_vpi_callback::transfer_vpi_callbacks_from(vvp_vpi_callback&src)
+{
+      if (&src == this)
+	    return;
+
+      if (src.vpi_callbacks_) {
+	    value_callback*tail = src.vpi_callbacks_;
+	    while (tail->next)
+		  tail = dynamic_cast<value_callback*>(tail->next);
+	    tail->next = vpi_callbacks_;
+	    vpi_callbacks_ = src.vpi_callbacks_;
+	    src.vpi_callbacks_ = 0;
+      }
+
+      if (src.array_words_) {
+	    struct __vpi_array_word*tail = src.array_words_;
+	    while (tail->next)
+		  tail = tail->next;
+	    tail->next = array_words_;
+	    array_words_ = src.array_words_;
+	    src.array_words_ = 0;
+      }
+}
+
 #ifdef CHECK_WITH_VALGRIND
 void vvp_vpi_callback::clear_all_callbacks()
 {
@@ -896,8 +920,9 @@ void vvp_vpi_callback::run_vpi_callbacks_slow_()
 
 	    if (cur->cb_data.cb_rtn != 0) {
 		  if (cur->test_value_callback_ready()) {
-			if (cur->cb_data.value)
-			      get_value(cur->cb_data.value);
+			if (cur->cb_data.value) {
+			      vpi_get_value(cur->cb_data.obj, cur->cb_data.value);
+			}
 
 			callback_execute(cur);
 		  }

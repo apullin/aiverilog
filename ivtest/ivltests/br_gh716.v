@@ -1,13 +1,10 @@
-// Test for GitHub issue #716
-// Undimensioned array passed to task expecting single vector should error
 module test();
-  logic [7:0] mybuf [];
+  logic [7:0] bf [];
 
   task t1(output logic [7:0] buffer);
-    buffer = 0;
+    buffer=0;
   endtask
 
-  initial begin
-    t1(mybuf);
-  end
+  initial t1(bf);
+
 endmodule

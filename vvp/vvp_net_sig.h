@@ -564,6 +564,7 @@ class vvp_wire_real : public vvp_wire_base {
     private:
       double bit_;
       double force_;
+      bool needs_init_ = true;
 };
 
 #if 0

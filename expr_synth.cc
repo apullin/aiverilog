@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 1999-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -867,9 +867,12 @@ NetNet *NetEArrayPattern::synthesize(Design *des, NetScope *scope, NetExpr *root
 		  failed = true;
 		  continue;
 	    }
+
 	    nets[idx] = items_[idx]->synthesize(des, scope, root);
-	    if (!nets[idx])
+	    if (!nets[idx]) {
 		  failed = true;
+		  continue;
+	    }
       }
 
       if (failed)
@@ -1135,7 +1138,7 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 {
 
       if (expr_->expr_type() == IVL_VT_DARRAY) {
-	    NetESignal*darray_expr = dynamic_cast<NetESignal*>(expr_);
+	    NetESignal*darray_expr = dynamic_cast<NetESignal*>(expr_.get());
 	    const netdarray_t*darray_type = darray_expr
 	          ? darray_expr->sig()->darray_type() : 0;
 
@@ -1189,7 +1192,7 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 
 	// Detect the special case that there is a base expression and
 	// it is constant. In this case we can generate fixed part selects.
-      if (const NetEConst*base_const = dynamic_cast<NetEConst*>(base_)) {
+      if (const NetEConst*base_const = dynamic_cast<NetEConst*>(base_.get())) {
 	    verinum base_tmp = base_const->value();
 	    unsigned select_width = expr_width();
 
@@ -1488,7 +1491,7 @@ NetNet* NetESignal::synthesize(Design*des, NetScope*scope, NetExpr*root)
 
       if (word_ == 0) {
 	    if (net_->get_signed() == has_sign())
-		  return net_;
+		  return net_.get();
 
 	      // If the signal has been cast to a different type, we
 	      // need to add an intermediate signal to reflect that.
@@ -1512,7 +1515,7 @@ NetNet* NetESignal::synthesize(Design*des, NetScope*scope, NetExpr*root)
 	// For NetExpr objects, the word index is already converted to
 	// a canonical (lsb==0) address. Just use the index directly.
 
-      if (const NetEConst*index_co = dynamic_cast<NetEConst*> (word_)) {
+      if (const NetEConst*index_co = dynamic_cast<NetEConst*> (word_.get())) {
 
 	    long index = index_co->value().as_long();
 	    connect(tmp->pin(0), net_->pin(index));
@@ -1521,7 +1524,7 @@ NetNet* NetESignal::synthesize(Design*des, NetScope*scope, NetExpr*root)
 	    unsigned selwid = word_->expr_width();
 
 	    NetArrayDq*mux = new NetArrayDq(scope, scope->local_symbol(),
-					    net_, selwid);
+					    net_.get(), selwid);
 	    mux->set_line(*this);
 	    des->add_node(mux);
 

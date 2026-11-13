@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010-2024 Cary R. (cygcary@yahoo.com)
+ * Copyright (C) 2010-2026 Cary R. (cygcary@yahoo.com)
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -273,6 +273,26 @@ static void emit_net_def(ivl_scope_t scope, ivl_signal_t sig)
       }
 }
 
+static ivl_signal_t get_port_from_nexus(const ivl_scope_t scope, ivl_nexus_t nex,
+                                      unsigned *word)
+{
+      assert(nex);
+      unsigned idx, count = ivl_nexus_ptrs(nex);
+      ivl_signal_t sig = 0;
+      *word = 0;
+      for (idx = 0; idx < count; idx += 1) {
+	    ivl_nexus_ptr_t nex_ptr = ivl_nexus_ptr(nex, idx);
+	    ivl_signal_t t_sig = ivl_nexus_ptr_sig(nex_ptr);
+	    if (t_sig) {
+		  if (ivl_signal_scope(t_sig) != scope) continue;
+		  assert(! sig);
+		  sig = t_sig;
+		  *word = ivl_nexus_ptr_pin(nex_ptr);
+	    }
+      }
+      return sig;
+}
+
 static bool scope_is_unique(ivl_scope_t scope)
 {
       unsigned int count = ivl_scope_params(scope);
@@ -284,14 +304,35 @@ static bool scope_is_unique(ivl_scope_t scope)
 	    }
       }
 
+      /* A caller can tie independent input ports together. The emitted
+       * expressions then use this instance's shared nexus, so this body must
+       * not be reused for another instance with distinct inputs. */
+      count = ivl_scope_ports(scope);
+      for (unsigned idx = 0; idx < count; idx += 1) {
+            unsigned word;
+            ivl_signal_t port = get_port_from_nexus(scope,
+                                      ivl_scope_mod_port(scope, idx), &word);
+            if (!port || ivl_signal_port(port) != IVL_SIP_INPUT) continue;
+            for (unsigned other = 0; other < idx; other += 1) {
+                  unsigned other_word;
+                  ivl_signal_t previous = get_port_from_nexus(scope,
+                                ivl_scope_mod_port(scope, other), &other_word);
+                  if (!previous || ivl_signal_port(previous) != IVL_SIP_INPUT)
+                        continue;
+                  if (port != previous &&
+                      ivl_signal_nex(port, word) ==
+                      ivl_signal_nex(previous, other_word)) return false;
+            }
+      }
+
       return true;
 }
 
 static void emit_mangled_name(ivl_scope_t scope, unsigned root)
 {
-	/* If the module has non-local parameters and it's not a root module then it
-	 * may not be unique so we create a mangled name version instead. The
-	 * mangled name is of the form:
+	/* Parameter values or caller-specific input aliases may require a
+	 * specialized body. For non-root modules, use the existing instance
+	 * name mangling in both cases. The mangled name is of the form:
 	 *   <module_name>[<full_instance_scope>]. */
       if (!root && !scope_is_unique(scope)) {
 	    char *name;
@@ -415,26 +456,6 @@ static void emit_module_ports(ivl_scope_t scope)
 	    emit_nexus_as_ca(scope, ivl_scope_mod_port(scope, idx), 0, 0);
       }
       fprintf(vlog_out, ")");
-}
-
-static ivl_signal_t get_port_from_nexus(const ivl_scope_t scope, ivl_nexus_t nex,
-	                                unsigned *word)
-{
-      assert(nex);
-      unsigned idx, count = ivl_nexus_ptrs(nex);
-      ivl_signal_t sig = 0;
-      *word = 0;
-      for (idx = 0; idx < count; idx += 1) {
-	    ivl_nexus_ptr_t nex_ptr = ivl_nexus_ptr(nex, idx);
-	    ivl_signal_t t_sig = ivl_nexus_ptr_sig(nex_ptr);
-	    if (t_sig) {
-		  if (ivl_signal_scope(t_sig) != scope) continue;
-		  assert(! sig);
-		  sig = t_sig;
-		  *word = ivl_nexus_ptr_pin(nex_ptr);
-	    }
-      }
-      return sig;
 }
 
 static void emit_sig_type(ivl_signal_t sig)
@@ -821,23 +842,24 @@ static void emit_specify_paths(ivl_scope_t scope, ivl_signal_t sig)
 	    ivl_delaypath_t dpath = ivl_signal_path(sig, idx);
 	    ivl_nexus_t cond = ivl_path_condit(dpath);
 	    ivl_nexus_t source = ivl_path_source(dpath);
-	    unsigned has_edge = 0;
+	    unsigned posedge = ivl_path_source_posedge(dpath);
+	    unsigned negedge = ivl_path_source_negedge(dpath);
 	    fprintf(vlog_out, "%*c", indent, ' ');
 	    if (cond) {
+		  const char*text = ivl_path_condition_text(dpath);
 		  fprintf(vlog_out, "if (");
-		  emit_nexus_as_ca(scope, cond, 0, 0);
+		  if (*text) fprintf(vlog_out, "%s", text);
+		  else emit_nexus_as_ca(scope, cond, 0, 0);
 		  fprintf(vlog_out, ") ");
 	    } else if (ivl_path_is_condit(dpath)) {
 		  fprintf(vlog_out, "ifnone ");
 	    }
 	    fprintf(vlog_out, "(");
-	    if (ivl_path_source_posedge(dpath)) {
+	    if (posedge && !negedge) {
 		  fprintf(vlog_out, "posedge ");
-		  has_edge = 1;
 	    }
-	    if (ivl_path_source_negedge(dpath)) {
+	    if (negedge && !posedge) {
 		  fprintf(vlog_out, "negedge ");
-		  has_edge = 1;
 	    }
 	    emit_nexus_as_ca(scope, source, 0, 0);
 	    if (ivl_path_is_parallel(dpath)) {
@@ -847,7 +869,7 @@ static void emit_specify_paths(ivl_scope_t scope, ivl_signal_t sig)
 	    }
 	      /* The compiler does not keep the source expression for an edge
 	       * sensitive path so add a constant to get the syntax right. */
-	    if (has_edge) {
+	    if (posedge || negedge) {
 		  fprintf(vlog_out, "(%s : 1'bx /* Missing */)",
 		                    ivl_signal_basename(sig));
 	    } else {
@@ -1052,10 +1074,10 @@ int emit_scope(ivl_scope_t scope, const ivl_scope_t parent)
 	      /* This is an instantiation. */
 	    if (parent) {
 		  assert(indent != 0);
-		    /* If the module has parameters then it may not be unique
-		     * so we create a mangled name version instead. */
+		    /* Parameters or caller-specific aliases can require
+		     * an instance-specific module definition. */
 		  fprintf(vlog_out, "\n%*c", indent, ' ');
-		  emit_mangled_name(scope, !parent && !emitting_scopes);
+		  emit_mangled_name(scope, false);
 		  fprintf(vlog_out, " ");
 		  emit_id(ivl_scope_basename(scope));
 		  fprintf(vlog_out, "(");
@@ -1082,7 +1104,7 @@ int emit_scope(ivl_scope_t scope, const ivl_scope_t parent)
 	                      ivl_scope_def_file(scope),
 	                      ivl_scope_def_lineno(scope));
 	    fprintf(vlog_out, "module ");
-	    emit_mangled_name(scope, !parent && !emitting_scopes);
+	    emit_mangled_name(scope, !emitting_scopes);
 	    emit_module_ports(scope);
 	    break;
 	case IVL_SCT_FUNCTION:
@@ -1284,7 +1306,8 @@ int emit_scope(ivl_scope_t scope, const ivl_scope_t parent)
 		  emitting_scopes = 1;
 		  for (idx =0; idx < num_scopes_to_emit; idx += 1) {
 			ivl_scope_t scope_to_emit = scopes_to_emit[idx];
-			if (scope_has_been_emitted(scope_to_emit)) continue;
+			if (scope_is_unique(scope_to_emit) &&
+                            scope_has_been_emitted(scope_to_emit)) continue;
 			(void) emit_scope(scope_to_emit, 0);
 			  /* If we used a mangled name then the instance is
 			   * unique so don't add it to the list. */

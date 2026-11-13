@@ -213,10 +213,15 @@ static char * format_as_string(int ljust, int plus, int ld_zero, int width,
   return strdup(buf);
 }
 
-static void get_time(char *rtn, const char *value, int prec,
-                     PLI_INT32 time_units)
+static char *get_time(const char *value, int prec, PLI_INT32 time_units)
 {
   int shift = time_units - timeformat_info.units;
+
+    /* Allow for scaling, a leading zero, the decimal point and NUL. */
+  size_t size = strlen(value) + strlen(timeformat_info.suff) + 3;
+  if (shift > 0) size += shift;
+  if (prec > 0) size += prec;
+  char *rtn = malloc(size);
 
   /* Strip any leading zeros, but leave a single zero. */
   while (value[0] == '0' && value[1] != '\0') value += 1;
@@ -278,10 +283,10 @@ static void get_time(char *rtn, const char *value, int prec,
   }
 
   strcat(rtn, timeformat_info.suff);
+  return rtn;
 }
 
-static void get_time_real(char *rtn, double value, int prec,
-                          PLI_INT32 time_units)
+static char *get_time_real(double value, int prec, PLI_INT32 time_units)
 {
   /* Scale the value from its time units to the format time units. */
   if (time_units >= timeformat_info.units) {
@@ -289,7 +294,11 @@ static void get_time_real(char *rtn, double value, int prec,
   } else {
     value /= pow(10.0, timeformat_info.units - time_units);
   }
-  sprintf(rtn, "%0.*f%s", prec, value, timeformat_info.suff);
+  int len = snprintf(NULL, 0, "%0.*f%s", prec, value, timeformat_info.suff);
+  assert(len >= 0);
+  char *rtn = malloc((size_t)len + 1);
+  snprintf(rtn, (size_t)len + 1, "%0.*f%s", prec, value, timeformat_info.suff);
+  return rtn;
 }
 
 static unsigned int get_format_char(char **rtn, int ljust, int plus,
@@ -675,23 +684,13 @@ static unsigned int get_format_char(char **rtn, int ljust, int plus,
           }
 
           unsigned swidth, free_flag = 0;
-          unsigned suff_len = strlen(timeformat_info.suff);
           char *cp;
-          size_t tbuf_size;
 
           if (prec == -1) prec = timeformat_info.prec;
           if (value.format == vpiRealVal) {
-            /* A finite double needs at most 309 integer digits. */
-            tbuf_size = 320 + suff_len + (prec > 0 ? (unsigned)prec : 0);
-            tbuf = malloc(tbuf_size*sizeof(char));
-            get_time_real(tbuf, value.value.real, prec, time_units);
+            tbuf = get_time_real(value.value.real, prec, time_units);
           } else {
-            tbuf_size = strlen(value.value.str) + suff_len + 2;
-            if (prec > 0) tbuf_size += (unsigned)prec;
-            if (time_units > timeformat_info.units)
-              tbuf_size += (unsigned)(time_units - timeformat_info.units);
-            tbuf = malloc(tbuf_size*sizeof(char));
-            get_time(tbuf, value.value.str, prec, time_units);
+            tbuf = get_time(value.value.str, prec, time_units);
           }
           cp = tbuf;
           swidth = strlen(tbuf);
@@ -720,7 +719,7 @@ static unsigned int get_format_char(char **rtn, int ljust, int plus,
 
           /* If the default buffer is too small make it big enough. */
           size = strlen(tbuf) + 1;
-          if ((signed)size < (width+1)) size = width+1;
+          if ((signed)size <= width) size = (unsigned)width + 1;
           if (size > ini_size) result = realloc(result, size*sizeof(char));
 
           if (ljust == 0) sprintf(result, "%*s", width, cp);
@@ -1085,12 +1084,13 @@ static char *get_display(unsigned int *rtnsz, const struct strobe_cb_info *info)
       case vpiTimeVar:
         value.format = vpiDecStrVal;
         vpi_get_value(item, &value);
-        get_time(buf, value.value.str, timeformat_info.prec,
-                 vpi_get(vpiTimeUnit, info->scope));
-        width = strlen(buf);
+        result = get_time(value.value.str, timeformat_info.prec,
+                          vpi_get(vpiTimeUnit, info->scope));
+        width = strlen(result);
         if (width  < timeformat_info.width) width = timeformat_info.width;
         rtn = realloc(rtn, (size+width)*sizeof(char));
-        sprintf(rtn+size-1, "%*s", width, buf);
+        sprintf(rtn+size-1, "%*s", width, result);
+        free(result);
         break;
 
       /* Realtime variables are also processed here. */
@@ -2102,14 +2102,20 @@ static PLI_INT32 sys_timeformat_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 
             value.format = vpiIntVal;
             vpi_get_value(wid, &value);
-            if (value.value.integer < 0 || value.value.integer >= INT_MAX) {
+            /* A minimum field width cannot be negative or overflow int+1. */
+            if (value.value.integer < 0) {
+                  vpi_printf("WARNING: %s:%d: ", vpi_get_str(vpiFile, sys),
+                             (int)vpi_get(vpiLineNo, sys));
+                  vpi_printf("%s's minimum width argument (%d) is negative, "
+                             "using 0.\n", name, (int)value.value.integer);
+                  value.value.integer = 0;
+            } else if (value.value.integer >= INT_MAX) {
                   vpi_printf("WARNING: %s:%d: %s minimum width is out of "
                              "range; using zero.\n", vpi_get_str(vpiFile, sys),
                              (int)vpi_get(vpiLineNo, sys), name);
-                  timeformat_info.width = 0;
-            } else {
-                  timeformat_info.width = value.value.integer;
+                  value.value.integer = 0;
             }
+            timeformat_info.width = value.value.integer;
       } else {
             /* If no arguments are given then use the default values. */
             sys_end_of_compile(NULL);

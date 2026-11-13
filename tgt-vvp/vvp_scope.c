@@ -449,31 +449,29 @@ static void draw_reg_in_scope(ivl_signal_t sig)
 	    break;
       }
 
-	/* Special Case: If this variable is the return value of a function,
-	   then it need to exist as an actual variable. */
-      if ((ivl_signal_data_type(sig)==IVL_VT_REAL)
-	  && signal_is_return_value(sig)) {
-	    fprintf(vvp_out, "; Variable %s is REAL return value of scope S_%p\n",
-		    ivl_signal_basename(sig), ivl_signal_scope(sig));
-	    return;
-      }
-      if ((ivl_signal_data_type(sig)==IVL_VT_STRING)
-	  && signal_is_return_value(sig)) {
-	    fprintf(vvp_out, "; Variable %s is string return value of scope S_%p\n",
-		    ivl_signal_basename(sig), ivl_signal_scope(sig));
-	    return;
-      }
-      if ((ivl_signal_data_type(sig)==IVL_VT_LOGIC)
-	  && signal_is_return_value(sig)) {
-	    fprintf(vvp_out, "; Variable %s is vec4 return value of scope S_%p\n",
-		    ivl_signal_basename(sig), ivl_signal_scope(sig));
-	    return;
-      }
-      if ((ivl_signal_data_type(sig)==IVL_VT_BOOL)
-	  && signal_is_return_value(sig)) {
-	    fprintf(vvp_out, "; Variable %s is bool return value of scope S_%p\n",
-		    ivl_signal_basename(sig), ivl_signal_scope(sig));
-	    return;
+	/* Special Case: If this variable is the return value of an automatic
+           function, then it doesn't need to exist as an actual variable. */
+      if (ivl_scope_is_auto(ivl_signal_scope(sig)) && signal_is_return_value(sig)) {
+            if (ivl_signal_data_type(sig)==IVL_VT_REAL) {
+                  fprintf(vvp_out, "; Variable %s is REAL return value of scope S_%p\n",
+                          ivl_signal_basename(sig), ivl_signal_scope(sig));
+                  return;
+            }
+            if (ivl_signal_data_type(sig)==IVL_VT_STRING) {
+                  fprintf(vvp_out, "; Variable %s is string return value of scope S_%p\n",
+                          ivl_signal_basename(sig), ivl_signal_scope(sig));
+                  return;
+            }
+            if (ivl_signal_data_type(sig)==IVL_VT_LOGIC) {
+                  fprintf(vvp_out, "; Variable %s is vec4 return value of scope S_%p\n",
+                          ivl_signal_basename(sig), ivl_signal_scope(sig));
+                  return;
+            }
+            if (ivl_signal_data_type(sig)==IVL_VT_BOOL) {
+                  fprintf(vvp_out, "; Variable %s is bool return value of scope S_%p\n",
+                          ivl_signal_basename(sig), ivl_signal_scope(sig));
+                  return;
+            }
       }
 
       const char *datatype_flag = ivl_signal_integer(sig) ? "/i" :
@@ -564,9 +562,13 @@ static void draw_reg_in_scope(ivl_signal_t sig)
 
       } else {
 
-	    fprintf(vvp_out, "v%p_0 .var%s %s%s\"%s\", %d %d;%s\n",
+	    ivl_enumtype_t enumtype = ivl_type_enumtype(ivl_signal_net_type(sig));
+
+	    fprintf(vvp_out, "v%p_0 .var%s %s%s\"%s\", %d %d",
 		    sig, datatype_flag, vector_flag, local_flag,
-		    vvp_mangle_name(ivl_signal_basename(sig)), msb, lsb,
+		    vvp_mangle_name(ivl_signal_basename(sig)), msb, lsb);
+	    if (enumtype) fprintf(vvp_out, ", enum%p", enumtype);
+	    fprintf(vvp_out, ";%s\n",
 		    ivl_signal_local(sig)? " Local signal" : "" );
       }
 }
@@ -1426,6 +1428,8 @@ static const char* draw_lpm_output_delay(ivl_lpm_t net, ivl_variable_type_t dt)
 	  case IVL_LPM_CMP_GT:
 	  case IVL_LPM_CMP_NE:
 	  case IVL_LPM_CMP_NEE:
+	  case IVL_LPM_CMP_WEQ:
+	  case IVL_LPM_CMP_WNE:
 	  case IVL_LPM_RE_AND:
 	  case IVL_LPM_RE_OR:
 	  case IVL_LPM_RE_XOR:
@@ -2159,13 +2163,13 @@ static void draw_lpm_ufunc(ivl_lpm_t net)
 
       if (ivl_lpm_trigger(net)) {
 	    assert(ninp > 0);
-	    fprintf(vvp_out, "L_%p%s .ufunc/e TD_%s, %u, E_%p", net, dly,
-	            vvp_mangle_id(ivl_scope_name(def)),
+	    const char*event_type = dt == IVL_VT_REAL ? "/real" : "";
+	    fprintf(vvp_out, "L_%p%s .ufunc%s/e TD_%p, %u, E_%p",
+	            net, dly, event_type, def,
 	            ivl_lpm_width(net), ivl_lpm_trigger(net));
       } else
-	    fprintf(vvp_out, "L_%p%s .ufunc%s TD_%s, %u", net, dly, type_string,
-	            vvp_mangle_id(ivl_scope_name(def)),
-	            ivl_lpm_width(net));
+	    fprintf(vvp_out, "L_%p%s .ufunc%s TD_%p, %u", net, dly, type_string,
+	            def, ivl_lpm_width(net));
 
 	/* Print all the net signals that connect to the input of the
 	   function. */
@@ -2186,7 +2190,22 @@ static void draw_lpm_ufunc(ivl_lpm_t net)
 	    else
 		  fprintf(vvp_out, ", ");
 
-	    assert(ivl_signal_dimensions(psig) == 0);
+	      /* A .ufunc node is driven by its input nexuses, and an unpacked
+		 array is memory rather than a net, so there is nothing to
+		 connect it to here. Passing an array to a function is
+		 supported in procedural code; in a continuous assignment it
+		 would additionally need the node to be sensitive to changes of
+		 any word, which the structural netlist cannot express today.
+		 Report it rather than aborting. */
+	    if (ivl_signal_dimensions(psig) > 0) {
+		  fprintf(stderr, "%s:%u: sorry: passing an unpacked array to "
+			  "a function is not supported in a continuous "
+			  "assignment; use an always_comb block instead.\n",
+			  ivl_lpm_file(net), ivl_lpm_lineno(net));
+		  vvp_errors += 1;
+		  fprintf(vvp_out, "v%p_0", psig);
+		  continue;
+	    }
 	    fprintf(vvp_out, "v%p_0", psig);
       }
 
@@ -2205,7 +2224,7 @@ static void draw_lpm_ufunc(ivl_lpm_t net)
       }
 #endif
         /* Finally, print the scope identifier. */
-      fprintf(vvp_out, " S_%p;\n", def);
+      fprintf(vvp_out, " S_%p; %s\n", def, ivl_scope_name(def));
 }
 
 /*
@@ -2443,12 +2462,12 @@ int draw_scope(ivl_scope_t net, ivl_scope_t parent)
 	    switch (ivl_scope_func_type(net)) {
 		case IVL_VT_LOGIC:
 		  snprintf(suffix, sizeof suffix, ".vec4.%c%u",
-			   ivl_scope_func_signed(net)? 'u' : 's',
+			   ivl_scope_func_signed(net)? 's' : 'u',
 			   ivl_scope_func_width(net));
 		  break;
 		case IVL_VT_BOOL:
 		  snprintf(suffix, sizeof suffix, ".vec2.%c%u",
-			   ivl_scope_func_signed(net)? 'u' : 's',
+			   ivl_scope_func_signed(net)? 's' : 'u',
 			   ivl_scope_func_width(net));
 		  break;
 		case IVL_VT_REAL:
@@ -2471,17 +2490,31 @@ int draw_scope(ivl_scope_t net, ivl_scope_t parent)
 	    }
       }
 
-      fprintf(vvp_out, "S_%p .scope %s%s%s, \"%s\" \"%s\" %u %u",
+	/* Emit each name before vvp_mangle_name() reuses its output buffer. */
+      fprintf(vvp_out, "S_%p .scope %s%s%s, \"%s\" ",
 	      net, prefix, type, suffix,
-	      vvp_mangle_name(ivl_scope_basename(net)),
+	      vvp_mangle_name(ivl_scope_basename(net)));
+      fprintf(vvp_out, "\"%s\" %u %u",
               vvp_mangle_name(ivl_scope_tname(net)),
 	      ivl_file_table_index(ivl_scope_file(net)),
               ivl_scope_lineno(net));
 
       if (parent) {
-	    fprintf(vvp_out, ", %u %u %u, S_%p;\n",
-	            ivl_file_table_index(ivl_scope_def_file(net)),
-	            ivl_scope_def_lineno(net), ivl_scope_is_cell(net), parent);
+	    fprintf(vvp_out, ", %u %u %u",
+		    ivl_file_table_index(ivl_scope_def_file(net)),
+		    ivl_scope_def_lineno(net), ivl_scope_is_cell(net));
+	    if (ivl_scope_type(net) == IVL_SCT_FUNCTION && !ivl_scope_is_auto(net)
+		&& ivl_scope_func_type(net) != IVL_VT_VOID) {
+		  ivl_signal_t sig = 0;
+		  for (idx = 0; idx < ivl_scope_sigs(net); idx += 1) {
+			sig = ivl_scope_sig(net, idx);
+			if (strcmp(ivl_signal_basename(sig), ivl_scope_basename(net)) == 0)
+			      break;
+		  }
+		  assert(sig);
+		  fprintf(vvp_out, ", v%p_0", sig);
+	    }
+	    fprintf(vvp_out, ", S_%p;\n", parent);
       } else {
 
 	    fprintf(vvp_out, ";\n");
@@ -2615,12 +2648,19 @@ int draw_scope(ivl_scope_t net, ivl_scope_t parent)
 	    draw_switch_in_scope(sw);
       }
 
-      if (ivl_scope_type(net) == IVL_SCT_TASK)
-	    draw_task_definition(net);
-
-      if (ivl_scope_type(net) == IVL_SCT_FUNCTION)
-	    vvp_errors += draw_func_definition(net);
-
+	/*
+	 * Declare child scopes before subroutine bodies so that system calls
+	 * in named blocks can resolve their scope while being compiled.
+	 */
       ivl_scope_children(net, (ivl_scope_f*) draw_scope, net);
+
+      if (ivl_scope_type(net) == IVL_SCT_TASK) {
+	    fprintf(vvp_out, "    .scope S_%p;\n", net);
+	    draw_task_definition(net);
+      } else if (ivl_scope_type(net) == IVL_SCT_FUNCTION) {
+	    fprintf(vvp_out, "    .scope S_%p;\n", net);
+	    vvp_errors += draw_func_definition(net);
+      }
+
       return 0;
 }

@@ -57,6 +57,13 @@ static scope_object_search_result_t symbol_search_scope_objects(
       const name_component_t &path_tail, unsigned int visibility_pos,
       struct symbol_search_results *res, unsigned int flags)
 {
+      const bool strict_declaration_order =
+	    flags & SYMBOL_SEARCH_STRICT_DECLARATION_ORDER;
+      const bool enforce_net_var_declaration_order =
+	    gn_strict_net_var_declaration || strict_declaration_order;
+      const bool enforce_parameter_declaration_order =
+	    gn_strict_parameter_declaration || strict_declaration_order;
+
       // Special case `super` keyword. Return the `this` object, but
       // with the type of the base class.
       if (path_tail.name == "#") {
@@ -86,7 +93,7 @@ static scope_object_search_result_t symbol_search_scope_objects(
 
       if (NetNet *net = scope->find_signal(path_tail.name)) {
 	    bool decl_after_use = !(net->lexical_pos() <= visibility_pos);
-	    if (!gn_strict_net_var_declaration || !decl_after_use) {
+	    if (!enforce_net_var_declaration_order || !decl_after_use) {
 		  pform_name_t path_head = path;
 		  path_head.push_back(path_tail);
 		  res->scope = scope;
@@ -111,7 +118,7 @@ static scope_object_search_result_t symbol_search_scope_objects(
 
       if (NetEvent *eve = scope->find_event(path_tail.name)) {
 	    bool decl_after_use = !(eve->lexical_pos() <= visibility_pos);
-	    if (!gn_strict_net_var_declaration || !decl_after_use) {
+	    if (!enforce_net_var_declaration_order || !decl_after_use) {
 		  pform_name_t path_head = path;
 		  path_head.push_back(path_tail);
 		  res->scope = scope;
@@ -145,14 +152,22 @@ static scope_object_search_result_t symbol_search_scope_objects(
 	    return scope_object_search_result_t::found;
       }
 
-      if (const NetExpr *par = scope->get_parameter(
-		des, path_tail.name, res->type)) {
-	    bool is_enum_name;
-	    unsigned int declaration_pos =
-		  scope->get_constant_lexical_pos(path_tail.name,
-					  is_enum_name);
+      bool is_enum_name = false;
+      unsigned int declaration_pos = UINT_MAX;
+      const bool has_constant = scope->get_constant_lexical_pos(
+	    path_tail.name, declaration_pos, is_enum_name);
+      const bool constant_decl_after_use = has_constant &&
+	    !(declaration_pos <= visibility_pos);
+
+      // get_parameter() elaborates parameters on demand. Check declaration
+      // visibility first so a later declaration cannot recursively elaborate
+      // when strict ordering applies.
+      const NetExpr*par =
+	    enforce_parameter_declaration_order && constant_decl_after_use
+	    ? nullptr : scope->get_parameter(des, path_tail.name, res->type);
+      if (par) {
 	    bool decl_after_use = !(declaration_pos <= visibility_pos);
-	    if (!gn_strict_parameter_declaration || !decl_after_use) {
+	    if (!enforce_parameter_declaration_order || !decl_after_use) {
 		  pform_name_t path_head = path;
 		  path_head.push_back(path_tail);
 		  res->scope = scope;
@@ -480,6 +495,13 @@ static bool symbol_search_(const LineInfo *li, Design *des, NetScope *scope,
 		      li, des, scope, start_scope, path, path_tail, res))
 		  return true;
 
+	      // Instance scopes were checked above. Gates and UDPs do not
+	      // introduce scopes, but hide outer names after their declarations.
+	    if (search_objects &&
+		  scope->gate_name_is_visible(path_tail.name, visibility_pos)) {
+		  return false;
+	    }
+
 	    // Don't scan up if the search is bound to the current scope.
 	    if (scope_is_bound)
 		  break;
@@ -508,7 +530,10 @@ static bool symbol_search_(const LineInfo *li, Design *des, NetScope *scope,
 	    // This feature recurses, so code in subscopes of foo can refer to
 	    // foo by the name "foo" as well. In general, anything within
 	    // "foo" can use the name "foo" to reference it.
-	    if (scope->type()==NetScope::MODULE && scope->module_name()==path_tail.name) {
+	    // A module definition name refers to this instance, not an array.
+	    if (scope->type() == NetScope::MODULE &&
+		  scope->module_name() == path_tail.name &&
+		  path_tail.index.empty()) {
 		  path.push_back(path_tail);
 		  res->scope = scope;
 		  res->path_head = path;
@@ -521,8 +546,8 @@ static bool symbol_search_(const LineInfo *li, Design *des, NetScope *scope,
 	    const bool is_design_unit =
 		  (scope->type() == NetScope::MODULE && !scope->nested_module())
 		  || scope->type() == NetScope::PACKAGE;
-	    if (!scope_is_bound && !searched_unit_scope && is_design_unit
-		&& unit_scope && scope != unit_scope) {
+	    if (!searched_unit_scope && is_design_unit &&
+		unit_scope && scope != unit_scope) {
 		  instance_parent = scope->parent();
 		  scope = unit_scope;
 		  searched_unit_scope = true;
@@ -570,7 +595,8 @@ static bool symbol_search_(const LineInfo *li, Design *des, NetScope *scope,
       // Last chance: this is a single name, so it might be the name
       // of a root scope. Ask the design if this is a root
       // scope. This is only possible if the search is not already bound.
-      if (!scope_is_bound) {
+      // Root modules are not instance arrays and cannot have an index.
+      if (!scope_is_bound && path_tail.index.empty()) {
 	    hname_t path_item (path_tail.name);
 	    scope = des->find_scope(path_item);
 	    if (scope) {
@@ -585,7 +611,7 @@ static bool symbol_search_(const LineInfo *li, Design *des, NetScope *scope,
 }
 
 bool symbol_search(const LineInfo *li, Design *des, NetScope *scope,
-		   pform_name_t path, unsigned int lexical_pos,
+		   const pform_name_t &path, unsigned int lexical_pos,
 		   struct symbol_search_results *res, unsigned int flags)
 {
       const bool allow_forward_reference =

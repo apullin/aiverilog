@@ -1433,14 +1433,9 @@ NetArrayDq::NetArrayDq(NetScope*s, perm_string n, NetNet*mem__, unsigned awid)
 {
       pin(0).set_dir(Link::OUTPUT); // Result
       pin(1).set_dir(Link::INPUT);  // Address
-	// Increment the expression reference count for the target
-	// memory so that it is not deleted underneath me.
-      mem_->incr_eref();
 }
 
-NetArrayDq::~NetArrayDq()
-{
-}
+NetArrayDq::~NetArrayDq() = default;
 
 unsigned NetArrayDq::width() const
 {
@@ -1457,7 +1452,7 @@ unsigned NetArrayDq::awidth() const
 
 const NetNet* NetArrayDq::mem() const
 {
-      return mem_;
+      return mem_.get();
 }
 
 Link& NetArrayDq::pin_Result()
@@ -2019,37 +2014,31 @@ NetCondit::NetCondit(NetExpr*ex, NetProc*i, NetProc*e)
 {
 }
 
-NetCondit::~NetCondit()
-{
-      delete expr_;
-      delete if_;
-      delete else_;
-}
+NetCondit::~NetCondit() = default;
 
 const NetExpr* NetCondit::expr() const
 {
-      return expr_;
+      return expr_.get();
 }
 
 NetExpr* NetCondit::expr()
 {
-      return expr_;
+      return expr_.get();
 }
 
 void NetCondit::set_expr(NetExpr*ex)
 {
-      delete expr_;
-      expr_ = ex;
+      expr_.reset(ex);
 }
 
 NetProc* NetCondit::if_clause()
 {
-      return if_;
+      return if_.get();
 }
 
 NetProc* NetCondit::else_clause()
 {
-      return else_;
+      return else_.get();
 }
 
 NetConst::NetConst(NetScope*s, perm_string n, verinum::V v)
@@ -2140,19 +2129,13 @@ const NetNet* NetFuncDef::return_sig() const
 
 NetSTask::NetSTask(const char*na, ivl_sfunc_as_task_t sfat,
                    const vector<NetExpr*>&pa)
-: name_(0), sfunc_as_task_(sfat), parms_(pa)
+: name_(lex_strings.make(na)), sfunc_as_task_(sfat)
 {
-      name_ = lex_strings.add(na);
-      ivl_assert(*this, name_[0] == '$');
+      for (auto*lparm : pa) parms_.emplace_back(lparm);
+      ivl_assert(*this, name_.str()[0] == '$');
 }
 
-NetSTask::~NetSTask()
-{
-      for (unsigned idx = 0 ;  idx < parms_.size() ;  idx += 1)
-	    delete parms_[idx];
-
-	/* The name_ string is perm-allocated in lex_strings. */
-}
+NetSTask::~NetSTask() = default;
 
 const char*NetSTask::name() const
 {
@@ -2171,12 +2154,12 @@ unsigned NetSTask::nparms() const
 
 const NetExpr* NetSTask::parm(unsigned idx) const
 {
-      return parms_[idx];
+      return parms_[idx].get();
 }
 
 NetEUFunc::NetEUFunc(NetScope*scope, NetScope*def, NetESignal*res,
                      vector<NetExpr*>&p, bool nc)
-: NetExpr(res->net_type()), scope_(scope), func_(def), result_sig_(res), parms_(p), need_const_(nc)
+: NetExpr(res->net_type()), scope_(scope), func_(def), result_sig_(res), parms_(p), need_const_(nc), nonvirtual_(false)
 {
 }
 
@@ -2213,7 +2196,7 @@ const NetScope* NetEUFunc::func() const
 }
 
 NetUTask::NetUTask(NetScope*def)
-: task_(def)
+: task_(def), nonvirtual_(false)
 {
 }
 
@@ -2430,16 +2413,14 @@ const NetScope* NetEScope::scope() const
 }
 
 NetESignal::NetESignal(NetNet*n)
-: NetExpr(n->net_type()), net_(n), word_(0)
+: NetExpr(n->net_type()), net_(n)
 {
-      net_->incr_eref();
       set_line(*n);
 }
 
 NetESignal::NetESignal(NetNet*n, NetExpr*w)
 : NetExpr(n->vector_width()), net_(n), word_(w)
 {
-      net_->incr_eref();
       set_line(*n);
 
       if (word_)
@@ -2448,10 +2429,7 @@ NetESignal::NetESignal(NetNet*n, NetExpr*w)
 	    set_net_type(net_->array_type());
 }
 
-NetESignal::~NetESignal()
-{
-      net_->decr_eref();
-}
+NetESignal::~NetESignal() = default;
 
 perm_string NetESignal::name() const
 {
@@ -2460,7 +2438,7 @@ perm_string NetESignal::name() const
 
 const NetExpr* NetESignal::word_index() const
 {
-      return word_;
+      return word_.get();
 }
 
 unsigned NetESignal::vector_width() const
@@ -2470,12 +2448,12 @@ unsigned NetESignal::vector_width() const
 
 const NetNet* NetESignal::sig() const
 {
-      return net_;
+      return net_.get();
 }
 
 NetNet* NetESignal::sig()
 {
-      return net_;
+      return net_.get();
 }
 
 /*
@@ -2519,12 +2497,7 @@ NetETernary::NetETernary(NetExpr*c, NetExpr*t, NetExpr*f,
       cast_signed_base_(signed_flag);
 }
 
-NetETernary::~NetETernary()
-{
-      delete cond_;
-      delete true_val_;
-      delete false_val_;
-}
+NetETernary::~NetETernary() = default;
 
 const netenum_t* NetETernary::enumeration() const
 {
@@ -2536,17 +2509,17 @@ const netenum_t* NetETernary::enumeration() const
 
 const NetExpr* NetETernary::cond_expr() const
 {
-      return cond_;
+      return cond_.get();
 }
 
 const NetExpr* NetETernary::true_expr() const
 {
-      return true_val_;
+      return true_val_.get();
 }
 
 const NetExpr* NetETernary::false_expr() const
 {
-      return false_val_;
+      return false_val_.get();
 }
 
 ivl_variable_type_t NetETernary::expr_type() const
@@ -2582,10 +2555,7 @@ NetEUnary::NetEUnary(char op__, NetExpr*ex, unsigned wid, bool signed_flag)
       cast_signed_base_(signed_flag);
 }
 
-NetEUnary::~NetEUnary()
-{
-      delete expr_;
-}
+NetEUnary::~NetEUnary() = default;
 
 ivl_variable_type_t NetEUnary::expr_type() const
 {
@@ -2900,7 +2870,7 @@ DelayType NetForever::delay_type(bool print_delay) const
 
 DelayType NetForLoop::delay_type(bool print_delay) const
 {
-      return get_loop_delay_type(condition_, statement_, print_delay);
+      return get_loop_delay_type(condition_.get(), statement_.get(), print_delay);
 }
 
 DelayType NetPDelay::delay_type(bool print_delay) const
@@ -2913,10 +2883,10 @@ DelayType NetPDelay::delay_type(bool print_delay) const
 
       if (expr_) {
 	    if (statement_) {
-		  return combine_delays(delay_type_from_expr(expr_),
+		  return combine_delays(delay_type_from_expr(expr_.get()),
 		                        statement_->delay_type(print_delay));
 	    } else {
-		  return delay_type_from_expr(expr_);
+		  return delay_type_from_expr(expr_.get());
 	    }
       }
 
@@ -2932,7 +2902,7 @@ DelayType NetPDelay::delay_type(bool print_delay) const
 
 DelayType NetRepeat::delay_type(bool print_delay) const
 {
-      return get_loop_delay_type(expr_, statement_, print_delay);
+      return get_loop_delay_type(expr_.get(), statement_.get(), print_delay);
 }
 
 DelayType NetTaskDef::delay_type(bool print_delay) const
@@ -3018,7 +2988,7 @@ DelayType NetWhile::delay_type(bool print_delay) const
 {
 	// If the wait was a constant value the compiler already removed it
 	// so we know we can only have a possible delay.
-      if (while_is_wait(cond_, proc_)) {
+      if (while_is_wait(cond_.get(), proc_.get())) {
 	    if (print_delay) {
 		  cerr << get_fileline() << ": error: a wait statement is "
 		          "not allowed in an "
@@ -3027,7 +2997,7 @@ DelayType NetWhile::delay_type(bool print_delay) const
 	    }
 	    return POSSIBLE_DELAY;
       }
-      return get_loop_delay_type(cond_, proc_, print_delay);
+      return get_loop_delay_type(cond_.get(), proc_.get(), print_delay);
 }
 
 /*
@@ -3379,7 +3349,7 @@ bool NetForLoop::check_synth(ivl_process_type_t pr_type,
       bool result = false;
 
 // FIXME: What about an enum (NetEConstEnum)?
-      if (! dynamic_cast<const NetEConst*>(init_expr_)) {
+      if (! dynamic_cast<const NetEConst*>(init_expr())) {
 	    cerr << get_fileline() << ": warning: A for statement must "
 	            "have a constant initial value to be synthesized "
                  << get_process_type_as_string(pr_type) << endl;
@@ -3392,11 +3362,11 @@ bool NetForLoop::check_synth(ivl_process_type_t pr_type,
 //          From NetEUnary
 //            What about NetEUBits ! sig or ! (sig == constat)
 //            What about NetEUReduce &signal
-      if (const NetESignal*tmp = dynamic_cast<const NetESignal*>(condition_)) {
+      if (const NetESignal*tmp = dynamic_cast<const NetESignal*>(condition_.get())) {
 	    if (tmp->sig() != index_) {
 		  print_for_idx_warning(this, "condition", pr_type, index_);
 	    }
-      } else if (const NetEBComp*cmp = dynamic_cast<const NetEBComp*>(condition_)) {
+      } else if (const NetEBComp*cmp = dynamic_cast<const NetEBComp*>(condition_.get())) {
 	    check_for_bin_synth(cmp->left(), cmp->right(),
                                 "compare against a constant", "condition",
 	                        this, pr_type, index_);
@@ -3404,7 +3374,7 @@ bool NetForLoop::check_synth(ivl_process_type_t pr_type,
 	    print_for_idx_warning(this, "condition", pr_type, index_);
       }
 
-      if (const NetAssign*tmp = dynamic_cast<const NetAssign*>(step_statement_)) {
+      if (const NetAssign*tmp = dynamic_cast<const NetAssign*>(step_statement_.get())) {
 	    check_for_step_synth(tmp, this, pr_type, index_);
       } else {
 	    print_for_step_warning(this, pr_type);
@@ -3515,7 +3485,7 @@ bool NetWhile::check_synth(ivl_process_type_t pr_type,
 {
       bool result = false;
 	// A wait is already maked as an error in the delay check above.
-      if (! while_is_wait(cond_, proc_)) {
+      if (! while_is_wait(cond_.get(), proc_.get())) {
 	    print_synth_warning(this, "A while", pr_type);
 	    if (proc_) result |= proc_->check_synth(pr_type, scope);
       }

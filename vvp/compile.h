@@ -247,7 +247,7 @@ extern void compile_modpath_src(__vpiModPath*dst,
 				const struct symb_s&src,
 				struct numbv_s&vals,
 				const struct symb_s&condit_src,
-				const struct symb_s&path_term_in);
+				const struct symb_s&path_term_in, const char* key = nullptr);
 extern void compile_modpath_src(__vpiModPath*dst,
 				char edge_c,
 				const struct symb_s&src,
@@ -489,7 +489,8 @@ extern void compile_codelabel(char*label);
  * The implementations of these live in the vpi_scope.cc file.
  */
 extern void compile_scope_decl(char*typ, char*lab, char*nam, char*tnam,
-                               char*par, long file_idx, long lineno,
+                               char*func_ret_val, char*parent,
+                               long file_idx, long lineno,
                                long def_file_idx, long def_lineno,
                                long is_cell);
 extern void compile_scope_recall(char*sym);
@@ -510,7 +511,9 @@ extern void compile_thread(char*start_sym, char*flag);
 extern void compile_variable(char*label, char*name,
 			     int msb, int lsb, int vpi_type_code,
 			     bool signed_flag, bool vector_flag,
-			     bool local_flag);
+			     bool local_flag, char*enum_label);
+extern void compile_replace_signal_value(const class vvp_signal_value*old_sig,
+					 class vvp_signal_value*new_sig);
 
 extern void compile_var_real(char*label, char*name, bool local_flag);
 extern void compile_var_string(char*label, char*name);
@@ -579,5 +582,19 @@ extern void delete_udp_symbols(void);
 extern void compile_class_start(char*lab, char*nam, unsigned nprop);
 extern void compile_class_property(unsigned idx, char*nam, char*typ, uint64_t array_size);
 extern void compile_class_done(void);
+
+/*
+ * The .super statement sets the base class of a class. The first label
+ * is the class and the second is its base class.
+ */
+extern void compile_super(char*cls, char*super);
+
+/*
+ * The .virt statement adds an entry to the virtual function table of a
+ * class. The first label is the class, the second is the scope of the
+ * virtual function and the third is the code that a call of the virtual
+ * function runs for objects of the class.
+ */
+extern void compile_virt(char*cls, char*scope, char*code);
 
 #endif /* IVL_compile_H */

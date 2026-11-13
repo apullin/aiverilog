@@ -1,7 +1,7 @@
 #ifndef IVL_ivl_target_H
 #define IVL_ivl_target_H
 /*
- * Copyright (c) 2000-2021 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2000-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -467,7 +467,7 @@ typedef enum ivl_variable_type_e ENUM_UNSIGNED_INT {
       IVL_VT_DARRAY  = 6,  /* Array (esp. dynamic array) */
       IVL_VT_CLASS   = 7,  /* SystemVerilog class instances */
       IVL_VT_QUEUE   = 8,  /* SystemVerilog queue instances */
-      IVL_VT_VECTOR = IVL_VT_LOGIC /* For compatibility */
+      IVL_VT_VECTOR  = IVL_VT_LOGIC /* For compatibility */
 } ivl_variable_type_t;
 
 /* This is the type of the function to apply to a process. */
@@ -527,6 +527,21 @@ extern ivl_island_t ivl_branch_island(ivl_branch_t obj);
  * ivl_path_condit
  *    This returns the nexus that tracks the condition for the
  *    delay. If the delay path is unconditional, this returns nil.
+ *
+ * ivl_path_condition_key
+ *    An opaque source condition identity for SDF annotation matching. Bare
+ *    local scalar names retain their original unescaped representation;
+ *    supported comparison/AND expression keys start with a reserved space.
+ *    Returns an empty string for unconditional or unsupported conditions.
+ *    This metadata does not evaluate the condition.
+ *
+ * ivl_path_condition_text
+ *    A Verilog expression preserving the supported source condition identity
+ *    returned by ivl_path_condition_key. Identifiers are escaped and binary
+ *    grouping is explicit. Returns an empty string for unconditional or
+ *    unsupported conditions. This is source metadata, not an expression
+ *    reconstructed from the optimized condition nexus.
+ *
  * ivl_path_is_condit
  *    Is this a conditional structure? Needed for ifnone.
  *
@@ -541,6 +556,8 @@ extern ivl_island_t ivl_branch_island(ivl_branch_t obj);
 extern ivl_scope_t ivl_path_scope(ivl_delaypath_t obj);
 extern ivl_nexus_t ivl_path_source(ivl_delaypath_t obj);
 extern uint64_t ivl_path_delay(ivl_delaypath_t obj, ivl_path_edge_t pt);
+extern const char* ivl_path_condition_key(ivl_delaypath_t obj);
+extern const char* ivl_path_condition_text(ivl_delaypath_t obj);
 extern ivl_nexus_t ivl_path_condit(ivl_delaypath_t obj);
 extern int ivl_path_is_condit(ivl_delaypath_t obj);
 
@@ -937,6 +954,9 @@ extern const char* ivl_expr_bits(ivl_expr_t net);
 extern ivl_branch_t ivl_expr_branch(ivl_expr_t net);
   /* IVL_EX_UFUNC */
 extern ivl_scope_t ivl_expr_def(ivl_expr_t net);
+  /* IVL_EX_UFUNC: true if the call is not dispatched on the class of
+     the object (a super.method() call). */
+extern unsigned ivl_expr_nonvirtual(ivl_expr_t net);
   /* IVL_EX_DELAY */
 extern uint64_t ivl_expr_delay_val(ivl_expr_t net);
   /* IVL_EX_REALNUM */
@@ -1796,6 +1816,12 @@ extern unsigned    ivl_parameter_lineno(ivl_parameter_t net);
  * ivl_scope_is_auto
  *    Is the task or function declared to be automatic?
  *
+ * ivl_scope_virtual_root
+ *    If the scope is a virtual class method, this is the scope of the
+ *    virtual declaration that the method implements. That is the scope
+ *    itself if the method is the first virtual declaration. Otherwise
+ *    this is nil.
+ *
  * ivl_scope_is_cell
  *    Is the module defined to be a cell?
  *
@@ -1885,6 +1911,7 @@ extern unsigned     ivl_scope_events(ivl_scope_t net);
 extern ivl_event_t  ivl_scope_event(ivl_scope_t net, unsigned idx);
 extern const char* ivl_scope_file(ivl_scope_t net);
 extern unsigned ivl_scope_is_auto(ivl_scope_t net);
+extern ivl_scope_t ivl_scope_virtual_root(ivl_scope_t net);
 extern unsigned ivl_scope_is_cell(ivl_scope_t net);
 extern unsigned ivl_scope_is_disable_target(ivl_scope_t net);
 extern unsigned ivl_scope_lineno(ivl_scope_t net);
@@ -2278,6 +2305,8 @@ extern ivl_scope_t ivl_stmt_block_scope(ivl_statement_t net);
 extern ivl_statement_t ivl_stmt_block_stmt(ivl_statement_t net, unsigned i);
   /* IVL_ST_UTASK IVL_ST_DISABLE */
 extern ivl_scope_t ivl_stmt_call(ivl_statement_t net);
+  /* IVL_ST_UTASK: see ivl_expr_nonvirtual */
+extern unsigned ivl_stmt_nonvirtual(ivl_statement_t net);
   /* IVL_ST_CASE,IVL_ST_CASER,IVL_ST_CASEX,IVL_ST_CASEZ */
 extern unsigned ivl_stmt_case_count(ivl_statement_t net);
   /* IVL_ST_CASE,IVL_ST_CASER,IVL_ST_CASEX,IVL_ST_CASEZ */
@@ -2408,6 +2437,8 @@ extern unsigned ivl_switch_lineno(ivl_switch_t net);
  */
 extern ivl_variable_type_t ivl_type_base(ivl_type_t net);
 extern ivl_type_t ivl_type_element(ivl_type_t net);
+/* Return the enum type, or NULL for a non-enum type. */
+extern ivl_enumtype_t ivl_type_enumtype(ivl_type_t net);
 extern unsigned ivl_type_packed_dimensions(ivl_type_t net);
 extern int ivl_type_packed_lsb(ivl_type_t net, unsigned dim);
 extern int ivl_type_packed_msb(ivl_type_t net, unsigned dim);
@@ -2417,6 +2448,16 @@ extern const char* ivl_type_name(ivl_type_t net);
 extern int         ivl_type_properties(ivl_type_t net);
 extern const char* ivl_type_prop_name(ivl_type_t net, int idx);
 extern ivl_type_t  ivl_type_prop_type(ivl_type_t net, int idx);
+
+/* The base class of a class type, or nil if it has none. */
+extern ivl_type_t  ivl_type_super(ivl_type_t net);
+
+/* A class type has a table of the virtual methods that the class or a
+   base class overrides. Each entry is the override that a call of the
+   virtual declaration (its ivl_scope_virtual_root) runs for an object
+   of this class. */
+extern unsigned    ivl_type_virtuals(ivl_type_t net);
+extern ivl_scope_t ivl_type_virtual(ivl_type_t net, unsigned idx);
 
 /* Maximum element count for a queue type (0 = unbounded). Only valid
  * when ivl_type_base(net) == IVL_VT_QUEUE. */

@@ -41,6 +41,7 @@ class vvp_vpi_callback {
       void attach_as_word(struct __vpiArray* arr, unsigned long addr);
 
       void add_vpi_callback(value_callback*);
+      void transfer_vpi_callbacks_from(vvp_vpi_callback&src);
 #ifdef CHECK_WITH_VALGRIND
 	/* This has only been tested at EOS. */
       void clear_all_callbacks(void);

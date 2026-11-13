@@ -323,6 +323,17 @@ general syntax of a variable is::
 	<label> .var/i "name", <msb>, <lsb>; vpiIntegerVar variable
 	<label> .var/str "name"; vpiStringVar variable
 
+Enum variables may append a reference to an enumeration definition before
+the terminating semicolon::
+
+        <label> .var "name", <msb> <lsb>, <enum-label>;
+
+This optional reference is also accepted by the ``/s``, ``/2u``, ``/2s``
+and ``/i`` forms. It identifies the enum typespec exposed through
+``vpi_handle(vpiTypespec, variable)``; it does not change the stored value.
+Declarations without this reference retain their existing behavior.
+Older VVP runtimes do not accept declarations containing this reference.
+
 The "name" is the declared base name of the original variable, for the
 sake of VPI code that might access it. The variable is placed in the
 current scope. The variable also has a width, defined by the indices
@@ -442,6 +453,23 @@ activates the delay.
         .modpath <width> <input> , [ <src> (<delays> [? <condition>]) ] ;
 
 <width> specifies the bit width of the input net.
+
+For a conditional source, an optional quoted condition identity follows
+the path's input-terminal symbol for SDF ``COND`` matching. A bare local
+scalar identifier retains its original unescaped name. Comparisons of a
+declaration-local scalar logic/bit signal with an explicitly sized, unsigned
+one-bit 0 or 1 using ``==``, and ordered ``&&`` trees of those comparisons,
+have opaque expression keys. Other expressions omit the identity. This
+metadata does not change how the condition is evaluated at runtime.
+
+Expression keys start with a space, which cannot occur in an identifier.
+A comparison is encoded as `` E<name-length>:<name><value>`` and an AND as
+`` A<left-key><right-key>``; name lengths count bytes. Length-delimited names
+and fixed binary arity preserve grouping and operand order without collisions
+with escaped names.
+Bare-name identities from older compiled files remain compatible. SDF scalar
+constants use the parser's existing normalized 0/1 syntax; no Boolean
+simplification or interchange of logical and case equality is performed.
 
 Array Index Statements
 ----------------------
@@ -773,9 +801,13 @@ The .ufunc statements define a call to a user defined function.
 	<label> .ufunc/e <flabel>, <wid>, <trigger>,
             <isymbols> ( <psymbols> ) <ssymbol>;
 
-The first variant is used for functions that only need to be called
-when one of their inputs changes value. The second variant is used
-for functions that also need to be called when a trigger event occurs.
+	<label> .ufunc/real/e <flabel>, <wid>, <trigger>,
+            [<isymbols> ( <psymbols> )] <ssymbol>;
+
+The variants without ``/e`` call the function when one of its inputs
+changes value. The ``/e`` variants also call it when a trigger event
+occurs. The ``/real`` variants return a real value; the other variants
+return a vector.
 
 The <flabel> is the code label for the first instruction of the
 function implementation. This is code that the simulator will branch

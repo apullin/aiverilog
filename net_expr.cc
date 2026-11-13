@@ -112,7 +112,8 @@ NetEBAdd::~NetEBAdd()
 }
 
 
-static ivl_variable_type_t arith_expr_type(const NetExpr *l, const NetExpr *r)
+static ivl_variable_type_t arith_expr_type(const NetExpr*l, const NetExpr*r,
+					   bool can_generate_x = false)
 {
       auto l_expr_type = l->expr_type();
       auto r_expr_type = r->expr_type();
@@ -121,9 +122,10 @@ static ivl_variable_type_t arith_expr_type(const NetExpr *l, const NetExpr *r)
           r_expr_type == IVL_VT_REAL)
 	    return IVL_VT_REAL;
 
-      if (l_expr_type == IVL_VT_LOGIC ||
-          r_expr_type == IVL_VT_LOGIC)
+      if (can_generate_x || l_expr_type == IVL_VT_LOGIC ||
+          r_expr_type == IVL_VT_LOGIC) {
 	    return IVL_VT_LOGIC;
+      }
 
       return IVL_VT_BOOL;
 }
@@ -176,15 +178,8 @@ NetEBDiv::~NetEBDiv()
 
 ivl_variable_type_t NetEBDiv::expr_type() const
 {
-      if (left_->expr_type() == IVL_VT_REAL)
-	    return IVL_VT_REAL;
-
-      if (right_->expr_type() == IVL_VT_REAL)
-	    return IVL_VT_REAL;
-
-      // div is always 4-state, even if both inputs are 2-state because division
-      // by 0 can yield 'x
-      return IVL_VT_LOGIC;
+	// Division and modulo by zero can produce X from two-state operands.
+      return arith_expr_type(left_, right_, true);
 }
 
 NetEBMinMax::NetEBMinMax(char op__, NetExpr*l, NetExpr*r, unsigned wid, bool signed_flag)
@@ -226,7 +221,8 @@ NetEBPow::~NetEBPow()
 
 ivl_variable_type_t NetEBPow::expr_type() const
 {
-      return arith_expr_type(left_, right_);
+	// Zero raised to a negative exponent can produce X.
+      return arith_expr_type(left_, right_, true);
 }
 
 NetEBShift::NetEBShift(char op__, NetExpr*l, NetExpr*r, unsigned wid, bool signed_flag)
@@ -347,9 +343,7 @@ NetELast::NetELast(NetNet*s)
 {
 }
 
-NetELast::~NetELast()
-{
-}
+NetELast::~NetELast() = default;
 
 ivl_variable_type_t NetELast::expr_type() const
 {
@@ -371,7 +365,7 @@ const netenum_t* NetENetenum::netenum() const
 }
 
 NetENew::NetENew(ivl_type_t t)
-: NetExpr(t), size_(0), init_val_(0)
+: NetExpr(t)
 {
 }
 
@@ -380,9 +374,7 @@ NetENew::NetENew(ivl_type_t t, NetExpr*size, NetExpr*init_val)
 {
 }
 
-NetENew::~NetENew()
-{
-}
+NetENew::~NetENew() = default;
 
 ivl_variable_type_t NetENew::expr_type() const
 {
@@ -413,9 +405,7 @@ NetEProperty::NetEProperty(NetNet*net, size_t pidx, NetExpr*idx)
       }
 }
 
-NetEProperty::~NetEProperty()
-{
-}
+NetEProperty::~NetEProperty() = default;
 
 NetESelect::NetESelect(NetExpr*exp, NetExpr*base, unsigned wid,
                        ivl_select_type_t sel_type)
@@ -431,20 +421,16 @@ NetESelect::NetESelect(NetExpr*exp, NetExpr*base, unsigned wid,
       expr_width(wid);
 }
 
-NetESelect::~NetESelect()
-{
-      delete expr_;
-      delete base_;
-}
+NetESelect::~NetESelect() = default;
 
 const NetExpr*NetESelect::sub_expr() const
 {
-      return expr_;
+      return expr_.get();
 }
 
 const NetExpr*NetESelect::select() const
 {
-      return base_;
+      return base_.get();
 }
 
 ivl_select_type_t NetESelect::select_type() const
@@ -470,25 +456,22 @@ ivl_variable_type_t NetESelect::expr_type() const
 
 NetESFunc::NetESFunc(const char*n, ivl_variable_type_t t,
 		     unsigned width, unsigned np, bool is_overridden)
-: name_(0), type_(t), parms_(np), is_overridden_(is_overridden)
+: name_(lex_strings.make(n)), type_(t), parms_(np),
+  is_overridden_(is_overridden)
 {
-      name_ = lex_strings.add(n);
       expr_width(width);
 }
 
 NetESFunc::NetESFunc(const char*n, ivl_type_t rtype, unsigned np)
-: NetExpr(rtype), name_(0), type_(rtype->base_type()), parms_(np),
-  is_overridden_(false)
+: NetExpr(rtype), name_(lex_strings.make(n)),
+  type_(rtype->base_type()), parms_(np), is_overridden_(false)
 {
-      name_ = lex_strings.add(n);
 }
 
 NetESFunc::~NetESFunc()
 {
       for (unsigned idx = 0 ;  idx < parms_.size() ;  idx += 1)
 	    if (parms_[idx]) delete parms_[idx];
-
-	/* name_ string ls lex_strings allocated. */
 }
 
 const char* NetESFunc::name() const
@@ -531,9 +514,7 @@ NetEShallowCopy::NetEShallowCopy(NetExpr*arg1, NetExpr*arg2)
 {
 }
 
-NetEShallowCopy::~NetEShallowCopy()
-{
-}
+NetEShallowCopy::~NetEShallowCopy() = default;
 
 ivl_variable_type_t NetEShallowCopy::expr_type() const
 {

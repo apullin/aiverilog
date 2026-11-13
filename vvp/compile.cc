@@ -25,6 +25,7 @@
 # include  "logic.h"
 # include  "resolv.h"
 # include  "udp.h"
+# include  "class_type.h"
 # include  "symbols.h"
 # include  "codes.h"
 # include  "schedule.h"
@@ -113,8 +114,9 @@ static const struct opcode_table_s opcode_table[] = {
       { "%assign/wr",  of_ASSIGN_WR, 2,{OA_VPI_PTR, OA_BIT1, OA_NONE} },
       { "%assign/wr/d",of_ASSIGN_WRD,2,{OA_VPI_PTR, OA_BIT1, OA_NONE} },
       { "%assign/wr/e",of_ASSIGN_WRE,1,{OA_VPI_PTR, OA_NONE, OA_NONE} },
-      { "%blend",    of_BLEND,   0,  {OA_NONE,  OA_NONE,     OA_NONE} },
-      { "%blend/wr", of_BLEND_WR,0,  {OA_NONE,  OA_NONE,     OA_NONE} },
+      { "%blend",     of_BLEND,     0, {OA_NONE, OA_NONE, OA_NONE} },
+      { "%blend/str", of_BLEND_STR, 0, {OA_NONE, OA_NONE, OA_NONE} },
+      { "%blend/wr",  of_BLEND_WR,  0, {OA_NONE, OA_NONE, OA_NONE} },
       { "%breakpoint", of_BREAKPOINT, 0,  {OA_NONE, OA_NONE, OA_NONE} },
       { "%callf/obj",       of_CALLF_OBJ,       2,{OA_CODE_PTR2,OA_VPI_PTR, OA_NONE} },
       { "%callf/real",      of_CALLF_REAL,      2,{OA_CODE_PTR2,OA_VPI_PTR, OA_NONE} },
@@ -125,6 +127,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%cassign/vec4",    of_CASSIGN_VEC4,    1,{OA_FUNC_PTR,OA_NONE,     OA_NONE} },
       { "%cassign/vec4/off",of_CASSIGN_VEC4_OFF,2,{OA_FUNC_PTR,OA_BIT1,     OA_NONE} },
       { "%cassign/wr",  of_CASSIGN_WR,  1,{OA_FUNC_PTR,OA_NONE,     OA_NONE} },
+      { "%cast/class", of_CAST_CLASS, 2, {OA_VPI_PTR,OA_BIT1,OA_NONE} },
       { "%cast/vec2/dar", of_CAST_VEC2_DAR, 1,  {OA_NUMBER,   OA_NONE,     OA_NONE} },
       { "%cast/vec4/dar", of_CAST_VEC4_DAR, 1,  {OA_NUMBER,   OA_NONE,     OA_NONE} },
       { "%cast/vec4/str", of_CAST_VEC4_STR, 1,  {OA_NUMBER,   OA_NONE,     OA_NONE} },
@@ -167,11 +170,13 @@ static const struct opcode_table_s opcode_table[] = {
       { "%disable",  of_DISABLE, 1, {OA_VPI_PTR,OA_NONE,     OA_NONE} },
       { "%disable/flow", of_DISABLE_FLOW, 1, {OA_VPI_PTR,OA_NONE, OA_NONE} },
       { "%disable/fork",of_DISABLE_FORK,0,{OA_NONE,OA_NONE,  OA_NONE} },
+      { "%dispatch/virt", of_DISPATCH_VIRT, 1, {OA_VPI_PTR,OA_NONE, OA_NONE} },
       { "%div",      of_DIV,     0, {OA_NONE,   OA_NONE,     OA_NONE} },
       { "%div/s",    of_DIV_S,   0, {OA_NONE,   OA_NONE,     OA_NONE} },
       { "%div/wr",   of_DIV_WR,  0, {OA_NONE,   OA_NONE,     OA_NONE} },
       { "%dup/obj",  of_DUP_OBJ, 0, {OA_NONE,   OA_NONE,     OA_NONE} },
       { "%dup/real", of_DUP_REAL,0, {OA_NONE,   OA_NONE,     OA_NONE} },
+      { "%dup/str",  of_DUP_STR, 0, {OA_NONE,   OA_NONE,     OA_NONE} },
       { "%dup/vec4", of_DUP_VEC4,0, {OA_NONE,   OA_NONE,     OA_NONE} },
       { "%end",    of_END,    0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%evctl",  of_EVCTL,  2,  {OA_FUNC_PTR, OA_BIT1,     OA_NONE} },
@@ -195,6 +200,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%force/wr",      of_FORCE_WR,      1,{OA_FUNC_PTR, OA_NONE,      OA_NONE} },
       { "%fork",   of_FORK,   2,  {OA_CODE_PTR2,OA_VPI_PTR,  OA_NONE} },
       { "%free",   of_FREE,   1,  {OA_VPI_PTR,  OA_NONE,     OA_NONE} },
+      { "%getc",   of_GETC,   1,  {OA_BIT1,     OA_NONE,     OA_NONE} },
       { "%inv",    of_INV,    0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%ix/add", of_IX_ADD, 3,  {OA_NUMBER,   OA_BIT1,     OA_BIT2} },
       { "%ix/getv",of_IX_GETV,2,  {OA_BIT1,     OA_FUNC_PTR, OA_NONE} },
@@ -305,13 +311,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%queue/min/prop/v", of_QUEUE_MIN_PROP_V, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%queue/min/v", of_QUEUE_MIN_V, 2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
       { "%queue/new_empty/v", of_QUEUE_NEW_EMPTY_V, 0, {OA_NONE, OA_NONE, OA_NONE} },
-      { "%queue/product/obj/v", of_QUEUE_PRODUCT_OBJ_V, 1, {OA_BIT1, OA_NONE, OA_NONE} },
-      { "%queue/product/prop/v", of_QUEUE_PRODUCT_PROP_V, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
-      { "%queue/product/v", of_QUEUE_PRODUCT_V, 2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
       { "%queue/size/v", of_QUEUE_SIZE_V, 1, {OA_FUNC_PTR, OA_NONE, OA_NONE} },
-      { "%queue/sum/obj/v", of_QUEUE_SUM_OBJ_V, 1, {OA_BIT1, OA_NONE, OA_NONE} },
-      { "%queue/sum/prop/v", of_QUEUE_SUM_PROP_V, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
-      { "%queue/sum/v", of_QUEUE_SUM_V, 2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
       { "%queue/unique/index/obj/v", of_QUEUE_UNIQUE_INDEX_OBJ_V, 1, {OA_BIT1, OA_NONE, OA_NONE} },
       { "%queue/unique/index/prop/v", of_QUEUE_UNIQUE_INDEX_PROP_V, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%queue/unique/index/v", of_QUEUE_UNIQUE_INDEX_V, 2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
@@ -392,6 +392,17 @@ static const struct opcode_table_s opcode_table[] = {
       { "%test_nul/a",   of_TEST_NUL_A,   2,{OA_ARR_PTR, OA_BIT1,    OA_NONE} },
       { "%test_nul/obj", of_TEST_NUL_OBJ, 0,{OA_NONE,    OA_NONE,    OA_NONE} },
       { "%test_nul/prop",of_TEST_NUL_PROP,2,{OA_NUMBER,  OA_BIT1,    OA_NONE} },
+      { "%uparr/and/v",          of_UPARR_AND_V,          2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
+      { "%uparr/or/v",           of_UPARR_OR_V,           2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
+      { "%uparr/product/obj/v",  of_UPARR_PRODUCT_OBJ_V,  1, {OA_BIT1,     OA_NONE, OA_NONE} },
+      { "%uparr/product/prop/v", of_UPARR_PRODUCT_PROP_V, 2, {OA_NUMBER,   OA_BIT1, OA_NONE} },
+      { "%uparr/product/r",      of_UPARR_PRODUCT_REAL,   1, {OA_FUNC_PTR, OA_NONE, OA_NONE} },
+      { "%uparr/product/v",      of_UPARR_PRODUCT_V,      2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
+      { "%uparr/sum/obj/v",      of_UPARR_SUM_OBJ_V,      1, {OA_BIT1,     OA_NONE, OA_NONE} },
+      { "%uparr/sum/prop/v",     of_UPARR_SUM_PROP_V,     2, {OA_NUMBER,   OA_BIT1, OA_NONE} },
+      { "%uparr/sum/r",          of_UPARR_SUM_REAL,       1, {OA_FUNC_PTR, OA_NONE, OA_NONE} },
+      { "%uparr/sum/v",          of_UPARR_SUM_V,          2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
+      { "%uparr/xor/v",          of_UPARR_XOR_V,          2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
       { "%wait",   of_WAIT,   1,  {OA_FUNC_PTR, OA_NONE,     OA_NONE} },
       { "%wait/fork",of_WAIT_FORK,0,{OA_NONE,   OA_NONE,     OA_NONE} },
       { "%xnor",   of_XNOR,   0,  {OA_NONE,     OA_NONE,     OA_NONE} },
@@ -655,6 +666,8 @@ void functor_ref_lookup(vvp_net_t**ref, char*lab)
       resolv_submit(res);
 }
 
+static std::vector<vvp_signal_value**> resolved_signal_refs;
+
 struct signal_value_resolv_list_s: public resolv_list_s {
       explicit signal_value_resolv_list_s(char*txt) : resolv_list_s(txt) {
 	    ref = 0;
@@ -671,6 +684,7 @@ bool signal_value_resolv_list_s::resolve(bool mes)
 
       if (sig) {
 	    *ref = sig;
+	    resolved_signal_refs.push_back(ref);
 	    return true;
       }
 
@@ -678,6 +692,18 @@ bool signal_value_resolv_list_s::resolve(bool mes)
 	    fprintf(stderr, "unresolved signal reference: %s\n", label());
 
       return false;
+}
+
+void compile_replace_signal_value(const vvp_signal_value*old_sig,
+				  vvp_signal_value*new_sig)
+{
+      if (!old_sig || old_sig == new_sig)
+	    return;
+
+      for (vvp_signal_value**ref : resolved_signal_refs) {
+	    if (*ref == old_sig)
+		  *ref = new_sig;
+      }
 }
 
 static void signal_value_ref_lookup(vvp_signal_value**ref, char*lab)
@@ -871,6 +897,78 @@ static void compile_array_lookup(struct vvp_code_s*code, char*label)
       resolv_submit(res);
 }
 
+/*
+ * Add an entry to the virtual function table of a class. The labels
+ * may all be defined later in the source file.
+ */
+struct virt_resolv_list_s: public resolv_list_s {
+      virt_resolv_list_s(char*cls, char*scope, char*code)
+      : resolv_list_s(cls), scope_(scope), code_(code) { }
+      ~virt_resolv_list_s() override { free(scope_); free(code_); }
+      virtual bool resolve(bool mes) override;
+      char*scope_;
+      char*code_;
+};
+
+bool virt_resolv_list_s::resolve(bool mes)
+{
+      symbol_value_t cls = sym_get_value(sym_vpi, label());
+      symbol_value_t scope = sym_get_value(sym_vpi, scope_);
+      symbol_value_t code = sym_get_value(sym_codespace, code_);
+      if (cls.ptr && scope.ptr && code.ptr) {
+	    class_type*defn = dynamic_cast<class_type*>(static_cast<vpiHandle>(cls.ptr));
+	    assert(defn);
+	    defn->set_virtual(static_cast<vpiHandle>(scope.ptr),
+			      reinterpret_cast<vvp_code_t>(code.ptr));
+	    return true;
+      }
+
+      if (mes)
+	    fprintf(stderr, "unresolved virtual function table entry: %s\n", label());
+
+      return false;
+}
+
+void compile_virt(char*cls, char*scope, char*code)
+{
+      resolv_submit(new virt_resolv_list_s(cls, scope, code));
+}
+
+/*
+ * Set the base class of a class. The labels may both be defined later
+ * in the source file.
+ */
+struct super_resolv_list_s: public resolv_list_s {
+      super_resolv_list_s(char*cls, char*super)
+      : resolv_list_s(cls), super_(super) { }
+      ~super_resolv_list_s() override { free(super_); }
+      virtual bool resolve(bool mes) override;
+      char*super_;
+};
+
+bool super_resolv_list_s::resolve(bool mes)
+{
+      symbol_value_t cls = sym_get_value(sym_vpi, label());
+      symbol_value_t super = sym_get_value(sym_vpi, super_);
+      if (cls.ptr && super.ptr) {
+	    class_type*defn = dynamic_cast<class_type*>(static_cast<vpiHandle>(cls.ptr));
+	    class_type*base = dynamic_cast<class_type*>(static_cast<vpiHandle>(super.ptr));
+	    assert(defn && base);
+	    defn->set_super(base);
+	    return true;
+      }
+
+      if (mes)
+	    fprintf(stderr, "unresolved base class of class: %s\n", label());
+
+      return false;
+}
+
+void compile_super(char*cls, char*super)
+{
+      resolv_submit(new super_resolv_list_s(cls, super));
+}
+
 static std::list<struct __vpiSysTaskCall*> scheduled_compiletf;
 
 void compile_compiletf(struct __vpiSysTaskCall*obj)
@@ -995,6 +1093,7 @@ void compile_vpi_symbol(const char*label, vpiHandle obj)
  */
 void compile_init(void)
 {
+      resolved_signal_refs.clear();
       sym_vpi = new_symbol_table();
 
       sym_functors = new_symbol_table();
@@ -1777,10 +1876,11 @@ void compile_modpath_src(struct __vpiModPath*dst, char edge_c,
 			 const struct symb_s&src,
 			 struct numbv_s&vals,
 			 const struct symb_s&condit_src,
-			 const struct symb_s&path_term_in)
+			 const struct symb_s&path_term_in, const char* key)
 {
       struct __vpiModPathSrc*obj =
 	    make_modpath_src(dst, edge_c, src, vals, false);
+      if (key) obj->sdf_condition = key;
       input_connect(obj->net, 1, condit_src.text);
       compile_vpi_lookup(&obj->path_term_in.expr, path_term_in.text);
 }

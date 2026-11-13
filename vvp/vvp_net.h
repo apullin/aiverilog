@@ -24,6 +24,7 @@
 # include  "vvp_vpi_callback.h"
 # include  "permaheap.h"
 # include  "vvp_object.h"
+# include  <climits>
 # include  <cstddef>
 # include  <cstdlib>
 # include  <cstring>
@@ -208,7 +209,8 @@ inline void update_driver_counts(vvp_bit4_t bit, unsigned counts[3])
 
 /*
  * Some of the instructions do wide addition to arrays of long. They
- * use this add_with_carry function to help.
+ * use this add_with_carry function to help. The carry is a single-bit
+ * input and output.
  */
 static inline unsigned long add_with_carry(unsigned long a, unsigned long b,
 					   unsigned long&carry)
@@ -1022,8 +1024,8 @@ class vvp_vector2_t {
 	// a NaN value. If enable_NaN is false then X or Z bits are
 	// converted to 0 as per the standard Verilog rules.
       explicit vvp_vector2_t(const vvp_vector4_t&that, bool allow_NaN = false);
-	// Make from a native long and a specified width.
-      vvp_vector2_t(unsigned long val, unsigned wid);
+	// Make from a 64-bit value and a specified width.
+      vvp_vector2_t(uint64_t val, unsigned wid);
 	// Make with the width, and filled with 1 or 0 bits.
       enum fill_t {FILL0, FILL1};
       vvp_vector2_t(fill_t fill, unsigned wid);

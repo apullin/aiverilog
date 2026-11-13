@@ -1,7 +1,7 @@
 #ifndef IVL_vvp_priv_H
 #define IVL_vvp_priv_H
 /*
- * Copyright (c) 2001-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 2001-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -80,15 +80,18 @@ extern int draw_process(ivl_process_t net, void*x);
 
 extern int draw_task_definition(ivl_scope_t scope);
 extern int draw_func_definition(ivl_scope_t scope);
+extern int draw_virtual_adapter(ivl_scope_t root, ivl_scope_t impl);
 
 extern int draw_scope(ivl_scope_t scope, ivl_scope_t parent);
 
 extern void draw_lpm_mux(ivl_lpm_t net);
 extern void draw_lpm_substitute(ivl_lpm_t net);
 
-extern void draw_ufunc_vec4(ivl_expr_t expr);
-extern void draw_ufunc_real(ivl_expr_t expr);
-extern void draw_ufunc_string(ivl_expr_t expr);
+/* Copy a whole unpacked array into another, word by word. Used both for a
+   plain array-to-array assignment and for passing an array to a subroutine. */
+extern int draw_array_copy(ivl_signal_t dst, ivl_expr_t rval);
+
+extern void draw_ufunc(ivl_expr_t expr);
 extern void draw_ufunc_object(ivl_expr_t expr);
 
 extern char* process_octal_codes(const char*txt, unsigned wid);
@@ -120,6 +123,14 @@ extern void draw_vpi_rfunc_call(ivl_expr_t expr);
 extern void draw_vpi_sfunc_call(ivl_expr_t expr);
 
 extern void draw_class_in_scope(ivl_type_t classtype);
+
+/*
+ * Draw $cast(dest, src) of class handles. The dest is a signal or a
+ * property expression. If want_result is true, a 32 bit 1 or 0 is left
+ * on the vec4 stack. If report is true, a failed cast prints an error.
+ */
+extern int draw_class_cast(ivl_expr_t dest, ivl_expr_t src,
+			   int report, int want_result);
 
 /*
  * Enumeration draw routine.
@@ -195,6 +206,20 @@ extern void draw_eval_expr_into_integer(ivl_expr_t expr, unsigned ix);
  * operand for conditional jump instructions.
  */
 extern int draw_eval_condition(ivl_expr_t expr);
+
+/*
+ * Evaluate a comparison and return the flag containing its result.
+ * Vector callers can copy this flag onto the expression stack.
+ */
+extern int draw_eval_compare(ivl_expr_t expr);
+
+/*
+ * Evaluate a ternary using draw_eval for its branches and blend to combine
+ * their results when the condition is unknown. Both must use the same
+ * expression stack.
+ */
+extern void draw_eval_ternary(ivl_expr_t expr, void(*draw_eval)(ivl_expr_t),
+                              const char*blend);
 
 /*
  * Return true if the signal is the return value of a function.

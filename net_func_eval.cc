@@ -218,27 +218,7 @@ bool NetProc::evaluate_function(const LineInfo&,
 void NetAssign::eval_func_lval_op_real_(const LineInfo&loc,
 					verireal&lv, const verireal&rv) const
 {
-      switch (op_) {
-	  case '+':
-	    lv = lv + rv;
-	    break;
-	  case '-':
-	    lv = lv - rv;
-	    break;
-	  case '*':
-	    lv = lv * rv;
-	    break;
-	  case '/':
-	    lv = lv / rv;
-	    break;
-	  case '%':
-	    lv = lv % rv;
-	    break;
-	  default:
-	    cerr << "Illegal assignment operator: "
-		 << human_readable_op(op_) << endl;
-	    ivl_assert(loc, 0);
-      }
+      lv = eval_binary(loc, op_, lv, rv);
 }
 
 void NetAssign::eval_func_lval_op_(const LineInfo&loc,
@@ -248,62 +228,16 @@ void NetAssign::eval_func_lval_op_(const LineInfo&loc,
       bool lv_sign = lv.has_sign();
       switch (op_) {
 	  case 'l':
+	  case 'r':
 	  case 'R':
 	      // The left operand is self-determined.
-	    break;
-	  case 'r':
-	      // The left operand is self-determined, but we need to
-	      // cast it to unsigned to get a logical shift.
-	    lv.has_sign(false);
 	    break;
           default:
 	      // The left operand must be cast to the expression type/size
 	    lv.has_sign(rv.has_sign());
 	    lv = cast_to_width(lv, rv.len());
       }
-      switch (op_) {
-	  case '+':
-	    lv = lv + rv;
-	    break;
-	  case '-':
-	    lv = lv - rv;
-	    break;
-	  case '*':
-	    lv = lv * rv;
-	    break;
-	  case '/':
-	    lv = lv / rv;
-	    break;
-	  case '%':
-	    lv = lv % rv;
-	    break;
-	  case '&':
-	    for (unsigned idx = 0 ; idx < lv.len() ; idx += 1)
-		  lv.set(idx, lv[idx] & rv[idx]);
-	    break;
-	  case '|':
-	    for (unsigned idx = 0 ; idx < lv.len() ; idx += 1)
-		  lv.set(idx, lv[idx] | rv[idx]);
-	    break;
-	  case '^':
-	    for (unsigned idx = 0 ; idx < lv.len() ; idx += 1)
-		  lv.set(idx, lv[idx] ^ rv[idx]);
-	    break;
-	  case 'l':
-	    lv = lv << rv.as_unsigned();
-	    break;
-	  case 'r':
-	    lv = lv >> rv.as_unsigned();
-	    break;
-	  case 'R':
-	    lv = lv >> rv.as_unsigned();
-	    break;
-	  default:
-	    cerr << "Illegal assignment operator: "
-		 << human_readable_op(op_) << endl;
-	    ivl_assert(loc, 0);
-      }
-      lv = cast_to_width(lv, lv_width);
+      lv = cast_to_width(eval_binary(loc, op_, lv, rv), lv_width);
       lv.has_sign(lv_sign);
 }
 
@@ -356,7 +290,13 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 	    const NetEConst*base_const = dynamic_cast<NetEConst*>(base_result);
 	    ivl_assert(loc, base_const);
 
-	    long base = base_const->value().as_long();
+	    long base;
+	      // If the base does not fit in a long, assume it is out of bounds.
+	    if (!base_const->value().try_long(base)) {
+		  delete base_result;
+		  delete rval_result;
+		  return true;
+	    }
 
 	    if (old_lval == 0)
 		  old_lval = make_const_x(lval->sig()->vector_width());
@@ -370,6 +310,7 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 
 	    verinum lpart(verinum::Vx, lval->lwidth());
 	    if (op_) {
+		  lpart.has_sign(lval->get_signed());
 		  for (unsigned idx = 0 ; idx < lpart.len() ; idx += 1) {
 			long ldx = base + idx;
 			if (ldx >= 0 && (unsigned long)ldx < lval_v.len())
@@ -569,7 +510,7 @@ bool NetCase::evaluate_function_vect_(const LineInfo&loc,
             const Item*item = &items_[cnt];
 
             if (item->guard == 0) {
-                  default_statement = item->statement;
+                  default_statement = item->statement.get();
                   continue;
             }
 
@@ -603,6 +544,7 @@ bool NetCase::evaluate_function_vect_(const LineInfo&loc,
             }
             if (!match) continue;
 
+            if (!item->statement) return true;
             return item->statement->evaluate_function(loc, context_map);
       }
 
@@ -631,7 +573,7 @@ bool NetCase::evaluate_function_real_(const LineInfo&loc,
             const Item*item = &items_[cnt];
 
             if (item->guard == 0) {
-                  default_statement = item->statement;
+                  default_statement = item->statement.get();
                   continue;
             }
 
@@ -647,6 +589,7 @@ bool NetCase::evaluate_function_real_(const LineInfo&loc,
 
             if (item_val != case_val) continue;
 
+            if (!item->statement) return true;
             return item->statement->evaluate_function(loc, context_map);
       }
 
@@ -749,8 +692,9 @@ bool NetDoWhile::evaluate_function(const LineInfo&loc,
       while (!disable) {
 	      // Evaluate the statement.
 	    flag = proc_->evaluate_function(loc, context_map);
-	    if (! flag)
-		   break;
+	    if (!flag || disable) {
+		  break;
+	    }
 
 	    if (loop_break) {
 		  loop_break = false;
@@ -1053,6 +997,9 @@ NetExpr* NetESelect::evaluate_function(const LineInfo&loc,
       verinum sub = sub_const->value();
       delete sub_exp;
 
+      verinum::V pad = expr_type() == IVL_VT_BOOL ? verinum::V0 : verinum::Vx;
+      verinum res(pad, expr_width());
+      res.has_sign(has_sign());
       long base = 0;
       if (base_) {
 	    NetExpr*base_val = base_->evaluate_function(loc, context_map);
@@ -1061,18 +1008,20 @@ NetExpr* NetESelect::evaluate_function(const LineInfo&loc,
 	    const NetEConst*base_const = dynamic_cast<NetEConst*>(base_val);
 	    ivl_assert(loc, base_const);
 
-	    base = base_const->value().as_long();
+	    bool valid = base_const->value().try_long(base);
 	    delete base_val;
+	    if (!valid) return new NetEConst(res);
       } else {
 	    sub.has_sign(has_sign());
 	    sub = pad_to_width(sub, expr_width());
       }
 
-      verinum res (verinum::Vx, expr_width());
       for (unsigned idx = 0 ; idx < res.len() ; idx += 1) {
-	    long sdx = base + idx;
-	    if (sdx >= 0 && (unsigned long)sdx < sub.len())
-		  res.set(idx, sub[sdx]);
+	    if (base >= 0) {
+		  if (static_cast<unsigned long>(base) >= sub.len()) break;
+		  res.set(idx, sub[base]);
+	    }
+	    base += 1;
       }
 
       NetEConst*res_const = new NetEConst(res);
@@ -1097,6 +1046,29 @@ NetExpr* NetESignal::evaluate_function(const LineInfo&loc,
       }
 
       const NetExpr*value = 0;
+      if (var->nwords > 0 && word_ == 0) {
+	      // A reference to the whole unpacked array (no word index), e.g.
+	      // `return arr;` in a constant function. Assemble the current word
+	      // values into an array pattern that later evaluation (e.g. the
+	      // enclosing localparam) can consume/flatten.
+	    const netarray_t*atype = sig()->array_type();
+	    ivl_assert(loc, atype);
+	    ivl_type_t etype = atype->element_type();
+	    std::vector<NetExpr*> items (var->nwords);
+	    for (int idx = 0 ; idx < var->nwords ; idx += 1) {
+		  if (var->array[idx]) {
+			items[idx] = var->array[idx]->dup_expr();
+		  } else if (etype->base_type() == IVL_VT_REAL) {
+			items[idx] = new NetECReal(verireal(0.0));
+		  } else {
+			items[idx] = new NetEConst(verinum(verinum::Vx,
+						   etype->packed_width(), true));
+		  }
+	    }
+	    NetEArrayPattern*ap = new NetEArrayPattern(atype, items);
+	    ap->set_line(loc);
+	    return ap;
+      }
       if (var->nwords > 0) {
 	    ivl_assert(loc, word_);
 	    NetExpr*word_result = word_->evaluate_function(loc, context_map);
@@ -1114,21 +1086,27 @@ NetExpr* NetESignal::evaluate_function(const LineInfo&loc,
 	    value = var->value;
       }
 
+      NetExpr*res;
       if (value == 0) {
 	    switch (expr_type()) {
 		case IVL_VT_REAL:
 		  return new NetECReal( verireal(0.0) );
 		case IVL_VT_BOOL:
-		  return make_const_0(expr_width());
+		  res = make_const_0(expr_width());
+		  break;
 		case IVL_VT_LOGIC:
-		  return make_const_x(expr_width());
+		  res = make_const_x(expr_width());
+		  break;
 		default:
 		  cerr << get_fileline() << ": sorry: I don't know how to initialize " << *this << endl;
 		  return 0;
 	    }
+      } else {
+	    res = value->dup_expr();
       }
 
-      return value->dup_expr();
+      res->cast_signed(has_sign());
+      return res;
 }
 
 NetExpr* NetETernary::evaluate_function(const LineInfo&loc,
@@ -1210,5 +1188,8 @@ NetExpr* NetEUFunc::evaluate_function(const LineInfo&loc,
 	    args[idx] = parms_[idx]->evaluate_function(loc, context_map);
 
       NetExpr*res = def->evaluate_function(*this, args);
+      if (NetEConst*value = dynamic_cast<NetEConst*>(res)) {
+	    value->cast_signed(has_sign());
+      }
       return res;
 }

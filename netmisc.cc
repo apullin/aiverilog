@@ -22,6 +22,7 @@
 # include  <cstdlib>
 # include  <climits>
 # include  "netlist.h"
+# include  "netclass.h"
 # include  "netparray.h"
 # include  "netvector.h"
 # include  "netmisc.h"
@@ -666,9 +667,10 @@ NetExpr* normalize_variable_unpacked(const LineInfo&loc, const netranges_t&dims,
 	    } else {
 		  bool expr_has_sign = canonical_expr->has_sign() &&
 		                        tmp_scaled->has_sign();
+		  unsigned use_wid = max(canonical_expr->expr_width(),
+					 tmp_scaled->expr_width());
 		  canonical_expr = new NetEBAdd('+', canonical_expr, tmp_scaled,
-						canonical_expr->expr_width()+1,
-		                                expr_has_sign);
+						use_wid+1, expr_has_sign);
 	    }
       }
 
@@ -782,6 +784,8 @@ NetNet* make_const_z(Design*des, NetScope*scope, unsigned long wid)
 
 NetExpr* condition_reduce(NetExpr*expr)
 {
+      if (expr == nullptr) return nullptr;
+
       if (expr->expr_type() == IVL_VT_REAL) {
 	    if (const NetECReal *tmp = dynamic_cast<NetECReal*>(expr)) {
 		  verinum::V res;
@@ -798,6 +802,29 @@ NetExpr* condition_reduce(NetExpr*expr)
 	                                 new NetECReal(verireal(0.0)));
 	    rtn->set_line(*expr);
 	    return rtn;
+      }
+
+	/* If we have a constant reduce it to a single bit */
+      const_bool cval = const_logical(expr);
+      if (cval != C_NON) {
+	    verinum::V res = verinum::Vx;
+	    switch (cval) {
+		case C_0:
+		  res = verinum::V0;
+		  break;
+		case C_1:
+		  res = verinum::V1;
+		  break;
+		case C_X:
+		  break;
+		case C_NON:
+		  assert(0);
+	    }
+	    verinum vres (res, 1, true);
+	    NetEConst*eres = new NetEConst(vres);
+	    eres->set_line(*expr);
+	    delete expr;
+	    return eres;
       }
 
       if (expr->expr_width() == 1)
@@ -969,8 +996,17 @@ NetExpr* elab_and_eval(Design*des, NetScope*scope, PExpr*pe,
 	// checking should be used for all expressions, but at the moment not
 	// all expressions do have a ivl_type_t attached to it.
       if (dynamic_cast<const netuarray_t*>(lv_net_type)) {
-	    if (tmp->net_type())
-		  compatible = lv_net_type->type_compatible(tmp->net_type());
+	      // A whole unpacked-array reference (e.g. `return arr;` or an
+	      // array-to-array copy) elaborates to a NetESignal whose net_type()
+	      // is the element type. Compare against the signal's array type so
+	      // the unpacked array is accepted where an unpacked array is wanted.
+	    ivl_type_t rtype = tmp->net_type();
+	    if (const NetESignal*esig = dynamic_cast<const NetESignal*>(tmp)) {
+		  if (esig->word_index() == 0 && esig->sig()->array_type())
+			rtype = esig->sig()->array_type();
+	    }
+	    if (rtype)
+		  compatible = lv_net_type->type_compatible(rtype);
 	    else
 		  compatible = false;
       } else if ((cast_type == IVL_VT_QUEUE || cast_type == IVL_VT_DARRAY) &&
@@ -1192,6 +1228,15 @@ void eval_expr(NetExpr*&expr, int context_width)
             delete expr;
             expr = ce;
       }
+}
+
+void eval_expr(NetExpr::Ptr&expr, int context_width)
+{
+        // The raw-pointer overload may delete and replace the expression.
+        // Release ownership before the call, then own its result.
+      auto tmp = expr.release();
+      eval_expr(tmp, context_width);
+      expr.reset(tmp);
 }
 
 bool eval_as_long(long&value, const NetExpr*expr)
@@ -1927,11 +1972,87 @@ bool calculate_param_range(const LineInfo&line, ivl_type_t par_type,
 	    par_lsv = 0;
 	    return true;
       }
-      ivl_assert(line, packed_dims.size() == 1);
+
+      // A multi-dimension packed array parameter has no single declared
+      // range. Index (element) selects are handled separately; for a flat
+      // part/bit select fall back to the canonical [width-1:0] range so we
+      // don't crash on the less common cases.
+      if (packed_dims.size() > 1) {
+	    par_msv = (long)vector_type->packed_width() - 1;
+	    par_lsv = 0;
+	    return true;
+      }
 
       netrange_t use_range = packed_dims[0];
       par_msv = use_range.get_msb();
       par_lsv = use_range.get_lsb();
+
+      return true;
+}
+
+static bool class_derives_from(const netclass_t*cls, const netclass_t*base)
+{
+      for ( ; cls ; cls = cls->get_super()) {
+	    if (cls == base)
+		  return true;
+      }
+
+      return false;
+}
+
+bool check_class_cast_args(Design*des, const LineInfo*li,
+			   const NetExpr*dest, const NetExpr*src)
+{
+      const netclass_t*dest_class = dest
+	    ? dynamic_cast<const netclass_t*>(dest->net_type()) : 0;
+      if (dest_class == 0) {
+	    cerr << li->get_fileline() << ": sorry: $cast is only supported "
+	            "for class handles." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+      const NetESignal*dest_sig = dynamic_cast<const NetESignal*>(dest);
+      const NetEProperty*dest_prop = dynamic_cast<const NetEProperty*>(dest);
+      bool dest_ok = (dest_sig && !dest_sig->word_index()
+		      && dest_sig->sig()->type() == NetNet::REG)
+	          || (dest_prop && !dest_prop->get_index());
+      if (dest_sig && dest_sig->sig()->name() == perm_string::literal(THIS_TOKEN)) {
+	    cerr << li->get_fileline() << ": error: The first argument of "
+	            "$cast cannot be \"this\", it is not assignable." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+      if (!dest_ok) {
+	    cerr << li->get_fileline() << ": error: The first argument of "
+	            "$cast must be a class variable or a class property." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+      if (dynamic_cast<const NetENull*>(src))
+	    return true;
+
+      const netclass_t*src_class = src
+	    ? dynamic_cast<const netclass_t*>(src->net_type()) : 0;
+      if (src_class == 0) {
+	    cerr << li->get_fileline() << ": error: The second argument of "
+	            "$cast must be a class handle." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+	// A cast that can never succeed is an error: the two classes
+	// must be the same or one must derive from the other.
+      if (!class_derives_from(dest_class, src_class) &&
+	  !class_derives_from(src_class, dest_class)) {
+	    cerr << li->get_fileline() << ": error: $cast from class "
+		 << src_class->get_name() << " to class "
+		 << dest_class->get_name() << " can never succeed, as the "
+		    "classes are not related by inheritance." << endl;
+	    des->errors += 1;
+	    return false;
+      }
 
       return true;
 }

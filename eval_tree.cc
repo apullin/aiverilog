@@ -92,6 +92,87 @@ static bool get_real_arguments(const NetExpr*le, const NetExpr*re,
       return true;
 }
 
+verinum eval_binary(const LineInfo&loc, char op,
+                    const verinum&left, const verinum&right)
+{
+      switch (op) {
+	  case '+': return left + right;
+	  case '-': return left - right;
+	  case '*': return left * right;
+	  case '/': return left / right;
+	  case '%': return left % right;
+	  case 'l':
+	  case 'r':
+	  case 'R': {
+		if (!right.is_defined()) {
+		      return verinum(verinum::Vx, left.len());
+		}
+		auto shift = right.as_unsigned();
+		if (op == 'l') return left << shift;
+		if (op == 'R') return left >> shift;
+
+		auto value = left;
+		value.has_sign(false);
+		return value >> shift;
+	  }
+	  default:
+	    break;
+      }
+
+      ivl_assert(loc, left.len() == right.len());
+      auto result = verinum(verinum::V0, left.len());
+      switch (op) {
+	  case '&':
+	    for (auto idx = 0U ; idx < result.len() ; idx += 1) {
+		  result.set(idx, left[idx] & right[idx]);
+	    }
+	    break;
+	  case 'A': // Binary NAND is an Icarus extension.
+	    for (auto idx = 0U ; idx < result.len() ; idx += 1) {
+		  result.set(idx, ~(left[idx] & right[idx]));
+	    }
+	    break;
+	  case '|':
+	    for (auto idx = 0U ; idx < result.len() ; idx += 1) {
+		  result.set(idx, left[idx] | right[idx]);
+	    }
+	    break;
+	  case 'O': // Binary NOR is an Icarus extension.
+	    for (auto idx = 0U ; idx < result.len() ; idx += 1) {
+		  result.set(idx, ~(left[idx] | right[idx]));
+	    }
+	    break;
+	  case '^':
+	    for (auto idx = 0U ; idx < result.len() ; idx += 1) {
+		  result.set(idx, left[idx] ^ right[idx]);
+	    }
+	    break;
+	  case 'X':
+	    for (auto idx = 0U ; idx < result.len() ; idx += 1) {
+		  result.set(idx, ~(left[idx] ^ right[idx]));
+	    }
+	    break;
+	  default:
+	    ivl_assert(loc, 0);
+      }
+      return result;
+}
+
+verireal eval_binary(const LineInfo&loc, char op,
+                     const verireal&left, const verireal&right)
+{
+      switch (op) {
+	  case '+': return left + right;
+	  case '-': return left - right;
+	  case '*': return left * right;
+	  case '/': return left / right;
+	  case '%': return left % right;
+	  default:
+	    ivl_assert(loc, 0);
+      }
+      return verireal();
+}
+
 NetExpr* NetEBinary::eval_tree()
 {
       eval_expr(left_);
@@ -115,20 +196,8 @@ NetECReal* NetEBAdd::eval_tree_real_(const NetExpr*l, const NetExpr*r) const
       bool flag = get_real_arguments(l, r, lval, rval);
       if (!flag) return 0;
 
-      double res_val;
-
-      switch (op()) {
-	  case '+':
-	    res_val = lval + rval;
-	    break;
-	  case '-':
-	    res_val = lval - rval;
-	    break;
-	  default:
-	    ivl_assert(*this, 0);
-      }
-
-      NetECReal*res = new NetECReal( verireal(res_val) );
+      auto value = eval_binary(*this, op_, verireal(lval), verireal(rval));
+      auto*res = new NetECReal(value);
       ivl_assert(*this, res);
       eval_debug(this, res, true);
       return res;
@@ -171,8 +240,15 @@ NetExpr* NetEBAdd::eval_tree()
 
             unsigned wid = expr_width();
             ivl_assert(*this, wid > 0);
-            ivl_assert(*this, lval.len() == wid);
-            ivl_assert(*this, rval.len() == wid);
+	      // Constant folding during compile-time function evaluation can
+	      // deliver operands whose width does not match the node width
+	      // (e.g. an int loop variable used in a narrower index
+	      // expression). Resize to the node width; for the elaboration-time
+	      // callers the operands already match, so this is a no-op.
+	    if (lval.len() != wid)
+		  lval = verinum(lval, wid);
+	    if (rval.len() != wid)
+		  rval = verinum(rval, wid);
 
 	    verinum val;
 	    if (op_ == se->op_) {
@@ -214,20 +290,17 @@ NetExpr* NetEBAdd::eval_arguments_(const NetExpr*l, const NetExpr*r) const
 
             unsigned wid = expr_width();
             ivl_assert(*this, wid > 0);
-            ivl_assert(*this, lval.len() == wid);
-            ivl_assert(*this, rval.len() == wid);
+	      // Constant folding during compile-time function evaluation can
+	      // deliver operands whose width does not match the node width
+	      // (e.g. an int loop variable used in a narrower index
+	      // expression). Resize to the node width; for the elaboration-time
+	      // callers the operands already match, so this is a no-op.
+	    if (lval.len() != wid)
+		  lval = verinum(lval, wid);
+	    if (rval.len() != wid)
+		  rval = verinum(rval, wid);
 
-	    verinum val;
-	    switch (op_) {
-		case '+':
-		  val = cast_to_width(lval + rval, wid);
-		  break;
-		case '-':
-		  val = cast_to_width(lval - rval, wid);
-		  break;
-		default:
-		  return 0;
-	    }
+	    auto val = cast_to_width(eval_binary(*this, op_, lval, rval), wid);
 
 	    NetEConst *res = new NetEConst(val);
 	    ivl_assert(*this, res);
@@ -275,41 +348,7 @@ NetEConst* NetEBBits::eval_arguments_(const NetExpr*l, const NetExpr*r) const
       ivl_assert(*this, lval.len() == wid);
       ivl_assert(*this, rval.len() == wid);
 
-      verinum res (verinum::V0, wid);
-
-      switch (op()) {
-
-	  case '|': {
-		for (unsigned idx = 0 ;  idx < wid ;  idx += 1)
-		      res.set(idx, lval.get(idx) | rval.get(idx));
-
-		break;
-	  }
-
-	  case '&': {
-		for (unsigned idx = 0 ;  idx < wid ;  idx += 1)
-		      res.set(idx, lval.get(idx) & rval.get(idx));
-
-		break;
-	  }
-
-	  case 'X': {
-		for (unsigned idx = 0 ;  idx < wid ;  idx += 1)
-		      res.set(idx, ~(lval.get(idx) ^ rval.get(idx)));
-
-		break;
-	}
-
-	  case '^': {
-		for (unsigned idx = 0 ;  idx < wid ;  idx += 1)
-		      res.set(idx, lval.get(idx) ^ rval.get(idx));
-
-		break;
-	  }
-
-	  default:
-	    return 0;
-      }
+      auto res = eval_binary(*this, op_, lval, rval);
 
       res.has_sign(has_sign());
       NetEConst*tmp = new NetEConst(res);
@@ -750,20 +789,10 @@ NetExpr* NetEBDiv::eval_tree_real_(const NetExpr*l, const NetExpr*r) const
       bool flag = get_real_arguments(l, r, lval, rval);
       if (! flag) return 0;
 
-      double res_val = 0.0;
-      switch (op_) {
-	  case '/':
-	    res_val = lval / rval;
-	    break;
-
-	  case '%':
-	      // Since this could/may be called early we don't want to
-	      // leak functionality.
-	    if (!gn_icarus_misc_flag) return 0;
-	    res_val = fmod(lval, rval);
-	    break;
-      }
-      NetECReal*res = new NetECReal( verireal(res_val) );
+        // Real modulus is an Icarus extension.
+      if (op_ == '%' && !gn_icarus_misc_flag) return nullptr;
+      auto value = eval_binary(*this, op_, verireal(lval), verireal(rval));
+      auto*res = new NetECReal(value);
       ivl_assert(*this, res);
       eval_debug(this, res, true);
       return res;
@@ -786,17 +815,7 @@ NetExpr* NetEBDiv::eval_arguments_(const NetExpr*l, const NetExpr*r) const
       ivl_assert(*this, lval.len() == wid);
       ivl_assert(*this, rval.len() == wid);
 
-      verinum val;
-      switch (op_) {
-	  case '/':
-	    val = cast_to_width(lval / rval, wid);
-	    break;
-	  case '%':
-	    val = cast_to_width(lval % rval, wid);
-	    break;
-	  default:
-	    return 0;
-      }
+      auto val = cast_to_width(eval_binary(*this, op_, lval, rval), wid);
 
       NetExpr*tmp = new NetEConst(val);
       ivl_assert(*this, tmp);
@@ -988,7 +1007,8 @@ NetExpr* NetEBMult::eval_tree_real_(const NetExpr*l, const NetExpr*r) const
       bool flag = get_real_arguments(l, r, lval, rval);
       if (! flag) return 0;
 
-      NetECReal*res = new NetECReal( verireal(lval * rval) );
+      auto value = eval_binary(*this, op_, verireal(lval), verireal(rval));
+      auto*res = new NetECReal(value);
       ivl_assert(*this, res);
       eval_debug(this, res, true);
       return res;
@@ -1011,7 +1031,7 @@ NetExpr* NetEBMult::eval_arguments_(const NetExpr*l, const NetExpr*r) const
       ivl_assert(*this, lval.len() == wid);
       ivl_assert(*this, rval.len() == wid);
 
-      verinum val = cast_to_width(lval * rval, wid);
+      auto val = cast_to_width(eval_binary(*this, op_, lval, rval), wid);
       NetEConst*tmp = new NetEConst(val);
       ivl_assert(*this, tmp);
       eval_debug(this, tmp, false);
@@ -1070,26 +1090,7 @@ NetEConst* NetEBShift::eval_arguments_(const NetExpr*l, const NetExpr*r) const
       ivl_assert(*this, wid > 0);
       ivl_assert(*this, lv.len() == wid);
 
-      verinum val;
-      if (rv.is_defined()) {
-	    unsigned shift = rv.as_unsigned();
-
-	    switch (op_) {
-		case 'l':
-		  val = cast_to_width(lv << shift, wid);
-		  break;
-		case 'r':
-                  lv.has_sign(false);
-		  // fallthrough
-		case 'R':
-		  val = cast_to_width(lv >> shift, wid);
-		  break;
-		default:
-		  return 0;
-	    }
-      } else {
-	    val = verinum(verinum::Vx, wid);
-      }
+      auto val = cast_to_width(eval_binary(*this, op_, lv, rv), wid);
       val.has_sign(has_sign());
       res = new NetEConst(val);
       ivl_assert(*this, res);
@@ -1195,12 +1196,12 @@ NetEConst* NetEConcat::eval_arguments_(const vector<NetExpr*>&vals,
 NetEConst* NetESelect::eval_tree()
 {
       eval_expr(expr_);
-      const NetEConst*expr = dynamic_cast<NetEConst*>(expr_);
+      const NetEConst*expr = dynamic_cast<NetEConst*>(expr_.get());
 
       long bval = 0;
       if (base_) {
 	    eval_expr(base_);
-	    const NetEConst*base = dynamic_cast<NetEConst*>(base_);
+	    const NetEConst*base = dynamic_cast<NetEConst*>(base_.get());
 
 	    if (base == 0) return 0;
 
@@ -1264,14 +1265,14 @@ static void print_ternary_cond(NetExpr*expr)
 NetExpr* NetETernary::eval_tree()
 {
       eval_expr(cond_);
-      switch (const_logical(cond_)) {
+      switch (const_logical(cond_.get())) {
 	  case C_0:
 	    eval_expr(false_val_);
 	    if (debug_eval_tree) {
 
 		  cerr << get_fileline() << ": debug: Evaluate ternary with "
 		       << "constant condition value: ";
-		  print_ternary_cond(cond_);
+		  print_ternary_cond(cond_.get());
 		  cerr << get_fileline() << ":      : Selecting false case: "
 		       << *false_val_ << endl;
 	    }
@@ -1282,7 +1283,7 @@ NetExpr* NetETernary::eval_tree()
 	    if (expr_type() == IVL_VT_REAL &&
 	        false_val_->expr_type() != IVL_VT_REAL) {
 		  verireal f;
-		  if (get_real_arg_(false_val_, f)) {
+		  if (get_real_arg_(false_val_.get(), f)) {
 			NetECReal*rc = new NetECReal(f);
 			rc->set_line(*this);
 			return rc;
@@ -1296,7 +1297,7 @@ NetExpr* NetETernary::eval_tree()
 	    if (debug_eval_tree) {
 		  cerr << get_fileline() << ": debug: Evaluate ternary with "
 		       << "constant condition value: ";
-		  print_ternary_cond(cond_);
+		  print_ternary_cond(cond_.get());
 		  cerr << get_fileline() << ":      : Selecting true case: "
 		       << *true_val_ << endl;
 	    }
@@ -1307,7 +1308,7 @@ NetExpr* NetETernary::eval_tree()
 	    if (expr_type() == IVL_VT_REAL &&
 	        true_val_->expr_type() != IVL_VT_REAL) {
 		  verireal t;
-		  if (get_real_arg_(true_val_, t)) {
+		  if (get_real_arg_(true_val_.get(), t)) {
 			NetECReal*rc = new NetECReal(t);
 			rc->set_line(*this);
 			return rc;
@@ -1330,7 +1331,7 @@ NetExpr* NetETernary::eval_tree()
       eval_expr(true_val_);
       eval_expr(false_val_);
 
-      return blended_arguments_(true_val_, false_val_);
+      return blended_arguments_(true_val_.get(), false_val_.get());
 }
 
 NetExpr*NetETernary::blended_arguments_(const NetExpr*te, const NetExpr*fe) const
@@ -1349,7 +1350,7 @@ NetExpr*NetETernary::blended_arguments_(const NetExpr*te, const NetExpr*fe) cons
 	    if (debug_eval_tree) {
 		  cerr << get_fileline() << ": debug: Evaluate ternary with "
 		       << "constant condition value: ";
-		  print_ternary_cond(cond_);
+		  print_ternary_cond(cond_.get());
 		  cerr << get_fileline() << ":      : Blending real cases "
 		       << "true=" << tv.as_double()
 		       << ", false=" << fv.as_double()
@@ -1379,7 +1380,7 @@ NetExpr*NetETernary::blended_arguments_(const NetExpr*te, const NetExpr*fe) cons
       if (debug_eval_tree) {
 	    cerr << get_fileline() << ": debug: Evaluate ternary with "
 		 << "constant condition value: ";
-	    print_ternary_cond(cond_);
+	    print_ternary_cond(cond_.get());
 	    cerr << get_fileline() << ":      : Blending cases to get "
 		 << val << endl;
       }
@@ -1396,7 +1397,7 @@ NetExpr*NetETernary::blended_arguments_(const NetExpr*te, const NetExpr*fe) cons
 NetExpr* NetEUnary::eval_tree()
 {
       eval_expr(expr_);
-      return eval_arguments_(expr_);
+      return eval_arguments_(expr_.get());
 }
 
 NetExpr* NetEUnary::eval_tree_real_(const NetExpr*ex) const
@@ -1642,10 +1643,13 @@ NetEConst* NetESFunc::evaluate_clog2_(const NetExpr*arg_) const
       if (tmpi == 0 && tmpr == 0) return 0;
 
       verinum arg;
+      bool is_neg_real = false;
       if (tmpi) {
 	    arg = tmpi->value();
       } else {
 	    arg = verinum(tmpr->value().as_double(), true);
+            if (arg.is_negative())
+                  is_neg_real = true;
       }
 
       NetEConst*rtn;
@@ -1658,16 +1662,8 @@ NetEConst* NetESFunc::evaluate_clog2_(const NetExpr*arg_) const
 	    rtn = new NetEConst(tmp);
 	    ivl_assert(*this, rtn);
       } else {
-	    bool is_neg = false;
 	    uint64_t res = 0;
 
-	    if (arg.is_negative()) {
-		  is_neg = true;
-		    // If the length is not defined, then work with
-		    // the trimmed version of the number.
-		  if (! arg.has_len())
-			arg = trim_vnum(arg);
-	    }
 	    arg.has_sign(false);  // $unsigned()
 
 	    if (!arg.is_zero()) {
@@ -1678,7 +1674,10 @@ NetEConst* NetESFunc::evaluate_clog2_(const NetExpr*arg_) const
 		  }
 	    }
 
-	    if (is_neg && res < integer_width)
+            // Allowing real arguments to $clog2 is an Icarus extension.
+            // Preserve the legacy behaviour that returns a minimum value
+            // of integer_width.
+	    if (is_neg_real && res < integer_width)
 		  res = integer_width;
 
 	    verinum tmp (res, integer_width);
@@ -2250,7 +2249,9 @@ NetEConst* NetESFunc::evaluate_array_funcs_(ID id,
       if (check_dimension(arg1, dim)) return 0;
 	/* If dimension is less than 1 return undefined. */
       if (dim < 1) {
-	    return new NetEConst(verinum(verinum::Vx, integer_width));
+	    verinum value(verinum::Vx, integer_width);
+	    value.has_sign(true);
+	    return new NetEConst(value);
       }
 	/* Get the left/right information for this dimension if it exists. */
       long left = 0;
@@ -2261,7 +2262,9 @@ NetEConst* NetESFunc::evaluate_array_funcs_(ID id,
 	       * call since the left/right information is dynamic and is
 	       * not available yet. */
 	    if (defer) return 0;
-	    return new NetEConst(verinum(verinum::Vx, integer_width));
+	    verinum value(verinum::Vx, integer_width);
+	    value.has_sign(true);
+	    return new NetEConst(value);
       }
 	/* Calculate the appropriate array function result. */
       long res;
@@ -2432,7 +2435,7 @@ NetESFunc::ID NetESFunc::built_in_id_() const
 
 	/* Look for the given function and if it is not available return
 	 * NOT_BUILT_IN otherwise return the ID for the function. */
-      map<string,ID>::iterator idx = built_in_func.find(name_);
+      map<string,ID>::iterator idx = built_in_func.find(name_.str());
 
       if (idx == built_in_func.end()) return NOT_BUILT_IN;
 
@@ -2530,5 +2533,8 @@ NetExpr* NetEUFunc::eval_tree()
 	    args[idx] = parms_[idx]->dup_expr();
 
       NetExpr*res = def->evaluate_function(*this, args);
+      if (NetEConst*value = dynamic_cast<NetEConst*>(res)) {
+	    value->cast_signed(has_sign());
+      }
       return res;
 }

@@ -27,44 +27,6 @@ static void fallback_eval(ivl_expr_t expr)
       fprintf(vvp_out, "    %%pushv/str; Cast BOOL/LOGIC to string\n");
 }
 
-static void draw_ternary_string(ivl_expr_t expr)
-{
-      ivl_expr_t cond = ivl_expr_oper1(expr);
-      ivl_expr_t true_ex = ivl_expr_oper2(expr);
-      ivl_expr_t false_ex = ivl_expr_oper3(expr);
-
-      unsigned lab_false = local_count++;
-      unsigned lab_out   = local_count++;
-
-      int use_flag = draw_eval_condition(cond);
-
-	/* The operand-evaluation code may clobber flags 0-7, so move the
-	   condition into a safe slot if needed. */
-      if (use_flag < 8) {
-	    int tmp_flag = allocate_flag();
-	    assert(tmp_flag >= 8);
-	    fprintf(vvp_out, "    %%flag_mov %d, %d;\n", tmp_flag, use_flag);
-	    use_flag = tmp_flag;
-      }
-
-	/* Strings have no natural bit-blend on an xz condition, so treat
-	   xz the same as false. */
-      fprintf(vvp_out, "    %%jmp/0xz T_%u.%u, %d;\n",
-	      thread_count, lab_false, use_flag);
-
-      draw_eval_string(true_ex);
-      fprintf(vvp_out, "    %%jmp T_%u.%u;\n", thread_count, lab_out);
-
-      fprintf(vvp_out, "T_%u.%u ; False branch of ternary.\n",
-	      thread_count, lab_false);
-      draw_eval_string(false_ex);
-
-      fprintf(vvp_out, "T_%u.%u ; End of ternary.\n",
-	      thread_count, lab_out);
-
-      clr_flag(use_flag);
-}
-
 static void string_ex_concat(ivl_expr_t expr)
 {
       unsigned repeat;
@@ -221,7 +183,6 @@ static void string_ex_pop(ivl_expr_t expr)
 
 static void draw_sfunc_string(ivl_expr_t expr)
 {
-    assert(ivl_expr_value(expr) == IVL_VT_STRING);
     draw_vpi_sfunc_call(expr);
 }
 
@@ -260,12 +221,12 @@ void draw_eval_string(ivl_expr_t expr)
 		  draw_sfunc_string(expr);
 	    break;
 
-	  case IVL_EX_UFUNC:
-	    draw_ufunc_string(expr);
+	  case IVL_EX_TERNARY:
+	    draw_eval_ternary(expr, draw_eval_string, "%blend/str");
 	    break;
 
-	  case IVL_EX_TERNARY:
-	    draw_ternary_string(expr);
+	  case IVL_EX_UFUNC:
+	    draw_ufunc(expr);
 	    break;
 
 	  default:

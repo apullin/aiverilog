@@ -41,7 +41,7 @@ class Design;
 class NetScope;
 class Definitions;
 class PExpr;
-class PScope;
+class PEIdent;
 class PPackage;
 class PWire;
 class Statement;
@@ -162,7 +162,7 @@ struct name_component_t {
       std::list<index_component_t>index;
 };
 
-struct decl_assignment_t {
+struct decl_assignment_t : public LineInfo {
       pform_ident_t name;
       std::list<pform_range_t>index;
       std::unique_ptr<PExpr> expr;
@@ -224,17 +224,17 @@ public:
       perm_string name;
 };
 
-struct typeref_t : public data_type_t {
-      explicit typeref_t(typedef_t *t, PScope *s = 0) : scope(s), type(t) {}
+/* A data type whose identifier is resolved during elaboration. */
+struct type_identifier_t : public data_type_t {
+      explicit type_identifier_t(PEIdent *identifier);
+      ~type_identifier_t() override;
 
-      ivl_type_t elaborate_type_raw(Design*des, NetScope*scope) const override;
-      NetScope *find_scope(Design* des, NetScope *scope) const override;
+      ivl_type_t elaborate_type_raw(Design *des, NetScope *scope) const override;
 
       std::ostream& debug_dump(std::ostream&out) const override;
 
 private:
-      PScope *scope;
-      typedef_t *type;
+      std::unique_ptr<PEIdent> identifier_;
 };
 
 struct type_parameter_t : data_type_t {
@@ -246,6 +246,14 @@ struct type_parameter_t : data_type_t {
 
 struct void_type_t : public data_type_t {
       virtual void pform_dump(std::ostream&out, unsigned indent) const override;
+};
+
+// Each enumerator has its own symbol location, distinct from the enum type.
+struct enum_name_t : public PNamedItem {
+      perm_string name;
+      PExpr*parm = nullptr;
+
+      SymbolType symbol_type() const override;
 };
 
 /*
@@ -263,7 +271,7 @@ struct enum_type_t : public data_type_t {
       SymbolType symbol_type() const override;
 
       std::unique_ptr<data_type_t> base_type;
-      std::unique_ptr< std::list<named_pexpr_t> > names;
+      std::unique_ptr< std::list<enum_name_t> > names;
 };
 
 struct struct_member_t : public LineInfo {
@@ -387,6 +395,13 @@ struct real_type_t : public data_type_t {
 struct string_type_t : public data_type_t {
       inline explicit string_type_t() { }
       ~string_type_t() override;
+
+      ivl_type_t elaborate_type_raw(Design*des, NetScope*scope) const override;
+};
+
+struct chandle_type_t : public data_type_t {
+      inline explicit chandle_type_t() { }
+      ~chandle_type_t() override;
 
       ivl_type_t elaborate_type_raw(Design*des, NetScope*scope) const override;
 };

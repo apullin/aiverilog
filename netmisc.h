@@ -131,7 +131,10 @@ struct symbol_search_results {
 
 enum symbol_search_flag_t {
       SYMBOL_SEARCH_ALLOW_FORWARD_REFERENCE = 1U << 0,
-      SYMBOL_SEARCH_NO_SIGNAL_ELABORATION = 1U << 1
+      SYMBOL_SEARCH_NO_SIGNAL_ELABORATION = 1U << 1,
+        // Ignore relaxed declaration-order compatibility options and require
+        // data objects to be declared before they are used.
+      SYMBOL_SEARCH_STRICT_DECLARATION_ORDER = 1U << 2
 };
 
 /*
@@ -149,7 +152,7 @@ static inline bool test_function_return_value(const symbol_search_results&search
 }
 
 extern bool symbol_search(const LineInfo *li, Design *des, NetScope *scope,
-			  pform_name_t path, unsigned int lexical_pos,
+			  const pform_name_t &path, unsigned int lexical_pos,
 			  struct symbol_search_results *res,
 			  unsigned int flags = 0);
 
@@ -214,6 +217,7 @@ extern NetExpr*cast_to_real(NetExpr*expr);
  * Take the input expression and return a variation that assures that
  * the expression is 1-bit wide and logical. This reflects the needs
  * of conditions i.e. for "if" statements or logical operators.
+ * A null input expression is returned unchanged.
  */
 extern NetExpr*condition_reduce(NetExpr*expr);
 
@@ -438,6 +442,18 @@ extern bool evaluate_ranges(Design*des, NetScope*scope, const LineInfo*li,
  * successful the original expression is replaced with the new one.
  */
 void eval_expr(NetExpr*&expr, int context_width =-1);
+void eval_expr(NetExpr::Ptr&expr, int context_width =-1);
+
+/*
+ * Evaluate +, -, *, /, %, bitwise operators and shifts on constants.
+ * Operands must already have their expression widths and signedness.
+ * Callers apply result width, signedness and assignment conversions.
+ * The real overload supports only arithmetic operators.
+ */
+verinum eval_binary(const LineInfo&loc, char op,
+                    const verinum&left, const verinum&right);
+verireal eval_binary(const LineInfo&loc, char op,
+                     const verireal&left, const verireal&right);
 
 /*
  * Get the long integer value for the passed in expression, if
@@ -526,5 +542,14 @@ extern NetPartSelect* detect_partselect_lval(Link&pin);
  * based delays in the design, since this is likely an error.
  */
 extern void check_for_inconsistent_delays(const NetScope*scope);
+
+/*
+ * Check the arguments of a $cast(dest, src) call for class handles:
+ * the dest must be a class variable or property, and the classes must
+ * be the same or related by inheritance. Print an error and return
+ * false if not.
+ */
+extern bool check_class_cast_args(Design*des, const LineInfo*li,
+				  const NetExpr*dest, const NetExpr*src);
 
 #endif /* IVL_netmisc_H */

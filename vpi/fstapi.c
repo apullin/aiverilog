@@ -4906,6 +4906,8 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
     for (;;) {
         uint32_t *tc_head = NULL;
         uint32_t tc_head_items = 0;
+        int have_physical_chain = 0;
+        pidx = 0; /* current section only */
         traversal_mem_offs = 0;
 
         fstReaderFseeko(xc, xc->f, blkpos, SEEK_SET);
@@ -5339,10 +5341,11 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
                     int64_t shval = fstGetSVarint64(pnt, &skiplen) >> 1;
                     if (shval > 0) {
                         pval = chain_table[idx] = pval + shval;
-                        if (idx) {
+                        if (have_physical_chain) {
                             chain_table_lengths[pidx] = pval - chain_table[pidx];
                         }
                         pidx = idx++;
+                        have_physical_chain = 1;
                     } else if (shval < 0) {
                         chain_table[idx] =
                             0; /* need to explicitly zero as calloc above might not run */
@@ -5366,7 +5369,9 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
                     }
 
                     for (i = 0; i < loopcnt; i++) {
-                        chain_table[idx++] = 0;
+                        chain_table[idx] = 0;
+                        chain_table_lengths[idx] = 0;
+                        idx++;
                     }
                 }
 
@@ -5387,10 +5392,11 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
                     idx++;
                 } else if (val & 1) {
                     pval = chain_table[idx] = pval + (val >> 1);
-                    if (idx) {
+                    if (have_physical_chain) {
                         chain_table_lengths[pidx] = pval - chain_table[pidx];
                     }
                     pidx = idx++;
+                    have_physical_chain = 1;
                 } else {
                     fstHandle loopcnt = val >> 1;
 
@@ -5400,7 +5406,9 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
                     }
 
                     for (i = 0; i < loopcnt; i++) {
-                        chain_table[idx++] = 0;
+                        chain_table[idx] = 0;
+                        chain_table_lengths[idx] = 0;
+                        idx++;
                     }
                 }
 
@@ -5409,7 +5417,8 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
         }
 
         chain_table[idx] = indx_pos - vc_start;
-        chain_table_lengths[pidx] = chain_table[idx] - chain_table[pidx];
+        if (have_physical_chain)
+            chain_table_lengths[pidx] = chain_table[idx] - chain_table[pidx];
 
         for (i = 0; i < idx; i++) {
             int32_t v32 = chain_table_lengths[i];
@@ -5454,7 +5463,9 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
                         unsigned long destlen = val;
                         unsigned long sourcelen = chain_table_lengths[i];
 
-                        if (traversal_mem_offs >= mem_required_for_traversal) {
+                        if ((uint64_t)traversal_mem_offs > mem_required_for_traversal ||
+                            (uint64_t)val > mem_required_for_traversal - traversal_mem_offs ||
+                            (uint64_t)val > UINT32_MAX - traversal_mem_offs) {
                             chk_report_abort("TALOS-2023-1785");
                         }
 
@@ -5496,7 +5507,10 @@ int fstReaderIterBlocks2(fstReaderContext *ctx,
                         int destlen = chain_table_lengths[i] - skiplen;
                         unsigned char *mu = mem_for_traversal + traversal_mem_offs;
 
-                        if (traversal_mem_offs >= mem_required_for_traversal) {
+                        if (destlen <= 0 ||
+                            (uint64_t)traversal_mem_offs > mem_required_for_traversal ||
+                            (uint64_t)destlen > mem_required_for_traversal - traversal_mem_offs ||
+                            (uint64_t)destlen > UINT32_MAX - traversal_mem_offs) {
                             chk_report_abort("TALOS-2023-1785");
                         }
 
@@ -6178,12 +6192,49 @@ char *fstReaderGetValueFromHandleAtTime(fstReaderContext *xc,
     fprintf(stderr, FST_APIMESS "indx_pos: %d (%d bytes)\n", (int)indx_pos, (int)chain_clen);
 #endif
     chain_cmem = (unsigned char *)malloc(chain_clen);
+    if(!chain_cmem) {
+        return(NULL);
+    }
     fstReaderFseeko(xc, xc->f, indx_pos, SEEK_SET);
     fstFread(chain_cmem, chain_clen, 1, xc->f);
 
+    if (!(xc->rvat_vc_maxhandle + 1)) {
+        chk_report_abort("TALOS-2023-1798");
+    }
+
+    if (sizeof(size_t) < sizeof(uint64_t)) {
+        /* TALOS-2023-1798 for 32b overflow */
+        uint64_t chk_64 = (xc->rvat_vc_maxhandle + 1) * sizeof(fst_off_t);
+        size_t chk_32 = ((size_t)(xc->rvat_vc_maxhandle + 1)) * sizeof(fst_off_t);
+        if (chk_64 != chk_32)
+            chk_report_abort("TALOS-2023-1798");
+    } else {
+        uint64_t chk_64 = (xc->rvat_vc_maxhandle + 1) * sizeof(fst_off_t);
+        if ((chk_64 / sizeof(fst_off_t)) != (xc->rvat_vc_maxhandle + 1)) {
+            chk_report_abort("TALOS-2023-1798");
+        }
+    }
     xc->rvat_chain_table = (fst_off_t *)calloc((xc->rvat_vc_maxhandle + 1), sizeof(fst_off_t));
+
+    if (sizeof(size_t) < sizeof(uint64_t)) {
+        /* TALOS-2023-1798 for 32b overflow */
+        uint64_t chk_64 = (xc->rvat_vc_maxhandle + 1) * sizeof(uint32_t);
+        size_t chk_32 = ((size_t)(xc->rvat_vc_maxhandle + 1)) * sizeof(uint32_t);
+        if (chk_64 != chk_32)
+            chk_report_abort("TALOS-2023-1798");
+    } else {
+        uint64_t chk_64 = (xc->rvat_vc_maxhandle + 1) * sizeof(uint32_t);
+        if ((chk_64 / sizeof(uint32_t)) != (xc->rvat_vc_maxhandle + 1)) {
+            chk_report_abort("TALOS-2023-1798");
+        }
+    }
     xc->rvat_chain_table_lengths =
         (uint32_t *)calloc((xc->rvat_vc_maxhandle + 1), sizeof(uint32_t));
+
+    if (!xc->rvat_chain_table || !xc->rvat_chain_table_lengths) {
+        free(chain_cmem);
+        return(NULL);
+    }
 
     pnt = chain_cmem;
     idx = 0;
@@ -6220,6 +6271,11 @@ char *fstReaderGetValueFromHandleAtTime(fstReaderContext *xc,
                 uint64_t val = fstGetVarint32(pnt, &skiplen);
 
                 fstHandle loopcnt = val >> 1;
+                if ((idx + loopcnt - 1) > xc->rvat_vc_maxhandle) /* TALOS-2023-1789 */
+                {
+                    chk_report_abort("TALOS-2023-1789");
+                }
+
                 for (i = 0; i < loopcnt; i++) {
                     xc->rvat_chain_table[idx++] = 0;
                 }
@@ -6246,6 +6302,11 @@ char *fstReaderGetValueFromHandleAtTime(fstReaderContext *xc,
                 pidx = idx++;
             } else {
                 fstHandle loopcnt = val >> 1;
+                if ((idx + loopcnt - 1) > xc->rvat_vc_maxhandle) /* TALOS-2023-1789 */
+                {
+                    chk_report_abort("TALOS-2023-1789");
+                }
+
                 for (i = 0; i < loopcnt; i++) {
                     xc->rvat_chain_table[idx++] = 0;
                 }
