@@ -213,16 +213,18 @@ void __vpiStringConst::vpi_get_value(p_vpi_value vp)
 	      }
 	      break;
 
-          case vpiVectorVal:
+          case vpiVectorVal: {
+              unsigned words = (size + 3) / 4;
+              if (words == 0) words = 1;
               vp->value.vector = static_cast<p_vpi_vecval>
-                                 (need_result_buf((size+3)/4*
-                                                   sizeof(s_vpi_vecval),
+                                 (need_result_buf(words * sizeof(s_vpi_vecval),
                                                   RBUF_VAL));
               uint_value = 0;
               vecp = vp->value.vector;
               vecp->aval = vecp->bval = 0;
 	      for(unsigned i=0; i<size; i += 1){
-		  vecp->aval |= value_[i] << uint_value*8;
+		  PLI_UINT32 byte = static_cast<unsigned char>(value_[i]);
+		  vecp->aval |= static_cast<PLI_INT32>(byte << (uint_value * 8));
 		  uint_value += 1;
 		  if (uint_value > 3 && i+1 < size) {
 		      uint_value = 0;
@@ -231,6 +233,7 @@ void __vpiStringConst::vpi_get_value(p_vpi_value vp)
 		  }
 	      }
 	      break;
+          }
 
 
 	  default:
