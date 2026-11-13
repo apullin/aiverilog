@@ -928,6 +928,14 @@ bool PEIdent::elaborate_lnet_packed_member_(Design*des, NetScope*scope,
 	// reflects the array index.
       if (sig->packed_dimensions() > 1) {
 	    list<index_component_t>tmp_index = base_path.back().index;
+	    for (unsigned idx = 0 ; idx < sig->unpacked_dimensions() && !tmp_index.empty() ; idx += 1)
+		  tmp_index.pop_front();
+	    if (tmp_index.size() + 1 != sig->packed_dimensions()) {
+		  cerr << get_fileline() << ": error: Incorrect number of packed indices for "
+		       << sig->name() << "." << endl;
+		  des->errors += 1;
+		  return false;
+	    }
 	    index_component_t member_select;
 	    member_select.sel = index_component_t::SEL_BIT;
 	    member_select.msb = new PENumber(new verinum(member_off));
@@ -1024,24 +1032,6 @@ bool PEIdent::elaborate_lnet_packed_member_(Design*des, NetScope*scope,
 	// part select of the base variable.
       lidx = member_off;
       midx = lidx + member_width - 1;
-
-	// Elaborate an expression from the packed indices and
-	// the member offset (into the structure) to get a
-	// canonical expression into the packed signal vector.
-      if (sig->packed_dimensions() > 1) {
-	    list<index_component_t>tmp_index = base_path.back().index;
-	    index_component_t member_select;
-	    member_select.sel = index_component_t::SEL_BIT;
-	    member_select.msb = new PENumber(new verinum(member_off));
-	    tmp_index.push_back(member_select);
-	    const NetExpr*packed_base = collapse_array_indices(des, scope, sig, tmp_index);
-
-	    if (debug_elaborate) {
-		  cerr << get_fileline() << ": PEIdent::elaborate_lnet_packed_member_: "
-		       << "packed_base=" << *packed_base
-		       << ", member_off=" << member_off << endl;
-	    }
-      }
 
       return true;
 }

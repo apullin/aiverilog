@@ -1642,6 +1642,8 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
       NetExpr*packed_base = 0;
       if (reg->packed_dimensions() > 1) {
 	    list<index_component_t>tmp_index = name_base.index;
+	    for (unsigned idx = 0 ; idx < reg->unpacked_dimensions() ; idx += 1)
+		  tmp_index.pop_front();
 	    index_component_t member_select;
 	    member_select.sel = index_component_t::SEL_BIT;
 	    member_select.msb = new PENumber(new verinum(off));
