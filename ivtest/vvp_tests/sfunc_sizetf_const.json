@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "sfunc_sizetf_const.v",
+    "iverilog-args" : [ "-g2012" ]
+}

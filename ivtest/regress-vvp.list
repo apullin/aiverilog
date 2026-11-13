@@ -513,6 +513,7 @@ sf_countones_fail		vvp_tests/sf_countones_fail.json
 sf_isunknown_fail		vvp_tests/sf_isunknown_fail.json
 sf_onehot_fail			vvp_tests/sf_onehot_fail.json
 sf_onehot0_fail			vvp_tests/sf_onehot0_fail.json
+sfunc_sizetf_const		vvp_tests/sfunc_sizetf_const.json
 shift6				vvp_tests/shift6.json
 shift_immediate			vvp_tests/shift_immediate.json
 shiftl_wide			vvp_tests/shiftl_wide.json
