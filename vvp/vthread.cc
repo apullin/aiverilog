@@ -5523,6 +5523,15 @@ static size_t property_object_index(vthread_t thr, unsigned reg)
       return index;
 }
 
+static bool report_null_object_access(vthread_t thr)
+{
+      cerr << thr->get_fileline()
+           << "VVP error: cannot access property of null class object." << endl;
+      vpip_set_return_value(1);
+      schedule_finish(0);
+      return false;
+}
+
 /*
  * %prop/obj <pid>, <idx>
  *
@@ -5535,6 +5544,8 @@ bool of_PROP_OBJ(vthread_t thr, vvp_code_t cp)
 
       vvp_object_t&obj = thr->peek_object();
       vvp_cobject*cobj = obj.peek<vvp_cobject>();
+      if (!cobj)
+	    return report_null_object_access(thr);
 
       vvp_object_t val;
       cobj->get_object(pid, val, idx);
@@ -5566,7 +5577,8 @@ static bool prop(vthread_t thr, vvp_code_t cp)
 
       vvp_object_t&obj = thr->peek_object();
       vvp_cobject*cobj = obj.peek<vvp_cobject>();
-      assert(cobj);
+      if (!cobj)
+	    return report_null_object_access(thr);
 
       ELEM val;
       get_from_obj(pid, cobj, val);
@@ -6573,7 +6585,8 @@ bool of_STORE_PROP_OBJ(vthread_t thr, vvp_code_t cp)
 
       vvp_object_t&obj = thr->peek_object();
       vvp_cobject*cobj = obj.peek<vvp_cobject>();
-      assert(cobj);
+      if (!cobj)
+	    return report_null_object_access(thr);
 
       cobj->set_object(pid, val, idx);
 
@@ -6621,7 +6634,8 @@ static bool store_prop(vthread_t thr, vvp_code_t cp, unsigned wid=0)
 
       vvp_object_t&obj = thr->peek_object();
       vvp_cobject*cobj = obj.peek<vvp_cobject>();
-      assert(cobj);
+      if (!cobj)
+	    return report_null_object_access(thr);
 
       set_val(cobj, pid, val);
 
@@ -6687,7 +6701,8 @@ static bool store_prop_qb(vthread_t thr, vvp_code_t cp, unsigned wid)
 
       vvp_object_t& top = thr->peek_object();
       vvp_cobject*cobj = top.peek<vvp_cobject>();
-      assert(cobj);
+      if (!cobj)
+	    return report_null_object_access(thr);
 
       QTYPE* queue = get_queue_prop<QTYPE>(cobj, pid);
       assert(queue);
@@ -6705,7 +6720,8 @@ static bool store_prop_qf(vthread_t thr, vvp_code_t cp, unsigned wid)
 
       vvp_object_t& top = thr->peek_object();
       vvp_cobject*cobj = top.peek<vvp_cobject>();
-      assert(cobj);
+      if (!cobj)
+	    return report_null_object_access(thr);
 
       QTYPE* queue = get_queue_prop<QTYPE>(cobj, pid);
       assert(queue);
