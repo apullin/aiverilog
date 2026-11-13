@@ -1,0 +1,1 @@
+./ivltests/br_gh1551_read.v:10: VVP error: cannot access property of null class object.
