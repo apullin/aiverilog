@@ -390,16 +390,26 @@ static const netclass_t* resolve_call_chain_prefix_class(Design*des, NetScope*sc
 			       link->lexical_pos(), &sr,
 			       SYMBOL_SEARCH_ALLOW_FORWARD_REFERENCE)) {
 		  return 0;
-		}
-	    if (!sr.is_scope() || sr.scope->type() != NetScope::FUNC) {
-		  return 0;
-		}
-	    NetFuncDef* fundef = sr.scope->func_def();
-	    ivl_assert(*link, fundef);
-	    NetScope* dscope = fundef->scope();
-	    const NetNet* res = dscope->find_signal(dscope->basename());
-	    if (res == 0) return 0;
-	    return dynamic_cast<const netclass_t*>(res->net_type());
+	    }
+	    if (sr.is_scope() && sr.scope->type() == NetScope::FUNC) {
+		  const NetNet* res = sr.scope->find_signal(sr.scope->basename());
+		  if (res == 0) return 0;
+		  return dynamic_cast<const netclass_t*>(res->net_type());
+	    }
+	    if (!sr.is_scope() && sr.net && sr.net->data_type() == IVL_VT_CLASS
+		&& !sr.path_tail.empty()) {
+		  const netclass_t* cur_class = dynamic_cast<const netclass_t*>(sr.type);
+		  for (auto it = sr.path_tail.begin(); it != sr.path_tail.end(); ++it) {
+			if (cur_class == 0) return 0;
+			NetScope* meth = cur_class->method_from_name(it->name);
+			if (meth == 0) return 0;
+			const NetNet* res = meth->find_signal(meth->basename());
+			if (res == 0) return 0;
+			cur_class = dynamic_cast<const netclass_t*>(res->net_type());
+		  }
+		  return cur_class;
+	    }
+	    return 0;
       }
 
       PECallFunction* inner = dynamic_cast<PECallFunction*>(
@@ -412,8 +422,6 @@ static const netclass_t* resolve_call_chain_prefix_class(Design*des, NetScope*sc
       perm_string mname = peek_tail_name(link->peek_path());
       NetScope* mscope = recv_class->method_from_name(mname);
       if (mscope == 0) return 0;
-      const NetFuncDef* mdef = mscope->func_def();
-      if (mdef == 0) return 0;
       const NetNet* mres = mscope->find_signal(mscope->basename());
       if (mres == 0) return 0;
       return dynamic_cast<const netclass_t*>(mres->net_type());
@@ -2540,9 +2548,6 @@ unsigned PECallFunction::test_width_chain_(Design*des, NetScope*scope,
       perm_string mname = peek_tail_name(path_);
       NetScope* mscope = cls->method_from_name(mname);
       if (mscope == 0) return 0;
-
-      const NetFuncDef* mdef = mscope->func_def();
-      if (mdef == 0 || mdef->is_void()) return 0;
 
       const NetNet* mres = mscope->find_signal(mscope->basename());
       if (mres == 0) return 0;
