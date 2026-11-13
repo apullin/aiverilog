@@ -347,8 +347,11 @@ struct array_base_t : public data_type_t {
     public:
       inline explicit array_base_t(data_type_t*btype, std::list<pform_range_t>*pd)
       : base_type(btype), dims(pd) { }
+      inline explicit array_base_t(std::shared_ptr<data_type_t> btype,
+				   std::list<pform_range_t>*pd)
+      : base_type(std::move(btype)), dims(pd) { }
 
-      std::unique_ptr<data_type_t> base_type;
+      std::shared_ptr<data_type_t> base_type;
       std::unique_ptr< std::list<pform_range_t> > dims;
 };
 
@@ -372,6 +375,9 @@ struct parray_type_t : public array_base_t {
 struct uarray_type_t : public array_base_t {
       inline explicit uarray_type_t(data_type_t*btype, std::list<pform_range_t>*pd)
       : array_base_t(btype, pd) { }
+      inline explicit uarray_type_t(std::shared_ptr<data_type_t> btype,
+				    std::list<pform_range_t>*pd)
+      : array_base_t(std::move(btype), pd) { }
 
     public:
       virtual void pform_dump(std::ostream&out, unsigned indent) const override;
@@ -432,7 +438,7 @@ struct class_type_t : public data_type_t {
 	    prop_info_t& operator=(prop_info_t&&) = default;
 	    SymbolType symbol_type() const override { return CLASS_PROPERTY; }
 	    property_qualifier_t qual;
-	    std::unique_ptr<data_type_t> type;
+	    std::shared_ptr<data_type_t> type;
 	    bool has_initializer = false;
       };
       std::map<perm_string, struct prop_info_t> properties;

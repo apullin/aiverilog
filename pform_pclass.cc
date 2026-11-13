@@ -72,6 +72,8 @@ void pform_class_property(const struct vlltype&loc,
 {
       ivl_assert(loc, pform_cur_class);
 
+      std::shared_ptr<data_type_t> shared_type(data_type);
+
 	// Add the non-static properties to the class type
 	// object. Unwind the list of names to make a map of name to
 	// type.
@@ -89,8 +91,10 @@ void pform_class_property(const struct vlltype&loc,
 	    // can not be registered in the local symbol table yet since that would
 	    // store a pointer to the temporary.
 	    if (!pform_check_local_symbol(pform_cur_class, curp->name.first,
-					  &property))
+					  &property)) {
+		  delete curp;
 		  continue;
+	    }
 
 	    auto result = pform_cur_class->type->properties.emplace(
 		  curp->name.first, std::move(property));
@@ -103,15 +107,16 @@ void pform_class_property(const struct vlltype&loc,
 		  curp->name.first, &property_info);
 	    ivl_assert(loc, symbol.second);
 
-	    data_type_t*use_type = data_type;
+	    std::shared_ptr<data_type_t> use_type = shared_type;
 
 	    if (! curp->index.empty()) {
 		  list<pform_range_t>*pd = new list<pform_range_t> (curp->index);
-		  use_type = new uarray_type_t(use_type, pd);
-		  FILE_NAME(use_type, loc);
+		  auto ua = std::make_shared<uarray_type_t>(use_type, pd);
+		  FILE_NAME(ua.get(), loc);
+		  use_type = std::move(ua);
 	    }
 
-	    property_info.type.reset(use_type);
+	    property_info.type = std::move(use_type);
 
 	    if (PExpr*rval = curp->expr.release()) {
 		  PExpr*lval = new PEIdent(curp->name.first, curp->name.second);
@@ -124,7 +129,9 @@ void pform_class_property(const struct vlltype&loc,
 		  else
 			pform_cur_class->type->initialize.push_back(tmp);
 	    }
+	    delete curp;
       }
+      delete decls;
 }
 
 /*
