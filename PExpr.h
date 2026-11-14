@@ -1225,6 +1225,33 @@ class PECastSign : public PExpr {
 };
 
 /*
+ * SystemVerilog set-membership "inside" expression (IEEE 1800-2017 11.4.13).
+ */
+class PEInside : public PExpr {
+
+    public:
+      struct item_t {
+	    PExpr*lo;
+	    PExpr*hi;
+	    bool is_range;
+      };
+
+      PEInside(PExpr*lhs, std::vector<item_t>*items);
+      ~PEInside() override;
+
+      void dump(std::ostream &out) const override;
+      void declare_implicit_nets(LexicalScope*scope, NetNet::Type type) override;
+      bool has_aa_term(Design*des, NetScope*scope) const override;
+      unsigned test_width(Design*des, NetScope*scope, width_mode_t&mode) override;
+      NetExpr* elaborate_expr(Design*des, NetScope*scope,
+			      unsigned expr_wid, unsigned flags) const override;
+
+    private:
+      PExpr*lhs_;
+      std::vector<item_t> items_;
+};
+
+/*
  * This class is used for error recovery. All methods do nothing and return
  * null or default values.
  */
