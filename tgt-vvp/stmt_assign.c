@@ -1097,29 +1097,69 @@ static void show_stmt_assign_sig_darray_queue_mux(ivl_statement_t net)
 	    draw_eval_expr_into_integer(mux, 3);
 	    break;
 	  case IVL_VT_BOOL:
-	  case IVL_VT_LOGIC:
-	    if (ivl_stmt_opcode(net) != 0) {
-		  int mux_word = allocate_word();
-		  int flag = allocate_flag();
+	  case IVL_VT_LOGIC: {
+		ivl_expr_t part_off_ex = ivl_lval_part_off(lval);
+		if (part_off_ex) {
+		      unsigned lwid = ivl_stmt_lwidth(net);
+		      int mux_word = allocate_word();
+		      int mux_flag = allocate_flag();
+		      int part_idx = allocate_word();
+		      int part_flag = allocate_flag();
 
-		  draw_eval_expr_into_integer(mux, 3);
-		  fprintf(vvp_out, "    %%ix/mov %d, 3;\n", mux_word);
-		  fprintf(vvp_out, "    %%flag_mov %d, 4;\n", flag);
-		  fprintf(vvp_out, "    %%load/dar/vec4 v%p_0;\n", var);
-		  draw_compressed_vector_op(ivl_stmt_opcode(net),
-					    ivl_stmt_lwidth(net), rval);
-		  if (ivl_type_base(element_type) == IVL_VT_BOOL)
-			fprintf(vvp_out, "    %%cast2;\n");
-		  fprintf(vvp_out, "    %%flag_mov 4, %d;\n", flag);
-		  fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
-		  clr_flag(flag);
-		  clr_word(mux_word);
-	    } else {
-		  draw_eval_vec4(rval);
-		  resize_vec4_wid(rval, ivl_stmt_lwidth(net));
-		  draw_eval_expr_into_integer(mux, 3);
-	    }
-	    break;
+		      draw_eval_expr_into_integer(mux, mux_word);
+		      fprintf(vvp_out, "    %%flag_mov %d, 4;\n", mux_flag);
+		      draw_eval_expr_into_integer(part_off_ex, part_idx);
+		      fprintf(vvp_out, "    %%flag_mov %d, 4;\n", part_flag);
+
+		      fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
+		      fprintf(vvp_out, "    %%flag_mov 4, %d;\n", mux_flag);
+		      fprintf(vvp_out, "    %%load/dar/vec4 v%p_0;\n", var);
+
+		      if (ivl_stmt_opcode(net) != 0) {
+			    fprintf(vvp_out, "    %%dup/vec4;\n");
+			    fprintf(vvp_out, "    %%push/ix/vec4 %d, 32, 1;\n", part_idx);
+			    fprintf(vvp_out, "    %%part/s %u;\n", lwid);
+			    draw_compressed_vector_op(ivl_stmt_opcode(net),
+						      lwid, rval);
+		      } else {
+			    draw_eval_vec4(rval);
+			    resize_vec4_wid(rval, lwid);
+		      }
+
+		      fprintf(vvp_out, "    %%flag_mov 4, %d;\n", part_flag);
+		      fprintf(vvp_out, "    %%set/vec4 %d, %u;\n", part_idx, lwid);
+		      if (ivl_type_base(element_type) == IVL_VT_BOOL)
+			    fprintf(vvp_out, "    %%cast2;\n");
+
+		      fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
+		      fprintf(vvp_out, "    %%flag_mov 4, %d;\n", mux_flag);
+		      clr_flag(part_flag);
+		      clr_word(part_idx);
+		      clr_flag(mux_flag);
+		      clr_word(mux_word);
+		} else if (ivl_stmt_opcode(net) != 0) {
+		      int mux_word = allocate_word();
+		      int flag = allocate_flag();
+
+		      draw_eval_expr_into_integer(mux, 3);
+		      fprintf(vvp_out, "    %%ix/mov %d, 3;\n", mux_word);
+		      fprintf(vvp_out, "    %%flag_mov %d, 4;\n", flag);
+		      fprintf(vvp_out, "    %%load/dar/vec4 v%p_0;\n", var);
+		      draw_compressed_vector_op(ivl_stmt_opcode(net),
+						ivl_stmt_lwidth(net), rval);
+		      if (ivl_type_base(element_type) == IVL_VT_BOOL)
+			    fprintf(vvp_out, "    %%cast2;\n");
+		      fprintf(vvp_out, "    %%flag_mov 4, %d;\n", flag);
+		      fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
+		      clr_flag(flag);
+		      clr_word(mux_word);
+		} else {
+		      draw_eval_vec4(rval);
+		      resize_vec4_wid(rval, ivl_stmt_lwidth(net));
+		      draw_eval_expr_into_integer(mux, 3);
+		}
+		break;
+	  }
 	  default:
 	    assert(0);
 	    break;
@@ -1138,7 +1178,7 @@ static int show_stmt_assign_sig_darray(ivl_statement_t net)
       ivl_type_t element_type = ivl_type_element(var_type);
 
       assert(ivl_stmt_lvals(net) == 1);
-      assert(part == 0);
+      assert(part == 0 || ivl_lval_idx(lval) != 0);
 
       if (ivl_lval_idx(lval)) {
 	    show_stmt_assign_sig_darray_queue_mux(net);
@@ -1294,7 +1334,7 @@ static int show_stmt_assign_sig_queue(ivl_statement_t net)
       ivl_type_t element_type = ivl_type_element(var_type);
 
       assert(ivl_stmt_lvals(net) == 1);
-      assert(part == 0);
+      assert(part == 0 || ivl_lval_idx(lval) != 0);
 
       assert(ivl_type_base(var_type) == IVL_VT_QUEUE);
 

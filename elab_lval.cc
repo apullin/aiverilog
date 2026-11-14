@@ -340,6 +340,11 @@ NetAssign_*PEIdent::elaborate_lval_var_(Design *des, NetScope *scope,
 
       ivl_assert(*this, member_path.empty());
 
+      if (reg->darray_type() && !path_.back().index.empty()) {
+	    elaborate_lval_darray_bit_(des, scope, lv, is_force);
+	    return lv;
+      }
+
       if (use_sel == index_component_t::SEL_PART) {
 	    elaborate_lval_net_part_(des, scope, lv, is_force);
 	    return lv;
@@ -728,6 +733,12 @@ bool PEIdent::elaborate_lval_net_bit_(Design*des,
       return true;
 }
 
+static bool elaborate_packed_vector_slice_lval(Design*des, NetScope*scope,
+					       const LineInfo*li,
+					       const netvector_t*vtype,
+					       const std::list<index_component_t>&indices,
+					       NetAssign_*lv);
+
 bool PEIdent::elaborate_lval_darray_bit_(Design*des,
 					 NetScope*scope,
 					 NetAssign_*lv,
@@ -736,9 +747,6 @@ bool PEIdent::elaborate_lval_darray_bit_(Design*des,
       const name_component_t&name_tail = path_.back();
       ivl_assert(*this, !name_tail.index.empty());
 
-	// For now, only support single-dimension dynamic arrays.
-      ivl_assert(*this, name_tail.index.size() == 1);
-
       if ((lv->sig()->type()==NetNet::UNRESOLVED_WIRE) && !is_force) {
 	    ivl_assert(*this, lv->sig()->coerced_to_uwire());
 	    report_mixed_assignment_conflict_("darray word");
@@ -746,20 +754,51 @@ bool PEIdent::elaborate_lval_darray_bit_(Design*des,
 	    return false;
       }
 
-      const index_component_t&index_tail = name_tail.index.back();
-      ivl_assert(*this, index_tail.lsb == 0);
+      const index_component_t&index_head = name_tail.index.front();
+      if (index_head.sel == index_component_t::SEL_BIT_LAST &&
+          !lv->sig()->queue_type()) {
+	    cerr << get_fileline() << ": error: "
+		 << "The $ index is only allowed for queues." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+      if (index_head.sel != index_component_t::SEL_BIT &&
+          index_head.sel != index_component_t::SEL_BIT_LAST) {
+	    cerr << get_fileline() << ": sorry: Slice assignment on dynamic "
+		    "arrays or queues is not yet supported." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+      ivl_assert(*this, index_head.lsb == 0);
 
 	// Evaluate the select expression, or use the last element for [$].
       NetExpr*mux;
-      if (index_tail.sel == index_component_t::SEL_BIT_LAST) {
+      if (index_head.sel == index_component_t::SEL_BIT_LAST) {
 	    mux = new NetELast(lv->sig());
 	    mux->set_line(*this);
       } else {
-	    ivl_assert(*this, index_tail.msb != 0);
-	    mux = elab_and_eval(des, scope, index_tail.msb, -1);
+	    ivl_assert(*this, index_head.msb != 0);
+	    mux = elab_and_eval(des, scope, index_head.msb, -1);
       }
 
       lv->set_word(mux);
+
+      if (name_tail.index.size() > 1) {
+	    const netdarray_t*darray = lv->sig()->darray_type();
+	    ivl_assert(*this, darray);
+	    const netvector_t*vtype =
+		  dynamic_cast<const netvector_t*>(darray->element_type());
+	    if (!vtype) {
+		  cerr << get_fileline() << ": error: Cannot bit/part-select "
+			  "non-vector dynamic array or queue element." << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+	    std::list<index_component_t>rem = name_tail.index;
+	    rem.pop_front();
+	    return elaborate_packed_vector_slice_lval(des, scope, this, vtype,
+						      rem, lv);
+      }
 
       return true;
 }
