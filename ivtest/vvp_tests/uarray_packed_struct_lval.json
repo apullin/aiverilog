@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "uarray_packed_struct_lval.v",
+    "iverilog-args" : [ "-g2012" ]
+}

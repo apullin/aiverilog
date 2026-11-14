@@ -1098,6 +1098,7 @@ timeformat_neg_width		vvp_tests/timeformat_neg_width.json
 timing_check_delayed_signals	vvp_tests/timing_check_delayed_signals.json
 timing_check_syntax		vvp_tests/timing_check_syntax.json
 uarray_ca_fail			vvp_tests/uarray_ca_fail.json
+uarray_packed_struct_lval	vvp_tests/uarray_packed_struct_lval.json
 uarray_subroutine_port		vvp_tests/uarray_subroutine_port.json
 udp_ansi_initial_nonreg_fail	vvp_tests/udp_ansi_initial_nonreg_fail.json
 udp_ansi_initial_reg		vvp_tests/udp_ansi_initial_reg.json
