@@ -61,7 +61,11 @@ void draw_switch_in_scope(ivl_switch_t sw)
 		 processing doesn't have to deal with it. */
 	    const char*raw = draw_net_input(enable);
 
-	    draw_delay(sw, 1, raw, rise_exp, fall_exp, decay_exp);
+	    if (ivl_switch_type(sw) == IVL_SW_TRANIF0 ||
+	        ivl_switch_type(sw) == IVL_SW_RTRANIF0)
+		  draw_delay(sw, 1, raw, fall_exp, rise_exp, decay_exp);
+	    else
+		  draw_delay(sw, 1, raw, rise_exp, fall_exp, decay_exp);
 
 	    snprintf(str_e_buf, sizeof str_e_buf, "p%p", sw);
 	    str_e = str_e_buf;
