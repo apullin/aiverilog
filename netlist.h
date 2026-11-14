@@ -3121,6 +3121,7 @@ class NetAssign_ {
     private:
 	// Get the declared component type, including for untyped l-values.
       ivl_type_t component_type() const;
+      ivl_type_t base_component_type() const;
 
 	// Nested l-value. If this is set, sig_ must NOT be set!
       NetAssign_*nest_;
