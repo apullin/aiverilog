@@ -25,9 +25,12 @@
 # include  "cfparse_misc.h"
 # include  "cfparse.h"
 # include  "globals.h"
+# include  <ctype.h>
+# include  <stdlib.h>
 # include  <string.h>
 
 char *current_file = NULL;
+int current_file_relative = 0;
 
 static int comment_enter;
 static char* trim_trailing_white(char*txt, int trim);
@@ -55,6 +58,7 @@ typedef struct t_cmdfile {
       char *cmdfile;
       YY_BUFFER_STATE buffer;
       unsigned line;
+      int relative;
 } s_cmdfile;
 s_cmdfile cmdfile_stack[MAX_CMDFILE_DEPTH];
 int cmdfile_stack_ptr = 0;
@@ -62,6 +66,8 @@ int cmdfile_stack_ptr = 0;
 # define PROCESS_EOF \
   if (--cmdfile_stack_ptr < 0) {		\
     free(current_file);				\
+    current_file = NULL;			\
+    current_file_relative = 0;			\
     yyterminate();				\
   } else {					\
     fclose(yyin);				\
@@ -70,6 +76,7 @@ int cmdfile_stack_ptr = 0;
     free(current_file);                         \
     current_file = cmdfile_stack[cmdfile_stack_ptr].cmdfile; \
     cflloc.first_line = cmdfile_stack[cmdfile_stack_ptr].line; \
+    current_file_relative = cmdfile_stack[cmdfile_stack_ptr].relative; \
   }
 
 %}
@@ -172,9 +179,10 @@ int cmdfile_stack_ptr = 0;
   /* Notice the -a flag. */
 "-a" { return TOK_Da; }
 
-  /* Notice the -c or -f flag. */
+  /* Notice the -c, -f, or -F flag. */
 "-c" { return TOK_Dc; }
 "-f" { return TOK_Dc; }
+"-F" { return TOK_DF; }
 
   /* Notice the -l or -v flag. */
 "-l" { return TOK_Dv; }
@@ -251,7 +259,51 @@ int yywrap(void)
       return 1;
 }
 
-void switch_to_command_file(const char *file)
+static int is_abs_cmd_path(const char *file)
+{
+      if (file[0] == '/' || file[0] == '\\')
+	    return 1;
+      if (isalpha((unsigned char)file[0]) && file[1] == ':')
+	    return 1;
+      return 0;
+}
+
+static const char *last_dir_sep(const char *file)
+{
+      const char *slash = strrchr(file, '/');
+      const char *bslash = strrchr(file, '\\');
+      if (slash == NULL)
+	    return bslash;
+      if (bslash == NULL)
+	    return slash;
+      return (bslash > slash) ? bslash : slash;
+}
+
+char *resolve_cmdfile_path(char *path)
+{
+      const char *cp;
+      size_t dir_len, total_len;
+      char *resolved;
+
+      if (!current_file_relative || current_file == NULL || path == NULL)
+	    return path;
+      if (is_abs_cmd_path(path))
+	    return path;
+
+      cp = last_dir_sep(current_file);
+      if (cp == NULL)
+	    return path;
+
+      dir_len = (size_t)(cp - current_file + 1);
+      total_len = dir_len + strlen(path) + 1;
+      resolved = (char *)malloc(total_len);
+      memcpy(resolved, current_file, dir_len);
+      strcpy(resolved + dir_len, path);
+      free(path);
+      return resolved;
+}
+
+void switch_to_command_file(const char *file, int relative)
 {
       char path[4096];
       int path_len;
@@ -266,14 +318,15 @@ void switch_to_command_file(const char *file)
       cmdfile_stack[cmdfile_stack_ptr].buffer = YY_CURRENT_BUFFER;
       cmdfile_stack[cmdfile_stack_ptr].cmdfile = current_file;
       cmdfile_stack[cmdfile_stack_ptr].line = cflloc.first_line;
+      cmdfile_stack[cmdfile_stack_ptr].relative = current_file_relative;
       cmdfile_stack_ptr += 1;
 
         /*
          * If this is a relative file then add the current path to the
          * file name.
          */
-      if (file[0] != '/') {
-	    const char *cp = strrchr(current_file, '/');
+      if (!is_abs_cmd_path(file)) {
+	    const char *cp = last_dir_sep(current_file);
 	    if (cp == 0)
 		  path_len = snprintf(path, sizeof path, "%s", file);
 	    else
@@ -297,17 +350,19 @@ void switch_to_command_file(const char *file)
       }
 
       current_file = strdup(path);
+      current_file_relative = relative;
       yy_switch_to_buffer(yy_create_buffer(yyin, YY_BUF_SIZE));
       cflloc.first_line = 1;
 }
 
-void cfreset(FILE*fd, const char*path)
+void cfreset(FILE*fd, const char*path, int relative)
 {
       command_file_errors = 0;
       forget_file_name();
       yyin = fd;
       yyrestart(fd);
       current_file = strdup(path);
+      current_file_relative = relative;
       cflloc.first_line = 1;
 }
 

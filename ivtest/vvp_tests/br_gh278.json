@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "br_gh278.v",
+    "iverilog-args" : [ "-F", "ivltests/br_gh278_dir/top.f" ]
+}

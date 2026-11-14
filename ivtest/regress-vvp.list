@@ -50,6 +50,7 @@ bitsel11			vvp_tests/bitsel11.json
 br_gh13a			vvp_tests/br_gh13a.json
 br_gh99c			vvp_tests/br_gh99c.json
 br_gh230			vvp_tests/br_gh230.json
+br_gh278			vvp_tests/br_gh278.json
 br_gh383a			vvp_tests/br_gh383a.json
 br_gh383b			vvp_tests/br_gh383b.json
 br_gh383c			vvp_tests/br_gh383c.json

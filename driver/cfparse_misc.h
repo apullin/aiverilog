@@ -36,8 +36,10 @@ struct cfltype {
 int cflex(void);
 int cferror(const char *);
 int cfparse(void);
-void switch_to_command_file(const char *);
+void switch_to_command_file(const char *, int relative);
+char *resolve_cmdfile_path(char *path);
 void destroy_lexor(void);
 extern char *current_file;
+extern int current_file_relative;
 
 #endif /* IVL_cfparse_misc_H */
