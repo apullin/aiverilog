@@ -3610,13 +3610,17 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
             if (idx_flags.invalid)
                   return nullptr;
 
+            bool is_2state = member_type->base_type() == IVL_VT_BOOL;
             if (idx_flags.undefined) {
                   cerr << li->get_fileline() << ": warning: "
-                       << "returning 'bx for undefined array access "
+                       << "returning " << (is_2state ? "'b0" : "'bx")
+                       << " for undefined array access "
                        << net->name()
                        << as_indices(unpacked_indices) << "." << endl;
 
-                  NetEConst*xxx = make_const_x(use_width);
+                  NetEConst*xxx = is_2state ? make_const_0(use_width)
+                                            : make_const_x(use_width);
+                  xxx->cast_signed(member_type->get_signed());
                   xxx->set_line(*li);
                   return xxx;
             }
@@ -3632,11 +3636,14 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
 
             if (canon_index == 0) {
                   cerr << li->get_fileline() << ": warning: "
-                       << "returning 'bx for out of bounds array access "
+                       << "returning " << (is_2state ? "'b0" : "'bx")
+                       << " for out of bounds array access "
                        << net->name()
                        << as_indices(unpacked_indices_const) << "." << endl;
 
-                  NetEConst*xxx = make_const_x(use_width);
+                  NetEConst*xxx = is_2state ? make_const_0(use_width)
+                                            : make_const_x(use_width);
+                  xxx->cast_signed(member_type->get_signed());
                   xxx->set_line(*li);
                   return xxx;
             }
@@ -6748,13 +6755,19 @@ NetExpr* PEIdent::elaborate_expr(Design*des, NetScope*scope,
 			     unpacked_indices_const);
 
       NetExpr*canon_index = 0;
+      const char*def_str = (net->data_type() == IVL_VT_BOOL) ? "'b0"
+                         : (net->data_type() == IVL_VT_REAL) ? "0.0"
+                         : (net->data_type() == IVL_VT_STRING) ? "\"\""
+                         : (net->data_type() == IVL_VT_CLASS ||
+                            net->data_type() == IVL_VT_DARRAY ||
+                            net->data_type() == IVL_VT_QUEUE) ? "null" : "'bx";
 
       if (idx_flags.invalid) {
 	      // Nothing to do
 
       } else if (idx_flags.undefined) {
 	    cerr << get_fileline() << ": warning: "
-		 << "returning 'bx for undefined array access "
+		 << "returning " << def_str << " for undefined array access "
 		 << net->name() << as_indices(unpacked_indices)
 		 << "." << endl;
 
@@ -6765,9 +6778,47 @@ NetExpr* PEIdent::elaborate_expr(Design*des, NetScope*scope,
       } else {
 	    ivl_assert(*this, unpacked_indices_const.size() == net->unpacked_dimensions());
 	    canon_index = normalize_variable_unpacked(net, unpacked_indices_const);
+	    if (canon_index == 0) {
+		  cerr << get_fileline() << ": warning: "
+		       << "returning " << def_str << " for out of bounds array access "
+		       << net->name() << as_indices(unpacked_indices_const)
+		       << "." << endl;
+	    }
       }
 
-      ivl_assert(*this, canon_index);
+      if (canon_index == 0) {
+	    NetExpr*oob = 0;
+	    switch (net->data_type()) {
+		case IVL_VT_BOOL: {
+		      NetEConst*c = make_const_0(net->vector_width());
+		      c->cast_signed(net->get_signed());
+		      oob = c;
+		      break;
+		}
+		case IVL_VT_LOGIC: {
+		      NetEConst*c = make_const_x(net->vector_width());
+		      c->cast_signed(net->get_signed());
+		      oob = c;
+		      break;
+		}
+		case IVL_VT_REAL:
+		  oob = new NetECReal(verireal(0.0));
+		  break;
+		case IVL_VT_STRING:
+		  oob = new NetECString("");
+		  break;
+		case IVL_VT_CLASS:
+		case IVL_VT_DARRAY:
+		case IVL_VT_QUEUE:
+		  oob = new NetENull();
+		  break;
+		default:
+		  return 0;
+	    }
+	    oob->set_line(*this);
+	    return oob;
+      }
+
       NetESignal*tmp = new NetESignal(net, canon_index);
       tmp->set_line(*this);
 
@@ -8137,12 +8188,15 @@ NetExpr* PEIdent::elaborate_expr_net_word_(Design*des, NetScope*scope,
 			     unpacked_indices_const);
 
       NetExpr*canon_index = 0;
+      bool is_2state = net->data_type() == IVL_VT_BOOL;
+      const char*def_str = is_2state ? "'b0"
+                         : (net->data_type() == IVL_VT_REAL) ? "0.0" : "'bx";
       if (idx_flags.invalid) {
 	    // Nothing to do.
 
       } else if (idx_flags.undefined) {
 	    cerr << get_fileline() << ": warning: "
-		 << "returning 'bx for undefined array access "
+		 << "returning " << def_str << " for undefined array access "
 		 << net->name() << as_indices(unpacked_indices)
 		 << "." << endl;
 
@@ -8156,14 +8210,21 @@ NetExpr* PEIdent::elaborate_expr_net_word_(Design*des, NetScope*scope,
 
 	    if (canon_index == 0) {
 		  cerr << get_fileline() << ": warning: "
-		       << "returning 'bx for out of bounds array access "
+		       << "returning " << def_str << " for out of bounds array access "
 		       << net->name() << as_indices(unpacked_indices_const)
 		       << "." << endl;
 	    }
       }
 
       if (canon_index == 0) {
-	    NetEConst*xxx = make_const_x(net->vector_width());
+	    if (net->data_type() == IVL_VT_REAL) {
+		  NetECReal*zr = new NetECReal(verireal(0.0));
+		  zr->set_line(*this);
+		  return zr;
+	    }
+	    NetEConst*xxx = is_2state ? make_const_0(net->vector_width())
+	                              : make_const_x(net->vector_width());
+	    xxx->cast_signed(net->get_signed());
 	    xxx->set_line(*this);
 	    return xxx;
       }

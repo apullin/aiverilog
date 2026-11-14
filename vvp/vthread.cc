@@ -4501,7 +4501,8 @@ bool of_LOAD_VEC4A(vthread_t thr, vvp_code_t cp)
 	// failed, and this load should return X instead of the actual
 	// value.
       if (thr->flags[4] == BIT4_1) {
-	    vvp_vector4_t tmp (cp->array->get_word_size(), BIT4_X);
+	    vvp_bit4_t def = cp->array->is_2state ? BIT4_0 : BIT4_X;
+	    vvp_vector4_t tmp (cp->array->get_word_size(), def);
 	    thr->push_vec4(tmp);
 	    return true;
       }

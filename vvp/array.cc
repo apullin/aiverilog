@@ -684,7 +684,7 @@ vvp_vector4_t __vpiArray::get_word(unsigned address)
 	    assert(nets == 0);
 	    assert(vals4== 0);
 	    if (address >= vals->get_size())
-		  return vvp_vector4_t(vals_width, BIT4_X);
+		  return vvp_vector4_t(vals_width, is_2state ? BIT4_0 : BIT4_X);
 
 	    vvp_vector4_t val;
 	    vals->get_word(address, val);
@@ -696,8 +696,8 @@ vvp_vector4_t __vpiArray::get_word(unsigned address)
       assert(nets != 0);
 
       if (address >= get_size()) {
-	      // Reading outside the array. Return X's but get the
-	      // width by looking at a word that we know is present.
+	      // Reading outside the array. Return default value ('0 for
+	      // 2-state, 'x for 4-state), using word 0 for the width.
 	    assert(get_size() > 0);
 	    vpiHandle word = nets[0];
 	    assert(word);
@@ -705,7 +705,7 @@ vvp_vector4_t __vpiArray::get_word(unsigned address)
 	    assert(vsig);
 	    vvp_signal_value*sig = dynamic_cast<vvp_signal_value*> (vsig->node->fil);
 	    assert(sig);
-	    return vvp_vector4_t(sig->value_size(), BIT4_X);
+	    return vvp_vector4_t(sig->value_size(), is_2state ? BIT4_0 : BIT4_X);
       }
 
       vpiHandle word = nets[address];
@@ -825,6 +825,7 @@ vpiHandle vpip_make_array(const char*label, const char*name,
       obj->vals4 = 0;
       obj->vals  = 0;
       obj->vals_width = 0;
+      obj->is_2state = false;
       obj->vals_words = 0;
 
 	// Initialize (clear) the read-ports list.
@@ -931,6 +932,7 @@ void compile_var2_array(char*label, char*name, int last, int first,
       arr->msb.set_value(msb);
       arr->lsb.set_value(lsb);
       arr->vals_width = labs(msb-lsb) + 1;
+      arr->is_2state = true;
 
       assert(! arr->nets);
       if (lsb == 0 && msb == 7 && signed_flag) {
