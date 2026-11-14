@@ -45,6 +45,7 @@
 # include  "map_named_args.h"
 # include  "HName.h"
 # include  "netvector.h"
+# include  <sstream>
 
 using namespace std;
 
@@ -2058,6 +2059,163 @@ NetExpr*PEBShift::elaborate_expr_leaf(Design*des, NetExpr*lp, NetExpr*rp,
       return tmp;
 }
 
+static std::string format_sv_typename(ivl_type_t type, unsigned skip_udims = 0)
+{
+      if (!type)
+	    return "void";
+
+      std::ostringstream suffix;
+      while (true) {
+	    if (const netuarray_t*ua = dynamic_cast<const netuarray_t*>(type)) {
+		  const auto&dims = ua->static_dimensions();
+		  for (size_t i = skip_udims ; i < dims.size() ; ++i) {
+			suffix << "$[" << dims[i].get_msb() << ":"
+			       << dims[i].get_lsb() << "]";
+		  }
+		  skip_udims = 0;
+		  type = ua->element_type();
+	    } else if (const netqueue_t*q = dynamic_cast<const netqueue_t*>(type)) {
+		  if (q->max_idx() >= 0)
+			suffix << "$[$:" << q->max_idx() << "]";
+		  else
+			suffix << "$[$]";
+		  type = q->element_type();
+	    } else if (const netdarray_t*da = dynamic_cast<const netdarray_t*>(type)) {
+		  suffix << "$[]";
+		  type = da->element_type();
+	    } else {
+		  break;
+	    }
+      }
+
+      std::ostringstream core;
+      if (const netenum_t*en = dynamic_cast<const netenum_t*>(type)) {
+	    core << "enum " << format_sv_typename(en->elem_base_type()) << "{";
+	    for (size_t i = 0 ; i < en->size() ; ++i) {
+		  if (i > 0) core << ",";
+		  core << en->name_at(i);
+	    }
+	    core << "}";
+      } else if (const netstruct_t*st = dynamic_cast<const netstruct_t*>(type)) {
+	    core << (st->union_flag() ? "union " : "struct ");
+	    if (st->packed()) core << "packed ";
+	    if (st->get_signed()) core << "signed ";
+	    core << "{";
+	    for (const auto&m : st->members()) {
+		  core << format_sv_typename(m.net_type) << " " << m.name << ";";
+	    }
+	    core << "}";
+      } else if (const netclass_t*cl = dynamic_cast<const netclass_t*>(type)) {
+	    core << "class " << cl->get_name();
+      } else if (dynamic_cast<const netstring_t*>(type)) {
+	    core << "string";
+      } else if (dynamic_cast<const netchandle_t*>(type)) {
+	    core << "chandle";
+      } else if (const netreal_t*rl = dynamic_cast<const netreal_t*>(type)) {
+	    if (rl == &netreal_t::type_shortreal)
+		  core << "shortreal";
+	    else
+		  core << "real";
+      } else if (const netparray_t*pa = dynamic_cast<const netparray_t*>(type)) {
+	    core << format_sv_typename(pa->element_type());
+	    const auto&dims = pa->static_dimensions();
+	    for (size_t i = skip_udims ; i < dims.size() ; ++i) {
+		  core << "[" << dims[i].get_msb() << ":"
+		       << dims[i].get_lsb() << "]";
+	    }
+      } else if (const netvector_t*vec = dynamic_cast<const netvector_t*>(type)) {
+	    bool is_signed = vec->get_signed();
+	    if (vec == &netvector_t::atom2s8)
+		  core << "byte";
+	    else if (vec == &netvector_t::atom2u8)
+		  core << "byte unsigned";
+	    else if (vec == &netvector_t::atom2s16)
+		  core << "shortint";
+	    else if (vec == &netvector_t::atom2u16)
+		  core << "shortint unsigned";
+	    else if (vec == &netvector_t::atom2s32)
+		  core << "int";
+	    else if (vec == &netvector_t::atom2u32)
+		  core << "int unsigned";
+	    else if (vec == &netvector_t::atom2s64)
+		  core << "longint";
+	    else if (vec == &netvector_t::atom2u64)
+		  core << "longint unsigned";
+	    else if (vec == &netvector_t::time_unsigned)
+		  core << "time";
+	    else if (vec == &netvector_t::time_signed)
+		  core << "time signed";
+	    else if (vec->get_isint())
+		  core << (is_signed ? "integer" : "integer unsigned");
+	    else {
+		  core << (vec->base_type() == IVL_VT_BOOL ? "bit" : "logic");
+		  if (is_signed)
+			core << " signed";
+		  if (!vec->get_scalar()) {
+			const auto&dims = vec->packed_dims();
+			for (size_t i = skip_udims ; i < dims.size() ; ++i) {
+			      core << "[" << dims[i].get_msb() << ":"
+			           << dims[i].get_lsb() << "]";
+			}
+		  }
+	    }
+      } else {
+	    type->debug_dump(core);
+      }
+
+      return core.str() + suffix.str();
+}
+
+static bool resolve_typename_string(Design*des, NetScope*scope, PExpr*expr,
+				    std::string&out)
+{
+      if (expr->test_type(des, scope)) {
+	    ivl_type_t data_type = expr->elaborate_type(des, scope);
+	    if (!data_type)
+		  return false;
+	    out = format_sv_typename(data_type);
+	    return true;
+      }
+
+      if (const PEIdent*id = dynamic_cast<const PEIdent*>(expr)) {
+	    unsigned int index_depth = 0;
+	    ivl_type_t id_type = id->resolve_expr_type(des, scope, index_depth);
+	    if (id_type) {
+		  out = format_sv_typename(id_type, index_depth);
+		  return true;
+	    }
+      }
+
+      PExpr::width_mode_t arg_mode = PExpr::SIZED;
+      expr->test_width(des, scope, arg_mode);
+      switch (expr->expr_type()) {
+	  case IVL_VT_REAL:
+	    out = "real";
+	    return true;
+	  case IVL_VT_STRING:
+	    out = "string";
+	    return true;
+	  case IVL_VT_VOID:
+	    out = "void";
+	    return true;
+	  case IVL_VT_BOOL:
+	  case IVL_VT_LOGIC: {
+		std::ostringstream ss;
+		ss << (expr->expr_type() == IVL_VT_BOOL ? "bit" : "logic");
+		if (expr->has_sign())
+		      ss << " signed";
+		unsigned w = expr->expr_width();
+		if (w > 1)
+		      ss << "[" << (w - 1) << ":0]";
+		out = ss.str();
+		return true;
+	  }
+	  default:
+	    out = "unknown";
+	    return true;
+      }
+}
+
 unsigned PECallFunction::test_width_sfunc_(Design*des, NetScope*scope,
                                            width_mode_t&mode)
 {
@@ -2123,6 +2281,29 @@ unsigned PECallFunction::test_width_sfunc_(Design*des, NetScope*scope,
 		       << " argument width = " << expr_width_ << "." << endl;
 
             return expr_width_;
+      }
+
+      if (name=="$typename") {
+	    if (!gn_system_verilog()) {
+		  cerr << get_fileline() << ": error: $typename() requires "
+			  "SystemVerilog." << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
+	    if (parms_.size() != 1 || !parms_[0].parm) {
+		  expr_type_ = IVL_VT_STRING;
+		  expr_width_ = 8;
+		  min_width_ = 8;
+		  signed_flag_ = false;
+		  return expr_width_;
+	    }
+	    std::string tname;
+	    resolve_typename_string(des, scope, parms_[0].parm, tname);
+	    expr_type_   = IVL_VT_STRING;
+	    expr_width_  = tname.empty() ? 8 : tname.size() * 8;
+	    min_width_   = expr_width_;
+	    signed_flag_ = false;
+	    return expr_width_;
       }
 
       if (name=="$sizeof" || name=="$bits") {
@@ -2791,6 +2972,27 @@ NetExpr* PECallFunction::elaborate_sfunc_(Design*des, NetScope*scope,
 	   the bit width of the sub-expression. The value of the
 	   sub-expression is not used, so the expression itself can be
 	   deleted. */
+      if (name=="$typename") {
+	    if (!gn_system_verilog()) {
+		  cerr << get_fileline() << ": error: $typename() requires "
+			  "SystemVerilog." << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
+	    if ((parms_.size() != 1) || !parms_[0].parm) {
+		  cerr << get_fileline() << ": error: The $typename "
+		       << "function takes exactly one(1) argument." << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
+	    std::string tname;
+	    if (!resolve_typename_string(des, scope, parms_[0].parm, tname))
+		  return nullptr;
+	    NetECString*res = new NetECString(tname);
+	    res->set_line(*this);
+	    return res;
+      }
+
       if (name=="$sizeof" || name=="$bits") {
 	    if ((parms_.size() != 1) || !parms_[0].parm) {
 		  cerr << get_fileline() << ": error: The " << name
@@ -6043,6 +6245,23 @@ unsigned PEIdent::test_width_parameter_(const NetExpr *par, width_mode_t&mode)
 	    mode = LOSSLESS;
 
       return expr_width_;
+}
+
+ivl_type_t PEIdent::resolve_expr_type(Design *des, NetScope *scope,
+				      unsigned int &index_depth) const
+{
+      symbol_search_results sr;
+      if (!symbol_search(this, des, scope, path_, lexical_pos(), &sr))
+	    return nullptr;
+      if (!sr.net && !sr.par_val && sr.type)
+	    return sr.type;
+      if (sr.par_val && !sr.type) {
+	    if (sr.par_val->expr_type() == IVL_VT_REAL)
+		  return &netreal_t::type_real;
+	    if (sr.par_val->expr_type() == IVL_VT_STRING)
+		  return &netstring_t::type_string;
+      }
+      return resolve_type_(des, sr, index_depth);
 }
 
 ivl_type_t PEIdent::resolve_type_(Design *des, const symbol_search_results &sr,

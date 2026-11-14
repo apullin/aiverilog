@@ -513,6 +513,10 @@ class PEIdent : public PExpr {
 					       unsigned long&width,
 					       bool&handled) const;
 
+    public:
+      ivl_type_t resolve_expr_type(Design *des, NetScope *scope,
+				   unsigned int &index_depth) const;
+
     private:
 
       void report_mixed_assignment_conflict_(const char*category) const;
