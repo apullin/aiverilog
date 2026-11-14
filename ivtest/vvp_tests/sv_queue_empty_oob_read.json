@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "sv_queue_empty_oob_read.v",
+    "iverilog-args" : [ "-g2012" ]
+}
