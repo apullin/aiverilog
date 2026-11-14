@@ -100,3 +100,68 @@ void draw_enumeration_in_scope(ivl_enumtype_t enumtype)
 
       fprintf(vvp_out, " ;\n");
 }
+
+int draw_enum_cast(ivl_expr_t dest, ivl_expr_t src,
+		   ivl_enumtype_t enumtype,
+		   int report, int want_result)
+{
+      int is_prop = ivl_expr_type(dest) == IVL_EX_PROPERTY;
+      unsigned enum_wid = ivl_enum_width(enumtype);
+      unsigned lab_fail = local_count++;
+      unsigned lab_end = local_count++;
+      int src_signed = 0;
+
+      if (is_prop)
+	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", ivl_expr_signal(dest));
+
+      if (ivl_expr_value(src) == IVL_VT_REAL) {
+	    unsigned cvt_wid = enum_wid > 64 ? enum_wid : 64;
+	    draw_eval_real(src);
+	    fprintf(vvp_out, "    %%cvt/vr %u;\n", cvt_wid);
+	    src_signed = 1;
+      } else {
+	    draw_eval_vec4(src);
+	    src_signed = ivl_expr_signed(src) != 0;
+      }
+
+      unsigned flags = (report ? 1U : 0U) | (src_signed ? 2U : 0U);
+      fprintf(vvp_out, "    %%cast/enum enum%p, %u;\n", enumtype, flags);
+      fprintf(vvp_out, "    %%jmp/0 T_%u.%u, 4;\n", thread_count, lab_fail);
+
+      fprintf(vvp_out, "    %%pad/u %u;\n", enum_wid);
+      if (ivl_enum_type(enumtype) == IVL_VT_BOOL)
+	    fprintf(vvp_out, "    %%cast2;\n");
+
+      if (is_prop) {
+	    fprintf(vvp_out, "    %%store/prop/v %d, %u;\n",
+		    ivl_expr_property_idx(dest), enum_wid);
+	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+      } else {
+	    ivl_signal_t sig = ivl_expr_signal(dest);
+	    ivl_expr_t word_ex = ivl_expr_oper1(dest);
+	    if (word_ex) {
+		  int w_idx = allocate_word();
+		  draw_eval_expr_into_integer(word_ex, w_idx);
+		  fprintf(vvp_out, "    %%store/vec4a v%p, %d, 0;\n", sig, w_idx);
+		  clr_word(w_idx);
+	    } else if (signal_is_return_value(sig)) {
+		  fprintf(vvp_out, "    %%ret/vec4 0, 0, %u;\n", enum_wid);
+	    } else {
+		  fprintf(vvp_out, "    %%store/vec4 v%p_0, 0, %u;\n", sig, enum_wid);
+	    }
+      }
+
+      if (want_result)
+	    fprintf(vvp_out, "    %%pushi/vec4 1, 0, 32;\n");
+      fprintf(vvp_out, "    %%jmp T_%u.%u;\n", thread_count, lab_end);
+
+      fprintf(vvp_out, "T_%u.%u ;\n", thread_count, lab_fail);
+      fprintf(vvp_out, "    %%pop/vec4 1;\n");
+      if (is_prop)
+	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+      if (want_result)
+	    fprintf(vvp_out, "    %%pushi/vec4 0, 0, 32;\n");
+      fprintf(vvp_out, "T_%u.%u ;\n", thread_count, lab_end);
+
+      return 0;
+}

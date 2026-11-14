@@ -110,6 +110,12 @@ int draw_class_cast(ivl_expr_t dest, ivl_expr_t src,
 		    int report, int want_result)
 {
       int is_prop = ivl_expr_type(dest) == IVL_EX_PROPERTY;
+      ivl_type_t dest_type = is_prop ? ivl_expr_net_type(dest)
+				     : ivl_signal_net_type(ivl_expr_signal(dest));
+      ivl_enumtype_t enumtype = dest_type ? ivl_type_enumtype(dest_type) : 0;
+      if (enumtype)
+	    return draw_enum_cast(dest, src, enumtype, report, want_result);
+
       unsigned lab_fail = local_count++;
       unsigned lab_end = local_count++;
       int errors;

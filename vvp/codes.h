@@ -66,6 +66,7 @@ extern bool of_CASSIGN_VEC4_OFF(vthread_t thr, vvp_code_t code);
 extern bool of_CASSIGN_WR(vthread_t thr, vvp_code_t code);
 extern bool of_CAST2(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_CLASS(vthread_t thr, vvp_code_t code);
+extern bool of_CAST_ENUM(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_VEC2_DAR(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_VEC4_DAR(vthread_t thr, vvp_code_t code);
 extern bool of_CAST_VEC4_STR(vthread_t thr, vvp_code_t code);

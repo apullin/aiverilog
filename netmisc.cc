@@ -2042,11 +2042,41 @@ static bool check_cast_dest_not_const(Design*des, const LineInfo*li,
 bool check_class_cast_args(Design*des, const LineInfo*li,
 			   const NetExpr*dest, const NetExpr*src)
 {
+      if (const netenum_t*dest_enum = dest ? dest->enumeration() : 0) {
+	    (void)dest_enum;
+	    const NetESignal*dest_sig = dynamic_cast<const NetESignal*>(dest);
+	    const NetEProperty*dest_prop = dynamic_cast<const NetEProperty*>(dest);
+	    bool dest_ok = (dest_sig && dest_sig->sig()->type() == NetNet::REG &&
+			    (dest_sig->sig()->unpacked_dimensions() == 0 ||
+			     dest_sig->word_index() != 0))
+			|| (dest_prop && !dest_prop->get_index());
+	    if (!dest_ok) {
+		  cerr << li->get_fileline() << ": error: The first argument of "
+		          "$cast must be an assignable variable or class property."
+		       << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+	    if (!check_cast_dest_not_const(des, li, dest_sig, dest_prop))
+		  return false;
+	    if (dest_sig)
+		  const_cast<NetESignal*>(dest_sig)->sig()->incr_lref();
+
+	    ivl_variable_type_t st = src ? src->expr_type() : IVL_VT_NO_TYPE;
+	    if (st != IVL_VT_BOOL && st != IVL_VT_LOGIC && st != IVL_VT_REAL) {
+		  cerr << li->get_fileline() << ": error: Enumeration $cast "
+		          "source expression must be integral or real." << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+	    return true;
+      }
+
       const netclass_t*dest_class = dest
 	    ? dynamic_cast<const netclass_t*>(dest->net_type()) : 0;
       if (dest_class == 0) {
 	    cerr << li->get_fileline() << ": sorry: $cast is only supported "
-	            "for class handles." << endl;
+	            "for class handles and enumerations." << endl;
 	    des->errors += 1;
 	    return false;
       }

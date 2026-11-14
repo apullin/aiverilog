@@ -137,6 +137,9 @@ extern void draw_class_in_scope(ivl_type_t classtype);
  */
 extern int draw_class_cast(ivl_expr_t dest, ivl_expr_t src,
 			   int report, int want_result);
+extern int draw_enum_cast(ivl_expr_t dest, ivl_expr_t src,
+			  ivl_enumtype_t enumtype,
+			  int report, int want_result);
 
 /*
  * Enumeration draw routine.

@@ -1884,6 +1884,29 @@ bool of_CAST_CLASS(vthread_t thr, vvp_code_t cp)
 }
 
 /*
+ * %cast/enum <enum_typespec>, <flags>
+ *   bit 0 of <flags> = report runtime error on failure (task form)
+ *   bit 1 of <flags> = source vec4 on top of stack is signed
+ */
+bool of_CAST_ENUM(vthread_t thr, vvp_code_t cp)
+{
+      bool report = (cp->bit_idx[0] & 1) != 0;
+      bool src_signed = (cp->bit_idx[0] & 2) != 0;
+
+      const vvp_vector4_t&val = thr->peek_vec4();
+      bool ok = vpip_enum_has_value(cp->handle, val, src_signed);
+
+      thr->flags[4] = ok ? BIT4_1 : BIT4_0;
+
+      if (!ok && report)
+	    cerr << thr->get_fileline()
+	         << "Error: $cast to enumeration failed, the value is not a"
+	         << " valid member of the enumeration." << endl;
+
+      return true;
+}
+
+/*
  * %cast2
  */
 bool of_CAST2(vthread_t thr, vvp_code_t)

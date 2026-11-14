@@ -348,6 +348,8 @@ extern unsigned vpip_add_item_to_context(automatic_hooks_s*item,
 extern vpiHandle vpip_make_root_iterator(int type_code);
 extern void vpip_make_root_iterator(class __vpiHandle**&table,
 				    unsigned&ntable);
+extern bool vpip_enum_has_value(vpiHandle ref, const vvp_vector4_t&val,
+				bool val_signed);
 
 /*
  * Signals include the variable types (reg, integer, time) and are

@@ -18,6 +18,7 @@
  */
 
 # include  "netlist.h"
+# include  "netenum.h"
 # include  "netmisc.h"
 # include  "compiler.h"
 # include  <cctype>
@@ -939,9 +940,105 @@ bool NetRepeat::evaluate_function(const LineInfo&loc,
       return flag;
 }
 
-bool NetSTask::evaluate_function(const LineInfo&,
-				 map<perm_string,LocalVar>&) const
+static bool eval_cfunc_enum_cast(const LineInfo&loc,
+				 map<perm_string,LocalVar>&context_map,
+				 const NetExpr*dest_ex, const NetExpr*src_ex,
+				 bool&matched)
 {
+      matched = false;
+      const netenum_t*en = dest_ex ? dest_ex->enumeration() : 0;
+      const NetESignal*dsig = dynamic_cast<const NetESignal*>(dest_ex);
+      if (!en || !dsig)
+	    return false;
+
+      NetExpr*sval = src_ex->evaluate_function(loc, context_map);
+      if (!sval)
+	    return false;
+
+      verinum sv;
+      if (const NetECReal*rc = dynamic_cast<const NetECReal*>(sval)) {
+	    int64_t iv = std::llround(rc->value().as_double());
+	    sv = verinum(static_cast<uint64_t>(iv), 64);
+	    sv.has_sign(true);
+      } else if (const NetEConst*cc = dynamic_cast<const NetEConst*>(sval)) {
+	    sv = cc->value();
+	    sv.has_sign(src_ex->has_sign());
+      } else {
+	    delete sval;
+	    return false;
+      }
+      delete sval;
+
+      if (en->base_type() == IVL_VT_BOOL && !sv.is_defined()) {
+	    matched = false;
+	    return true;
+      }
+
+      unsigned ewid = en->packed_width();
+      bool esign = en->get_signed();
+      for (netenum_t::iterator it = en->first_name() ; it != en->end_name() ; ++it) {
+	    verinum mv = it->second;
+	    mv.has_sign(esign);
+	    unsigned cwid = max<unsigned>(sv.len(), mv.len()) + 1;
+	    verinum sv_ext = pad_to_width(sv, cwid);
+	    verinum mv_ext = pad_to_width(mv, cwid);
+	    bool eq = true;
+	    for (unsigned b = 0 ; b < cwid ; ++b) {
+		  if (sv_ext.get(b) != mv_ext.get(b)) {
+			eq = false;
+			break;
+		  }
+	    }
+	    if (eq) {
+		  matched = true;
+		  break;
+	    }
+      }
+
+      if (!matched)
+	    return true;
+
+      map<perm_string,LocalVar>::iterator ptr = context_map.find(dsig->name());
+      if (ptr == context_map.end())
+	    return false;
+      LocalVar*var = &ptr->second;
+      while (var->nwords == -1)
+	    var = var->ref;
+
+      verinum stored = cast_to_width(sv, ewid);
+      stored.has_sign(esign);
+      NetEConst*new_c = new NetEConst(stored);
+      new_c->set_line(loc);
+
+      if (var->nwords > 0) {
+	    if (!dsig->word_index()) { delete new_c; return false; }
+	    NetExpr*wr = dsig->word_index()->evaluate_function(loc, context_map);
+	    if (!wr) { delete new_c; return false; }
+	    const NetEConst*wc = dynamic_cast<const NetEConst*>(wr);
+	    if (wc && wc->value().is_defined()) {
+		  long w = wc->value().as_long();
+		  if (w >= 0 && w < var->nwords) {
+			delete var->array[w];
+			var->array[w] = new_c;
+			new_c = 0;
+		  }
+	    }
+	    delete wr;
+	    delete new_c;
+      } else {
+	    delete var->value;
+	    var->value = new_c;
+      }
+      return true;
+}
+
+bool NetSTask::evaluate_function(const LineInfo&loc,
+				 map<perm_string,LocalVar>&context_map) const
+{
+      if (strcmp(name(), "$cast") == 0 && nparms() == 2) {
+	    bool matched = false;
+	    return eval_cfunc_enum_cast(loc, context_map, parm(0), parm(1), matched);
+      }
 	// system tasks within a constant function are ignored
       return true;
 }
@@ -1420,6 +1517,17 @@ static NetExpr* eval_cfunc_string_method(const LineInfo&loc,
 NetExpr* NetESFunc::evaluate_function(const LineInfo&loc,
 				map<perm_string,LocalVar>&context_map) const
 {
+      if (strcmp(name(), "$cast") == 0 && parms_.size() == 2) {
+	    bool matched = false;
+	    if (!eval_cfunc_enum_cast(loc, context_map, parms_[0], parms_[1], matched))
+		  return 0;
+	    verinum rv(matched ? uint64_t(1) : uint64_t(0), expr_width());
+	    rv.has_sign(has_sign());
+	    NetEConst*res = new NetEConst(rv);
+	    res->set_line(loc);
+	    return res;
+      }
+
       if (strncmp(name(), "$ivl_string_method$", 19) == 0) {
 	    return eval_cfunc_string_method(loc, name(), parms_, context_map);
       }

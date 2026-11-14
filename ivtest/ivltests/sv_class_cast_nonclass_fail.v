@@ -1,11 +1,9 @@
-// Check that $cast() of values that are not class handles is
+// Check that $cast() to a non-class, non-enumeration target is
 // reported as not supported.
 
 module test;
 
-  typedef enum { RED, GREEN } color_t;
-
-  color_t c;
+  int c;
   int rc;
 
   initial begin

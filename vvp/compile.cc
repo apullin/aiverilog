@@ -124,6 +124,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%cassign/vec4/off",of_CASSIGN_VEC4_OFF,2,{OA_FUNC_PTR,OA_BIT1,     OA_NONE} },
       { "%cassign/wr",  of_CASSIGN_WR,  1,{OA_FUNC_PTR,OA_NONE,     OA_NONE} },
       { "%cast/class", of_CAST_CLASS, 2, {OA_VPI_PTR,OA_BIT1,OA_NONE} },
+      { "%cast/enum",  of_CAST_ENUM,  2, {OA_VPI_PTR,OA_BIT1,OA_NONE} },
       { "%cast/vec2/dar", of_CAST_VEC2_DAR, 1,  {OA_NUMBER,   OA_NONE,     OA_NONE} },
       { "%cast/vec4/dar", of_CAST_VEC4_DAR, 1,  {OA_NUMBER,   OA_NONE,     OA_NONE} },
       { "%cast/vec4/str", of_CAST_VEC4_STR, 1,  {OA_NUMBER,   OA_NONE,     OA_NONE} },
