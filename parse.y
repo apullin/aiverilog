@@ -1279,7 +1279,6 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 %type <flag>    signing unsigned_signed_opt signed_unsigned_opt
 %type <flag>    import_export union_soft_opt
 %type <flag>    K_genvar_opt K_static_opt K_virtual_opt K_const_opt
-%type <flag>    method_qualifier method_qualifier_opt
 %type <flag>    udp_reg_opt edge_operator
 %type <drive>   drive_strength drive_strength_opt dr_strength0 dr_strength1
 %type <letter>  udp_input_sym udp_output_sym
@@ -1381,6 +1380,7 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 %type <property_qualifier> class_item_qualifier property_qualifier
 %type <property_qualifier> class_item_qualifier_list property_qualifier_list
 %type <property_qualifier> class_item_qualifier_opt property_qualifier_opt
+%type <property_qualifier> method_qualifier_nonempty method_qualifier_opt
 %type <property_qualifier> random_qualifier
 
 %type <ranges> dimensions_opt dimensions
@@ -1649,8 +1649,10 @@ class_item /* IEEE1800-2005: A.1.8 */
     /* IEEE1800 A.1.8: class_constructor_declaration */
   : method_qualifier_opt K_function K_new
       { assert(current_function==0);
-	if ($1)
+	if ($1.test_virtual())
 	      yyerror(@1, "error: A constructor cannot be virtual.");
+	if ($1.test_static())
+	      yyerror(@1, "error: A constructor cannot be static.");
 	current_function = pform_push_constructor_scope(@3);
       }
     tf_port_list_parens_opt ';'
@@ -1700,16 +1702,26 @@ class_item /* IEEE1800-2005: A.1.8 */
 	delete[] $4;
       }
 
-    /* Pure virtual class method declarations (IEEE1800-2012: A.1.8)... */
+    /* Pure virtual class method declarations (IEEE1800-2017: A.1.9)... */
 
-  | K_pure K_virtual K_function data_type_or_implicit_or_void_plus_id
+  | K_pure K_virtual class_item_qualifier_opt K_function data_type_or_implicit_or_void_plus_id
     tf_port_list_parens_opt ';'
       { yyerror(@1, "sorry: Pure virtual methods are not yet supported.");
-	delete_type_id_range($4);
+	delete_type_id_range($5);
       }
-  | K_pure K_virtual K_task IDENTIFIER tf_port_list_parens_opt ';'
+  | K_pure K_virtual class_item_qualifier_opt K_task IDENTIFIER tf_port_list_parens_opt ';'
       { yyerror(@1, "sorry: Pure virtual methods are not yet supported.");
-	delete[] $4;
+	delete[] $5;
+      }
+  | property_qualifier_list K_pure K_virtual class_item_qualifier_opt K_function
+    data_type_or_implicit_or_void_plus_id tf_port_list_parens_opt ';'
+      { yyerror(@2, "sorry: Pure virtual methods are not yet supported.");
+	delete_type_id_range($6);
+      }
+  | property_qualifier_list K_pure K_virtual class_item_qualifier_opt K_task
+    IDENTIFIER tf_port_list_parens_opt ';'
+      { yyerror(@2, "sorry: Pure virtual methods are not yet supported.");
+	delete[] $6;
       }
 
     /* Class constraints... */
@@ -2732,14 +2744,34 @@ loop_variables /* IEEE1800-2005: A.6.8 */
       }
   ;
 
-method_qualifier /* IEEE1800-2005: A.1.8 */
-  : K_virtual { $$ = true; }
-  | class_item_qualifier { $$ = false; }
+method_qualifier_nonempty /* IEEE1800-2017: A.1.9 */
+  : K_virtual
+      { $$ = property_qualifier_t::make_virtual(); }
+  | K_virtual class_item_qualifier_list
+      { $$ = $2 | property_qualifier_t::make_virtual(); }
+  | property_qualifier_list
+      { $$ = $1; }
+  | property_qualifier_list K_virtual
+      { $$ = $1 | property_qualifier_t::make_virtual(); }
+  | property_qualifier_list K_virtual class_item_qualifier_list
+      { $$ = $1 | $3 | property_qualifier_t::make_virtual(); }
   ;
 
 method_qualifier_opt
-  : method_qualifier { $$ = $1; pform_set_method_virtual($1); }
-  |                  { $$ = false; pform_set_method_virtual(false); }
+  : method_qualifier_nonempty
+      { if ($1.test_rand() || $1.test_randc())
+	      yyerror(@1, "error: A class method cannot be qualified with rand or randc.");
+	if ($1.test_local() && $1.test_protected())
+	      yyerror(@1, "error: A class method cannot be both local and protected.");
+	if ($1.test_virtual() && $1.test_static())
+	      yyerror(@1, "error: A virtual class method cannot be static.");
+	$$ = $1;
+	pform_set_method_virtual($1.test_virtual());
+      }
+  |
+      { $$ = property_qualifier_t::make_none();
+	pform_set_method_virtual(false);
+      }
   ;
 
 modport_declaration /* IEEE1800-2012: A.2.9 */
