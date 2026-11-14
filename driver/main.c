@@ -39,7 +39,7 @@ const char NOTICE[] =
 
 const char HELP[] =
 "Usage: iverilog [-EiRSuvV] [--help] [--version] [-B[IMPVt] base]\n"
-"                [-c cmdfile|-f cmdfile]\n"
+"                [-c cmdfile|-f cmdfile|-F cmdfile]\n"
 "                [-g1995|-g2001|-g2005|-g2005-sv|-g2009|-g2012|-g2017|-g2023] [-g<feature>]\n"
 "                [-D macro[=defn]] [-I includedir] [-L moduledir]\n"
 "                [-M [mode=]depfile] [-m module]\n"
@@ -111,7 +111,7 @@ const char path_sep = ':';
 # define CMD_EXE_QUOTE "\""
 #endif
 
-extern void cfreset(FILE*fd, const char*path);
+extern void cfreset(FILE*fd, const char*path, int relative);
 
 const char*base = 0;
 const char*vpi_dir = 0;
@@ -204,6 +204,7 @@ static char ivl_root[MAXSIZE];
 /* Structure to keep a FIFO list of the command files */
 typedef struct t_command_file {
       char *filename;
+      int relative;
       struct t_command_file *next;
 } s_command_file, *p_command_file;
 p_command_file cmd_file_head = NULL;  /* The FIFO head */
@@ -216,12 +217,13 @@ static const char** defparm_base = 0;
 static int defparm_size = 0;
 
 /* Function to add a command file name to the FIFO. */
-static void add_cmd_file(const char* filename)
+static void add_cmd_file(const char* filename, int relative)
 {
       p_command_file new;
 
       new = (p_command_file) malloc(sizeof(s_command_file));
       new->filename = strdup(filename);
+      new->relative = relative;
       new->next = NULL;
       if (cmd_file_head == NULL) {
             cmd_file_head = new;
@@ -233,15 +235,18 @@ static void add_cmd_file(const char* filename)
 }
 
 /* Function to return the top command file name from the FIFO. */
-static char *get_cmd_file(void)
+static char *get_cmd_file(int *relative)
 {
       char *filename;
 
-      if (cmd_file_head == NULL) filename = NULL;
-      else {
+      if (cmd_file_head == NULL) {
+            filename = NULL;
+            if (relative) *relative = 0;
+      } else {
             p_command_file head;
 
             filename = cmd_file_head->filename;
+            if (relative) *relative = cmd_file_head->relative;
             head = cmd_file_head;
             cmd_file_head = cmd_file_head->next;
             free(head);
@@ -1339,7 +1344,7 @@ int main(int argc, char **argv)
 	}
       }
 
-      while ((opt = getopt(argc, argv, "B:c:D:d:Ef:g:hl:I:iL:M:m:N:o:P:p:RSs:T:t:uvVW:y:Y:")) != EOF) {
+      while ((opt = getopt(argc, argv, "B:c:D:d:EF:f:g:hl:I:iL:M:m:N:o:P:p:RSs:T:t:uvVW:y:Y:")) != EOF) {
 
 	    switch (opt) {
 		case 'B':
@@ -1370,7 +1375,10 @@ int main(int argc, char **argv)
 		  break;
 		case 'c':
 		case 'f':
-		  add_cmd_file(optarg);
+		  add_cmd_file(optarg, 0);
+		  break;
+		case 'F':
+		  add_cmd_file(optarg, 1);
 		  break;
 		case 'D':
 		  process_define(optarg);
@@ -1489,7 +1497,7 @@ int main(int argc, char **argv)
 		  free(iconfig_path);
 		  remove(compiled_defines_path);
 		  free(compiled_defines_path);
-		  while( (command_filename = get_cmd_file()) ) {
+		  while( (command_filename = get_cmd_file(NULL)) ) {
 			free(command_filename);
 		  }
 		  return 1;
@@ -1580,7 +1588,8 @@ int main(int argc, char **argv)
             fprintf(iconfig_file, "depmode:%c\n", depmode);
       }
 
-      while ( (command_filename = get_cmd_file()) ) {
+      int command_relative = 0;
+      while ( (command_filename = get_cmd_file(&command_relative)) ) {
 	    int rc;
 
 	    if (( fp = fopen(command_filename, "r")) == NULL ) {
@@ -1589,7 +1598,7 @@ int main(int argc, char **argv)
 		  return 1;
 	    }
 
-	    cfreset(fp, command_filename);
+	    cfreset(fp, command_filename, command_relative);
 	    rc = cfparse();
 	    if (rc != 0 || command_file_errors > 0) {
 		  fprintf(stderr, "%s: parsing failed in base command "

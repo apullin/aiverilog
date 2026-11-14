@@ -64,7 +64,7 @@ static void translate_file_name(char*text)
 };
 
 %locations
-%token TOK_Da TOK_Dc TOK_Dv TOK_Dy
+%token TOK_Da TOK_Dc TOK_DF TOK_Dv TOK_Dy
 %token TOK_DEFINE TOK_INCDIR TOK_INTEGER_WIDTH TOK_LIBDIR TOK_LIBDIR_NOCASE
 %token TOK_LIBEXT TOK_PARAMETER TOK_TIMESCALE TOK_VHDL_WORK TOK_VHDL_LIBDIR
 %token TOK_WIDTH_CAP
@@ -90,6 +90,7 @@ item
 	: TOK_STRING
 		{ char*tmp = substitutions($1);
 		  translate_file_name(tmp);
+		  tmp = resolve_cmdfile_path(tmp);
 		  process_file_name(tmp, 0);
 		  free($1);
 		  free(tmp);
@@ -99,12 +100,20 @@ item
 
         | TOK_Da { }
 
-  /* Match a -c <cmdfile> or -f <cmdfile> */
+  /* Match a -c <cmdfile>, -f <cmdfile>, or -F <cmdfile> */
 
         | TOK_Dc TOK_STRING
 		{ char*tmp = substitutions($2);
 		  translate_file_name(tmp);
-		  switch_to_command_file(tmp);
+		  switch_to_command_file(tmp, 0);
+		  free($2);
+		  free(tmp);
+		}
+
+        | TOK_DF TOK_STRING
+		{ char*tmp = substitutions($2);
+		  translate_file_name(tmp);
+		  switch_to_command_file(tmp, 1);
 		  free($2);
 		  free(tmp);
 		}
@@ -115,6 +124,7 @@ item
         | TOK_Dv TOK_STRING
 		{ char*tmp = substitutions($2);
 		  translate_file_name(tmp);
+		  tmp = resolve_cmdfile_path(tmp);
 		  process_file_name(tmp, 1);
 		  free($2);
 		  free(tmp);
@@ -126,6 +136,7 @@ item
 
         | TOK_Dy TOK_STRING
 		{ char*tmp = substitutions($2);
+		  tmp = resolve_cmdfile_path(tmp);
 		  process_library_switch(tmp);
 		  free($2);
 		  free(tmp);
@@ -133,6 +144,7 @@ item
 
         | TOK_LIBDIR TOK_PLUSARG
 		{ char*tmp = substitutions($2);
+		  tmp = resolve_cmdfile_path(tmp);
 		  process_library_switch(tmp);
 		  free($2);
 		  free(tmp);
@@ -140,6 +152,7 @@ item
 
         | TOK_LIBDIR_NOCASE TOK_PLUSARG
 		{ char*tmp = substitutions($2);
+		  tmp = resolve_cmdfile_path(tmp);
 		  process_library_nocase_switch(tmp);
 		  free($2);
 		  free(tmp);
@@ -174,6 +187,7 @@ item
 
         | TOK_VHDL_LIBDIR TOK_PLUSARG
 	        { char*tmp = substitutions($2);
+		  tmp = resolve_cmdfile_path(tmp);
 		  vhdlpp_libdir = realloc(vhdlpp_libdir, (vhdlpp_libdir_cnt+1)*sizeof(char*));
 	          vhdlpp_libdir[vhdlpp_libdir_cnt] = tmp;
 		  vhdlpp_libdir_cnt += 1;
@@ -244,6 +258,7 @@ inc_args
 
 inc_arg : TOK_PLUSARG
 		{ char*tmp = substitutions($1);
+		  tmp = resolve_cmdfile_path(tmp);
 		  process_include_dir(tmp);
 		  free($1);
 		  free(tmp);
