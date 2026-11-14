@@ -3702,6 +3702,170 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
       return sel;
 }
 
+static NetExpr* elaborate_packed_struct_expr_tail(Design*des, NetScope*scope,
+						  const LineInfo*li,
+						  NetExpr*base_expr,
+						  const netstruct_t*struct_type,
+						  perm_string base_name,
+						  pform_name_t member_path)
+{
+      unsigned long off = 0;
+      unsigned long use_width = struct_type->packed_width();
+      ivl_type_t member_type = nullptr;
+      pform_name_t completed_path;
+
+      do {
+	    const name_component_t member_comp = member_path.front();
+	    const perm_string&member_name = member_comp.name;
+
+	    unsigned long tmp_off;
+	    const netstruct_t::member_t*member =
+		  struct_type->packed_member(member_name, tmp_off);
+	    if (member == 0) {
+		  cerr << li->get_fileline() << ": error: Member " << member_name
+		       << " is not a member of struct type of " << base_name;
+		  if (!completed_path.empty())
+			cerr << "." << completed_path;
+		  cerr << "." << endl;
+		  des->errors += 1;
+		  delete base_expr;
+		  return nullptr;
+	    }
+
+	    member_type = member->net_type;
+	    off += tmp_off;
+	    use_width = member_type->packed_width();
+
+	    if (const netstruct_t*tmp_struct = dynamic_cast<const netstruct_t*>(member_type)) {
+		  struct_type = tmp_struct;
+	    } else if (dynamic_cast<const netenum_t*>(member_type)) {
+		  struct_type = 0;
+		  if (!member_comp.index.empty()) {
+			if (member_comp.index.size() > 1) {
+			      cerr << li->get_fileline() << ": error: Too many "
+				      "index expressions for enum member." << endl;
+			      des->errors += 1;
+			      delete base_expr;
+			      return nullptr;
+			}
+			long tail_off = 0;
+			unsigned long tail_wid = 0;
+			if (!calculate_part(li, des, scope, member_comp.index.back(),
+					    tail_off, tail_wid)) {
+			      delete base_expr;
+			      return nullptr;
+			}
+			off += tail_off;
+			use_width = tail_wid;
+			member_type = nullptr;
+		  }
+	    } else if (const netvector_t*mem_vec = dynamic_cast<const netvector_t*>(member_type)) {
+		  struct_type = 0;
+		  if (!member_comp.index.empty()) {
+			const netranges_t&mem_packed_dims = mem_vec->packed_dims();
+			if (member_comp.index.size() > mem_packed_dims.size()) {
+			      cerr << li->get_fileline() << ": error: Too many "
+				      "index expressions for member." << endl;
+			      des->errors += 1;
+			      delete base_expr;
+			      return nullptr;
+			}
+			list<long>prefix_indices;
+			if (!evaluate_index_prefix(des, scope, prefix_indices, member_comp.index)) {
+			      delete base_expr;
+			      return nullptr;
+			}
+			long tail_off = 0;
+			unsigned long tail_wid = 0;
+			if (!calculate_part(li, des, scope, member_comp.index.back(),
+					    tail_off, tail_wid)) {
+			      delete base_expr;
+			      return nullptr;
+			}
+			long loff;
+			unsigned long lwid;
+			if (!prefix_to_slice(mem_packed_dims, prefix_indices, tail_off, loff, lwid)) {
+			      delete base_expr;
+			      bool is_2s = mem_vec->base_type() == IVL_VT_BOOL;
+			      NetEConst*oob = is_2s ? make_const_0(lwid * tail_wid)
+			                            : make_const_x(lwid * tail_wid);
+			      oob->set_line(*li);
+			      return oob;
+			}
+			off += loff;
+			use_width = lwid * tail_wid;
+			member_type = nullptr;
+		  }
+	    } else if (const netparray_t*array = dynamic_cast<const netparray_t*>(member_type)) {
+		  ivl_assert(*li, array->packed());
+		  if (member_comp.index.empty()) {
+			struct_type = 0;
+			completed_path.push_back(member_comp);
+			member_path.pop_front();
+			continue;
+		  }
+		  const netranges_t&mem_packed_dims = array->static_dimensions();
+		  if (member_comp.index.size() > mem_packed_dims.size()) {
+			cerr << li->get_fileline() << ": error: Too many index "
+				"expressions for member " << member_name << "." << endl;
+			des->errors += 1;
+			delete base_expr;
+			return nullptr;
+		  }
+		  list<long>prefix_indices;
+		  if (!evaluate_index_prefix(des, scope, prefix_indices, member_comp.index)) {
+			delete base_expr;
+			return nullptr;
+		  }
+		  NetExpr*texpr = elab_and_eval(des, scope, member_comp.index.back().msb, -1, true);
+		  long tmp;
+		  if (texpr == 0 || !eval_as_long(tmp, texpr)) {
+			cerr << li->get_fileline() << ": error: Array index "
+				"expressions for member " << member_name
+			     << " must be constant here." << endl;
+			des->errors += 1;
+			delete base_expr;
+			return nullptr;
+		  }
+		  delete texpr;
+		  long loff;
+		  unsigned long lwid;
+		  ivl_type_t element_type = array->element_type();
+		  long element_width = element_type->packed_width();
+		  if (!prefix_to_slice(mem_packed_dims, prefix_indices, tmp, loff, lwid)) {
+			delete base_expr;
+			bool is_2s = element_type->base_type() == IVL_VT_BOOL;
+			NetEConst*oob = is_2s ? make_const_0(lwid * element_width)
+			                      : make_const_x(lwid * element_width);
+			oob->set_line(*li);
+			return oob;
+		  }
+		  off += loff * element_width;
+		  use_width = lwid * element_width;
+		  member_type = element_type;
+		  struct_type = dynamic_cast<const netstruct_t*>(element_type);
+	    } else {
+		  struct_type = 0;
+	    }
+
+	    completed_path.push_back(member_comp);
+	    member_path.pop_front();
+      } while (!member_path.empty() && struct_type != 0);
+
+      if (!member_path.empty()) {
+	    cerr << li->get_fileline() << ": sorry: Nested member path not yet "
+		    "supported for class properties." << endl;
+	    delete base_expr;
+	    return nullptr;
+      }
+
+      NetExpr*off_expr = make_const_val(off);
+      off_expr->set_line(*li);
+      NetESelect*sel = new NetESelect(base_expr, off_expr, use_width, member_type);
+      sel->set_line(*li);
+      return sel;
+}
+
 NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 					      const symbol_search_results &sr,
 					      unsigned expr_wid,
@@ -3716,19 +3880,19 @@ NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 		 << " look for property " << comp << endl;
       }
 
-      if (sr.path_tail.size() > 1) {
-	    cerr << get_fileline() << ": sorry: "
-		 << "Nested member path not yet supported for class properties."
-		 << endl;
-	    return nullptr;
-      }
-
       ivl_type_t par_type;
       const NetExpr *par_val = class_type->get_parameter(des, comp.name, par_type);
-      if (par_val)
+      if (par_val) {
+	    if (sr.path_tail.size() > 1) {
+		  cerr << get_fileline() << ": sorry: "
+		       << "Nested member path not yet supported for class properties."
+		       << endl;
+		  return nullptr;
+	    }
 	    return elaborate_expr_param_(des, scope, par_val,
 				         class_type->class_scope(), par_type,
 				         expr_wid, flags);
+      }
 
       int pidx = class_type->property_idx_from_name(comp.name);
       if (pidx < 0) {
@@ -3767,6 +3931,21 @@ NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 
       NetExpr *canon_index = nullptr;
       ivl_type_t tmp_type = class_type->get_prop_type(pidx);
+      if (sr.path_tail.size() > 1) {
+	    const netstruct_t*st = dynamic_cast<const netstruct_t*>(tmp_type);
+	    if (st && st->packed() && comp.index.empty()) {
+		  NetEProperty*prop = new NetEProperty(sr.net, pidx, nullptr);
+		  prop->set_line(*this);
+		  pform_name_t rem = sr.path_tail;
+		  rem.pop_front();
+		  return elaborate_packed_struct_expr_tail(
+			des, scope, this, prop, st, comp.name, rem);
+	    }
+	    cerr << get_fileline() << ": sorry: "
+		 << "Nested member path not yet supported for class properties."
+		 << endl;
+	    return nullptr;
+      }
       if (const netuarray_t *tmp_ua = dynamic_cast<const netuarray_t*>(tmp_type)) {
 	    const auto &dims = tmp_ua->static_dimensions();
 
