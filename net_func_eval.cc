@@ -1061,7 +1061,9 @@ NetExpr* NetESignal::evaluate_function(const LineInfo&loc,
 		  } else if (etype->base_type() == IVL_VT_REAL) {
 			items[idx] = new NetECReal(verireal(0.0));
 		  } else {
-			items[idx] = new NetEConst(verinum(verinum::Vx,
+			verinum::V def = etype->base_type() == IVL_VT_BOOL
+			               ? verinum::V0 : verinum::Vx;
+			items[idx] = new NetEConst(verinum(def,
 						   etype->packed_width(), true));
 		  }
 	    }
