@@ -3882,14 +3882,14 @@ bool of_GETC(vthread_t thr, vvp_code_t cp)
 {
       int32_t idx = thr->words[cp->bit_idx[0]].w_int;
       const string str = thr->pop_str();
-      int8_t byte = 0;
+      uint8_t byte = 0;
 
-      if (idx >= 0 && idx < (int32_t)str.size() &&
+      if (idx >= 0 && static_cast<size_t>(idx) < str.size() &&
           (thr->flags[4] == BIT4_0)) {
-	    byte = str[idx];
+	    byte = static_cast<uint8_t>(str[idx]);
       }
 
-      thr->push_vec4(vvp_vector4_t(8, byte));
+      thr->push_vec4(vvp_vector4_t(8, static_cast<unsigned long>(byte), 0));
 
       return true;
 }

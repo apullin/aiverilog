@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "sv_string_getc_const_oob.v",
+    "iverilog-args" : [ "-g2012" ]
+}

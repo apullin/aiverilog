@@ -315,9 +315,10 @@ static PLI_INT32 toupperlower_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       value.format = vpiStringVal;
       vpi_get_value(arg, &value);
 
-      for (size_t i = 0; value.value.str[i]; i++)
-	    value.value.str[i] = (name[0] == 'u') ? toupper(value.value.str[i])
-						  : tolower(value.value.str[i]);
+      for (size_t i = 0; value.value.str[i]; i++) {
+	    unsigned char ch = (unsigned char)value.value.str[i];
+	    value.value.str[i] = (name[0] == 'u') ? toupper(ch) : tolower(ch);
+      }
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
