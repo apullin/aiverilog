@@ -1148,7 +1148,8 @@ void vvp_queue_vec4::set_word(unsigned adr, const vvp_vector4_t&value)
 void vvp_queue_vec4::get_word(unsigned adr, vvp_vector4_t&value)
 {
       if (adr >= queue.size())
-	    value = vvp_vector4_t(queue[0].size());
+	    value = queue.empty() ? vvp_vector4_t(value.size())
+	                          : vvp_vector4_t(queue[0].size());
       else
 	    value = queue[adr];
 }

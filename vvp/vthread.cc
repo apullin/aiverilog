@@ -4319,7 +4319,8 @@ static bool load_dar(vthread_t thr, vvp_code_t cp)
 
       ELEM word;
       if (darray &&
-          (adr >= 0) && (thr->flags[4] == BIT4_0)) // A defined address >= 0
+          (adr >= 0) && (thr->flags[4] == BIT4_0) &&
+          (static_cast<size_t>(adr) < darray->get_size()))
 	    darray->get_word(adr, word);
       else
 	    dq_default(word, obj->size());
@@ -4372,7 +4373,8 @@ bool of_LOAD_PROP_DAR_VEC4(vthread_t thr, vvp_code_t cp)
       vvp_darray*darray = pobj.peek<vvp_darray>();
 
       vvp_vector4_t word;
-      if (darray && (adr >= 0) && (thr->flags[4] == BIT4_0)) {
+      if (darray && (adr >= 0) && (thr->flags[4] == BIT4_0) &&
+          (static_cast<size_t>(adr) < darray->get_size())) {
 	    darray->get_word(adr, word);
       } else {
 	    dq_default(word, wid);
