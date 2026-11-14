@@ -42,6 +42,24 @@ static bool vec4_lt_unsigned(const vvp_vector4_t&a, const vvp_vector4_t&b)
       return gt == BIT4_1;
 }
 
+static bool vec4_lt_signed(const vvp_vector4_t&a, const vvp_vector4_t&b)
+{
+      if (a.eeq(b)) return false;
+      vvp_bit4_t gt = compare_gtge_signed(b, a, BIT4_1);
+      if (gt == BIT4_X) return false;
+      return gt == BIT4_1;
+}
+
+static bool vec2_lt_signed(const vvp_vector2_t&a, const vvp_vector2_t&b,
+                           unsigned wid)
+{
+      if (wid == 0) return false;
+      int sa = a.value(wid - 1);
+      int sb = b.value(wid - 1);
+      if (sa != sb) return sa > sb; // negative (1) < non-negative (0)
+      return a < b;
+}
+
 } // namespace
 
 vvp_darray::~vvp_darray()
@@ -54,7 +72,7 @@ void vvp_darray::reverse_elems(void)
            << typeid(*this).name() << endl;
 }
 
-void vvp_darray::sort_elems(bool /*ascending*/)
+void vvp_darray::sort_elems(bool /*ascending*/, bool /*is_signed*/)
 {
       cerr << "XXXX sort_elems() not implemented for "
            << typeid(*this).name() << endl;
@@ -129,7 +147,7 @@ template <class TYPE> void vvp_darray_atom<TYPE>::reverse_elems(void)
       }
 }
 
-template <class TYPE> void vvp_darray_atom<TYPE>::sort_elems(bool ascending)
+template <class TYPE> void vvp_darray_atom<TYPE>::sort_elems(bool ascending, bool /*is_signed*/)
 {
       if (ascending) std::sort(array_.begin(), array_.end());
       else std::sort(array_.begin(), array_.end(), std::greater<TYPE>());
@@ -291,14 +309,15 @@ void vvp_darray_vec4::reverse_elems(void)
       }
 }
 
-void vvp_darray_vec4::sort_elems(bool ascending)
+void vvp_darray_vec4::sort_elems(bool ascending, bool is_signed)
 {
+      auto lt = is_signed ? vec4_lt_signed : vec4_lt_unsigned;
       if (ascending) {
-	    std::sort(array_.begin(), array_.end(), vec4_lt_unsigned);
+	    std::sort(array_.begin(), array_.end(), lt);
       } else {
 	    std::sort(array_.begin(), array_.end(),
-		      [](const vvp_vector4_t&a, const vvp_vector4_t&b) {
-			    return vec4_lt_unsigned(b, a);
+		      [lt](const vvp_vector4_t&a, const vvp_vector4_t&b) {
+			    return lt(b, a);
 		      });
       }
 }
@@ -316,8 +335,23 @@ void vvp_darray_vec2::reverse_elems(void)
       }
 }
 
-void vvp_darray_vec2::sort_elems(bool ascending)
+void vvp_darray_vec2::sort_elems(bool ascending, bool is_signed)
 {
+      unsigned wid = word_wid_;
+      if (is_signed) {
+	    if (ascending) {
+		  std::sort(array_.begin(), array_.end(),
+			    [wid](const vvp_vector2_t&a, const vvp_vector2_t&b) {
+				  return vec2_lt_signed(a, b, wid);
+			    });
+	    } else {
+		  std::sort(array_.begin(), array_.end(),
+			    [wid](const vvp_vector2_t&a, const vvp_vector2_t&b) {
+				  return vec2_lt_signed(b, a, wid);
+			    });
+	    }
+	    return;
+      }
       if (ascending) {
 	    std::sort(array_.begin(), array_.end());
       } else {
@@ -448,7 +482,7 @@ void vvp_darray_object::reverse_elems(void)
       }
 }
 
-void vvp_darray_object::sort_elems(bool ascending)
+void vvp_darray_object::sort_elems(bool ascending, bool /*is_signed*/)
 {
       if (ascending) {
 	    std::sort(array_.begin(), array_.end(),
@@ -512,7 +546,7 @@ void vvp_darray_real::reverse_elems(void)
       }
 }
 
-void vvp_darray_real::sort_elems(bool ascending)
+void vvp_darray_real::sort_elems(bool ascending, bool /*is_signed*/)
 {
       if (ascending) std::sort(array_.begin(), array_.end());
       else std::sort(array_.begin(), array_.end(), std::greater<double>());
@@ -603,7 +637,7 @@ void vvp_darray_string::reverse_elems(void)
       }
 }
 
-void vvp_darray_string::sort_elems(bool ascending)
+void vvp_darray_string::sort_elems(bool ascending, bool /*is_signed*/)
 {
       if (ascending) std::sort(array_.begin(), array_.end());
       else std::sort(array_.begin(), array_.end(), std::greater<string>());
@@ -963,7 +997,7 @@ void vvp_queue_string::reverse_elems(void)
       std::reverse(queue.begin(), queue.end());
 }
 
-void vvp_queue_real::sort_elems(bool ascending)
+void vvp_queue_real::sort_elems(bool ascending, bool /*is_signed*/)
 {
       if (ascending) std::sort(queue.begin(), queue.end());
       else std::sort(queue.begin(), queue.end(), std::greater<double>());
@@ -974,7 +1008,7 @@ void vvp_queue_real::shuffle_elems(void)
       std::shuffle(queue.begin(), queue.end(), shuffle_rng());
 }
 
-void vvp_queue_string::sort_elems(bool ascending)
+void vvp_queue_string::sort_elems(bool ascending, bool /*is_signed*/)
 {
       if (ascending) std::sort(queue.begin(), queue.end());
       else std::sort(queue.begin(), queue.end(), std::greater<string>());
@@ -1099,14 +1133,15 @@ void vvp_queue_vec4::reverse_elems(void)
       std::reverse(queue.begin(), queue.end());
 }
 
-void vvp_queue_vec4::sort_elems(bool ascending)
+void vvp_queue_vec4::sort_elems(bool ascending, bool is_signed)
 {
+      auto lt = is_signed ? vec4_lt_signed : vec4_lt_unsigned;
       if (ascending) {
-	    std::sort(queue.begin(), queue.end(), vec4_lt_unsigned);
+	    std::sort(queue.begin(), queue.end(), lt);
       } else {
 	    std::sort(queue.begin(), queue.end(),
-		      [](const vvp_vector4_t&a, const vvp_vector4_t&b) {
-			    return vec4_lt_unsigned(b, a);
+		      [lt](const vvp_vector4_t&a, const vvp_vector4_t&b) {
+			    return lt(b, a);
 		      });
       }
 }

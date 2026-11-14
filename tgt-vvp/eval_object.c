@@ -360,7 +360,7 @@ static int eval_object_ufunc(ivl_expr_t ex)
       return 0;
 }
 
-static unsigned queue_unique_src_elem_wid(ivl_expr_t arg)
+static ivl_type_t queue_unique_src_elem_type(ivl_expr_t arg)
 {
       ivl_type_t src_q = 0;
       if (ivl_expr_type(arg) == IVL_EX_PROPERTY) {
@@ -374,9 +374,24 @@ static unsigned queue_unique_src_elem_wid(ivl_expr_t arg)
       }
       if (ivl_type_base(src_q) == IVL_VT_QUEUE ||
 	  ivl_type_base(src_q) == IVL_VT_DARRAY) {
-	    return ivl_type_packed_width(ivl_type_element(src_q));
+	    return ivl_type_element(src_q);
       }
       return 0;
+}
+
+static unsigned queue_unique_src_elem_wid(ivl_expr_t arg)
+{
+      ivl_type_t et = queue_unique_src_elem_type(arg);
+      return et ? ivl_type_packed_width(et) : 0;
+}
+
+static bool queue_unique_src_elem_signed(ivl_expr_t arg)
+{
+      ivl_type_t et = queue_unique_src_elem_type(arg);
+      if (!et) return false;
+      ivl_variable_type_t bt = ivl_type_base(et);
+      return (bt == IVL_VT_BOOL || bt == IVL_VT_LOGIC) &&
+             (ivl_type_signed(et) != 0);
 }
 
 /*
@@ -424,6 +439,18 @@ static int eval_queue_method_unique(ivl_expr_t expr)
       ivl_expr_t arg = ivl_expr_parm(expr, 0);
       unsigned elem_wid = queue_unique_src_elem_wid(arg);
       if (elem_wid == 0) return 1;
+      bool is_signed = queue_unique_src_elem_signed(arg);
+
+      if (is_signed && strcmp(name, "$ivl_queue_method$min") == 0) {
+	    return emit_queue_locator_opcode(arg, elem_wid,
+					     "%queue/min/v/s",
+					     "%queue/min/prop/v/s");
+      }
+      if (is_signed && strcmp(name, "$ivl_queue_method$max") == 0) {
+	    return emit_queue_locator_opcode(arg, elem_wid,
+					     "%queue/max/v/s",
+					     "%queue/max/prop/v/s");
+      }
 
       for (unsigned idx = 0; idx < sizeof table / sizeof table[0]; idx += 1) {
 	    if (strcmp(name, table[idx].name) == 0) {
@@ -574,7 +601,8 @@ static void emit_queue_with_step_index(int reverse, int i_reg, unsigned lab_top)
 }
 
 static void emit_queue_with_finish(enum queue_locator_with_mode_e mode,
-				   int is_prop, unsigned elem_wid)
+				   int is_prop, unsigned elem_wid,
+				   bool is_signed)
 {
       if (mode == QUEUE_WITH_UNIQUE || mode == QUEUE_WITH_UNIQUE_INDEX) {
 	    unsigned wid = (mode == QUEUE_WITH_UNIQUE_INDEX) ? 32 : elem_wid;
@@ -586,7 +614,9 @@ static void emit_queue_with_finish(enum queue_locator_with_mode_e mode,
       }
       if (mode == QUEUE_WITH_MIN || mode == QUEUE_WITH_MAX) {
 	    const char* opname = (mode == QUEUE_WITH_MIN) ? "min" : "max";
-	    fprintf(vvp_out, "    %%queue/%s/obj/v %u;\n", opname, elem_wid);
+	    const char* sign_suf = is_signed ? "/s" : "";
+	    fprintf(vvp_out, "    %%queue/%s/obj/v%s %u;\n",
+		    opname, sign_suf, elem_wid);
 	    if (is_prop) {
 		  fprintf(vvp_out, "    %%pop/obj 1, 1;\n");
 	    }
@@ -701,6 +731,7 @@ static int eval_queue_method_find_with(ivl_expr_t expr)
       fprintf(vvp_out, "T_%u.%u ; nomatch\n", thread_count, lab_nom);
       emit_queue_with_step_index(reverse, i_reg, lab_top);
 
+      bool is_signed = queue_unique_src_elem_signed(qarg);
       if (is_prop) {
 	    fprintf(vvp_out, "T_%u.%u ; found (queue prop)\n", thread_count,
 		    lab_found);
@@ -709,12 +740,12 @@ static int eval_queue_method_find_with(ivl_expr_t expr)
 
 	    fprintf(vvp_out, "T_%u.%u ; loop end (prop)\n", thread_count,
 		    lab_loop_end);
-	    emit_queue_with_finish(mode, 1, elem_wid);
+	    emit_queue_with_finish(mode, 1, elem_wid, is_signed);
 	    fprintf(vvp_out, "T_%u.%u ; with end (prop)\n", thread_count, lab_end);
       } else {
 	    fprintf(vvp_out, "T_%u.%u ; loop end (var)\n", thread_count,
 		    lab_loop_end);
-	    emit_queue_with_finish(mode, 0, elem_wid);
+	    emit_queue_with_finish(mode, 0, elem_wid, is_signed);
 	    fprintf(vvp_out, "T_%u.%u ; with end (var)\n", thread_count, lab_end);
       }
 

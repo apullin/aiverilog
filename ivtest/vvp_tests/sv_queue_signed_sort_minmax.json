@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "sv_queue_signed_sort_minmax.v",
+    "iverilog-args" : [ "-g2012" ]
+}
