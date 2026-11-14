@@ -5228,7 +5228,24 @@ bool of_NEW_COBJ(vthread_t thr, vvp_code_t cp)
 bool of_NEW_DARRAY(vthread_t thr, vvp_code_t cp)
 {
       const char*text = cp->text;
-      size_t size = thr->words[cp->bit_idx[0]].w_int;
+      int64_t raw_size = thr->words[cp->bit_idx[0]].w_int;
+      if (thr->flags[4] != BIT4_0) {
+	    cerr << thr->get_fileline()
+	         << "VVP error: dynamic array new[] size contains unknown "
+	            "or high-Z bits." << endl;
+	    vpip_set_return_value(1);
+	    schedule_finish(0);
+	    return false;
+      }
+      if (raw_size < 0) {
+	    cerr << thr->get_fileline()
+	         << "VVP error: dynamic array new[] size (" << raw_size
+	         << ") must be non-negative." << endl;
+	    vpip_set_return_value(1);
+	    schedule_finish(0);
+	    return false;
+      }
+      size_t size = static_cast<size_t>(raw_size);
       unsigned word_wid;
       size_t n;
 
@@ -5265,6 +5282,8 @@ bool of_NEW_DARRAY(vthread_t thr, vvp_code_t cp)
 	    obj = new vvp_darray_real(size);
       } else if (strcmp(text,"S") == 0) {
 	    obj = new vvp_darray_string(size);
+      } else if (strcmp(text,"o") == 0) {
+	    obj = new vvp_darray_object(size);
       } else {
 	    cerr << get_fileline()
 	         << "Internal error: Unsupported dynamic array type: "

@@ -58,6 +58,13 @@ void darray_new(ivl_type_t element_type, unsigned size_reg)
 	                     size_reg, signed_char, wid);
 	    break;
 
+	  case IVL_VT_CLASS:
+	  case IVL_VT_DARRAY:
+	  case IVL_VT_QUEUE:
+	    fprintf(vvp_out, "    %%new/darray %u, \"o\";\n",
+	                     size_reg);
+	    break;
+
 	  default:
 	    assert(0);
 	    break;

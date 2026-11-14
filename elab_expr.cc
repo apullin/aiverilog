@@ -9168,9 +9168,23 @@ NetExpr* PENewArray::elaborate_expr(Design*des, NetScope*scope,
 				    ivl_type_t ntype, unsigned flags) const
 {
 	// Elaborate the size expression.
-      width_mode_t mode = LOSSLESS;
-      unsigned use_wid = size_->test_width(des, scope, mode);
-      NetExpr*size = size_->elaborate_expr(des, scope, use_wid, flags);
+      NetExpr*size = elab_and_eval(des, scope, size_, -1,
+				   (flags & NEED_CONST) != 0);
+      if (size == 0)
+	    return 0;
+
+      if (const NetEConst*sc = dynamic_cast<const NetEConst*>(size)) {
+	    if (!sc->value().is_defined()) {
+		  cerr << get_fileline() << ": error: Dynamic array new[] "
+		          "size must not contain unknown or high-Z bits."
+		       << endl;
+		  des->errors += 1;
+	    } else if (sc->has_sign() && sc->value().is_negative()) {
+		  cerr << get_fileline() << ": error: Dynamic array new[] "
+		          "size must be non-negative." << endl;
+		  des->errors += 1;
+	    }
+      }
       NetExpr*init_val = 0;
 
       if (init_) {
