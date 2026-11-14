@@ -253,7 +253,28 @@ static struct vvp_nexus_data*new_nexus_data(void)
       return data;
 }
 
-static int nexus_drive_is_strength_aware(ivl_nexus_ptr_t nptr)
+static int nexus_drive_is_strength_aware_(ivl_nexus_ptr_t nptr, unsigned depth);
+
+static int nexus_has_strength_aware_drive(ivl_nexus_t nex, unsigned depth)
+{
+      unsigned idx;
+
+      if (nex == 0 || depth > 8)
+	    return 0;
+
+      for (idx = 0 ; idx < ivl_nexus_ptrs(nex) ; idx += 1) {
+	    ivl_nexus_ptr_t ptr = ivl_nexus_ptr(nex, idx);
+	    if ((ivl_nexus_ptr_drive0(ptr) == IVL_DR_HiZ)
+		&& (ivl_nexus_ptr_drive1(ptr) == IVL_DR_HiZ))
+		  continue;
+	    if (nexus_drive_is_strength_aware_(ptr, depth + 1))
+		  return 1;
+      }
+
+      return 0;
+}
+
+static int nexus_drive_is_strength_aware_(ivl_nexus_ptr_t nptr, unsigned depth)
 {
       ivl_net_logic_t logic;
       ivl_lpm_t lpm;
@@ -292,12 +313,20 @@ static int nexus_drive_is_strength_aware(ivl_nexus_ptr_t nptr)
 	    switch (ivl_lpm_type(lpm)) {
 		case IVL_LPM_CONCATZ:
 		  return 1;
+		case IVL_LPM_PART_VP:
+		  return nexus_has_strength_aware_drive(ivl_lpm_data(lpm, 0),
+							depth);
 		default:
 		  break;
 	    }
       }
 
       return 0;
+}
+
+static int nexus_drive_is_strength_aware(ivl_nexus_ptr_t nptr)
+{
+      return nexus_drive_is_strength_aware_(nptr, 0);
 }
 
 /*
