@@ -515,6 +515,34 @@ static void draw_stmt_assign_vector_opcode(unsigned char opcode, bool is_signed)
       }
 }
 
+static void draw_compressed_vector_op(unsigned char opcode, unsigned lwid,
+				      ivl_expr_t rval)
+{
+      if (opcode == 'l' || opcode == 'r' || opcode == 'R') {
+	    draw_eval_vec4(rval);
+	    draw_stmt_assign_vector_opcode(opcode, false);
+	    return;
+      }
+
+      unsigned op_wid = ivl_expr_width(rval);
+      if (op_wid < lwid)
+	    op_wid = lwid;
+
+      bool is_signed = ivl_expr_signed(rval) != 0;
+      if (op_wid > lwid) {
+	    fprintf(vvp_out, "    %%pad/%c %u;\n",
+		    is_signed ? 's' : 'u', op_wid);
+      }
+
+      draw_eval_vec4(rval);
+      resize_vec4_wid(rval, op_wid);
+      draw_stmt_assign_vector_opcode(opcode, is_signed);
+
+      if (op_wid > lwid) {
+	    fprintf(vvp_out, "    %%pad/u %u;\n", lwid);
+      }
+}
+
 /*
  * Copy a whole unpacked array into another, element by element.
  *
@@ -608,10 +636,7 @@ static int show_stmt_assign_vector(ivl_statement_t net)
 
 	    fprintf(vvp_out, "    ; show_stmt_assign_vector: Get l-value for compressed %c= operand\n", ivl_stmt_opcode(net));
 	    get_vec_from_lval(net, slices);
-	    draw_eval_vec4(rval);
-	    resize_vec4_wid(rval, wid);
-	    draw_stmt_assign_vector_opcode(ivl_stmt_opcode(net),
-					   ivl_expr_signed(rval));
+	    draw_compressed_vector_op(ivl_stmt_opcode(net), wid, rval);
 	    if (defer_events)
 		  fprintf(vvp_out, "    %%event/defer/begin;\n");
 	    put_vec_to_lval(net, slices);
@@ -1066,10 +1091,10 @@ static void show_stmt_assign_sig_darray_queue_mux(ivl_statement_t net)
 		  fprintf(vvp_out, "    %%ix/mov %d, 3;\n", mux_word);
 		  fprintf(vvp_out, "    %%flag_mov %d, 4;\n", flag);
 		  fprintf(vvp_out, "    %%load/dar/vec4 v%p_0;\n", var);
-		  draw_eval_vec4(rval);
-		  resize_vec4_wid(rval, ivl_stmt_lwidth(net));
-		  draw_stmt_assign_vector_opcode(ivl_stmt_opcode(net),
-					         ivl_expr_signed(rval));
+		  draw_compressed_vector_op(ivl_stmt_opcode(net),
+					    ivl_stmt_lwidth(net), rval);
+		  if (ivl_type_base(element_type) == IVL_VT_BOOL)
+			fprintf(vvp_out, "    %%cast2;\n");
 		  fprintf(vvp_out, "    %%flag_mov 4, %d;\n", flag);
 		  fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
 		  clr_flag(flag);
@@ -1334,15 +1359,14 @@ static int show_stmt_assign_sig_cobject(ivl_statement_t net)
 	        ivl_type_base(prop_type) == IVL_VT_LOGIC) {
 		  if (ivl_stmt_opcode(net) != 0) {
 			fprintf(vvp_out, "    %%prop/v %d;\n", prop_idx);
+			draw_compressed_vector_op(ivl_stmt_opcode(net),
+						  lwid, rval);
+		  } else {
+			draw_eval_vec4(rval);
+			resize_vec4_wid(rval, lwid);
 		  }
-
-		  draw_eval_vec4(rval);
-		  if (ivl_type_base(prop_type) == IVL_VT_BOOL &&
-		      ivl_expr_value(rval) != IVL_VT_BOOL)
+		  if (ivl_type_base(prop_type) == IVL_VT_BOOL)
 			fprintf(vvp_out, "    %%cast2;\n");
-
-		  draw_stmt_assign_vector_opcode(ivl_stmt_opcode(net),
-					         ivl_expr_signed(rval));
 
 		  fprintf(vvp_out, "    %%store/prop/v %d, %u; Store in logic property %s\n",
 			  prop_idx, lwid, ivl_type_prop_name(sig_type, prop_idx));
