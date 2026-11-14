@@ -37,6 +37,7 @@ class netenum_t : public LineInfo, public ivl_type_s {
       ~netenum_t() override;
 
       virtual ivl_variable_type_t base_type() const override;
+      inline ivl_type_t elem_base_type() const { return base_type_; }
       virtual bool packed() const override;
       virtual long packed_width() const override;
       netranges_t slice_dimensions() const override;
