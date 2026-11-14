@@ -662,6 +662,65 @@ bool PEUnary::has_aa_term(Design*des, NetScope*scope) const
       return expr_->has_aa_term(des, scope);
 }
 
+PEInside::PEInside(PExpr*lhs, std::vector<item_t>*items)
+: lhs_(lhs), items_(*items)
+{
+      delete items;
+}
+
+PEInside::~PEInside()
+{
+      delete lhs_;
+      for (const auto&it : items_) {
+	    delete it.lo;
+	    delete it.hi;
+      }
+}
+
+void PEInside::dump(std::ostream&out) const
+{
+      out << "(";
+      if (lhs_) lhs_->dump(out);
+      out << " inside {";
+      for (size_t i = 0 ; i < items_.size() ; ++i) {
+	    if (i > 0) out << ", ";
+	    if (items_[i].is_range) {
+		  out << "[";
+		  if (items_[i].lo) items_[i].lo->dump(out);
+		  else out << "$";
+		  out << ":";
+		  if (items_[i].hi) items_[i].hi->dump(out);
+		  else out << "$";
+		  out << "]";
+	    } else if (items_[i].lo) {
+		  items_[i].lo->dump(out);
+	    }
+      }
+      out << "})";
+}
+
+void PEInside::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
+{
+      if (lhs_) lhs_->declare_implicit_nets(scope, type);
+      for (const auto&it : items_) {
+	    if (it.lo) it.lo->declare_implicit_nets(scope, type);
+	    if (it.hi) it.hi->declare_implicit_nets(scope, type);
+      }
+}
+
+bool PEInside::has_aa_term(Design*des, NetScope*scope) const
+{
+      if (lhs_ && lhs_->has_aa_term(des, scope))
+	    return true;
+      for (const auto&it : items_) {
+	    if (it.lo && it.lo->has_aa_term(des, scope))
+		  return true;
+	    if (it.hi && it.hi->has_aa_term(des, scope))
+		  return true;
+      }
+      return false;
+}
+
 PEVoid::PEVoid()
 {
 }

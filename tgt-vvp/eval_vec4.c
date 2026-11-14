@@ -802,6 +802,87 @@ static void draw_string_getc(ivl_expr_t expr)
       clr_word(arg1);
 }
 
+static void draw_inside_darray(ivl_expr_t expr)
+{
+      ivl_expr_t lhs_ex = ivl_expr_parm(expr, 0);
+      ivl_expr_t arr_ex = ivl_expr_parm(expr, 1);
+      ivl_signal_t sig = ivl_expr_signal(arr_ex);
+      assert(sig);
+
+      ivl_type_t et = ivl_type_element(ivl_signal_net_type(sig));
+      ivl_variable_type_t ebt = ivl_type_base(et);
+
+      int i_reg = allocate_word();
+      int n_reg = allocate_word();
+      int acc_flag = allocate_flag();
+      unsigned lab_top = local_count++;
+      unsigned lab_done = local_count++;
+
+      fprintf(vvp_out, "    %%flag_set/imm %d, 0;\n", acc_flag);
+      if (ebt == IVL_VT_REAL) {
+	    draw_eval_real(lhs_ex);
+      } else if (ebt == IVL_VT_STRING) {
+	    draw_eval_string(lhs_ex);
+      } else {
+	    draw_eval_vec4(lhs_ex);
+      }
+
+      fprintf(vvp_out, "    %%vpi_func %u %u \"$size\" 32, v%p_0 {0 0 0};\n",
+	      ivl_file_table_index(ivl_expr_file(expr)),
+	      ivl_expr_lineno(expr), sig);
+      fprintf(vvp_out, "    %%ix/vec4 %d;\n", n_reg);
+      fprintf(vvp_out, "    %%ix/load %d, 0, 0;\n", i_reg);
+
+      fprintf(vvp_out, "T_%u.%u ;\n", thread_count, lab_top);
+      fprintf(vvp_out, "    %%cmpix/ltu %d, %d;\n", i_reg, n_reg);
+      fprintf(vvp_out, "    %%jmp/0 T_%u.%u, 4;\n", thread_count, lab_done);
+      fprintf(vvp_out, "    %%ix/mov 3, %d;\n", i_reg);
+      fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+
+      if (ebt == IVL_VT_REAL) {
+	    fprintf(vvp_out, "    %%dup/real;\n");
+	    fprintf(vvp_out, "    %%load/dar/r v%p_0;\n", sig);
+	    fprintf(vvp_out, "    %%cmp/wr;\n");
+      } else if (ebt == IVL_VT_STRING) {
+	    fprintf(vvp_out, "    %%dup/str;\n");
+	    fprintf(vvp_out, "    %%load/dar/str v%p_0;\n", sig);
+	    fprintf(vvp_out, "    %%cmp/str;\n");
+      } else {
+	    unsigned lwid = ivl_expr_width(lhs_ex);
+	    unsigned ewid = ivl_type_packed_width(et);
+	    fprintf(vvp_out, "    %%dup/vec4;\n");
+	    fprintf(vvp_out, "    %%load/dar/vec4 v%p_0;\n", sig);
+	    if (ebt == IVL_VT_BOOL)
+		  fprintf(vvp_out, "    %%cast2;\n");
+	    if (ewid != lwid) {
+		  char ps = (ivl_expr_signed(lhs_ex) && ivl_type_signed(et))
+		          ? 's' : 'u';
+		  fprintf(vvp_out, "    %%pad/%c %u;\n", ps, lwid);
+	    }
+	    fprintf(vvp_out, "    %%cmp/we;\n");
+      }
+
+      fprintf(vvp_out, "    %%flag_or %d, 4;\n", acc_flag);
+      fprintf(vvp_out, "    %%jmp/1 T_%u.%u, %d;\n", thread_count, lab_done,
+	      acc_flag);
+      fprintf(vvp_out, "    %%ix/add %d, 1, 0;\n", i_reg);
+      fprintf(vvp_out, "    %%jmp T_%u.%u;\n", thread_count, lab_top);
+
+      fprintf(vvp_out, "T_%u.%u ;\n", thread_count, lab_done);
+      if (ebt == IVL_VT_REAL) {
+	    fprintf(vvp_out, "    %%pop/real 1;\n");
+      } else if (ebt == IVL_VT_STRING) {
+	    fprintf(vvp_out, "    %%pop/str 1;\n");
+      } else {
+	    fprintf(vvp_out, "    %%pop/vec4 1;\n");
+      }
+      fprintf(vvp_out, "    %%flag_get/vec4 %d;\n", acc_flag);
+
+      clr_flag(acc_flag);
+      clr_word(n_reg);
+      clr_word(i_reg);
+}
+
 static void draw_sfunc_vec4(ivl_expr_t expr)
 {
       unsigned parm_count = ivl_expr_parms(expr);
@@ -816,6 +897,12 @@ static void draw_sfunc_vec4(ivl_expr_t expr)
 		    ivl_file_table_index(ivl_expr_file(expr)),
 		    ivl_expr_lineno(expr), ivl_expr_name(expr),
 		    ivl_expr_width(expr));
+	    return;
+      }
+
+      if (strcmp(ivl_expr_name(expr), "$ivl_inside_darray") == 0 &&
+          parm_count == 2) {
+	    draw_inside_darray(expr);
 	    return;
       }
 
