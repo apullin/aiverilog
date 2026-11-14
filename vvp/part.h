@@ -58,11 +58,14 @@ class vvp_fun_part_sa  : public vvp_fun_part, public vvp_gen_event_s {
       void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 			unsigned base, unsigned vwid, vvp_context_t) override;
 
+      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override;
+
     private:
       void run_run() override;
 
     private:
       vvp_vector4_t val_;
+      vvp_vector8_t val8_;
       vvp_net_t*net_;
 };
 
@@ -87,6 +90,8 @@ class vvp_fun_part_aa  : public vvp_fun_part, public automatic_hooks_s {
 
       void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 			unsigned base, unsigned vwid, vvp_context_t context) override;
+
+      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override;
 
     private:
       __vpiScope*context_scope_;
@@ -136,6 +141,7 @@ class vvp_fun_part_var  : public vvp_net_fun_t {
       bool recv_vec4_(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                       int&base, vvp_vector4_t&source,
                       vvp_vector4_t&ref);
+      bool recv_vec8_(const vvp_vector8_t&source, int base, vvp_vector8_t&ref);
 
       unsigned wid_;
       bool is_signed_;
@@ -157,11 +163,15 @@ class vvp_fun_part_var_sa  : public vvp_fun_part_var {
       void recv_vec4_pv(vvp_net_ptr_t port, const vvp_vector4_t&bit,
 			unsigned base, unsigned vwid, vvp_context_t) override;
 
+      void recv_vec8(vvp_net_ptr_t port, const vvp_vector8_t&bit) override;
+
     private:
       int base_;
       vvp_vector4_t source_;
+      vvp_vector8_t source8_;
 	// Save the last output, for detecting change.
       vvp_vector4_t ref_;
+      vvp_vector8_t ref8_;
 };
 
 /*
