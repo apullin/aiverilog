@@ -113,6 +113,295 @@ unsigned PGate::calculate_array_size_(Design*des, NetScope*scope,
  * Elaborate the continuous assign. (This is *not* the procedural
  * assign.) Elaborate the lvalue and rvalue, and do the assignment.
  */
+struct uarray_slice_dim_t {
+      enum kind_t { SINGLE_CONST, SINGLE_VAR, SLICE_CONST, SLICE_IDX_VAR } kind;
+      long left = 0;
+      long step = 1;
+      unsigned count = 1;
+      NetExpr*expr = nullptr;
+};
+
+struct uarray_slice_info_t {
+      NetNet*sig = nullptr;
+      bool is_slice = false;
+      bool all_const = true;
+      std::vector<uarray_slice_dim_t> dims;
+      std::vector<unsigned> slice_counts;
+
+      ~uarray_slice_info_t() {
+	    for (auto&d : dims)
+		  delete d.expr;
+      }
+};
+
+static bool inspect_uarray_slice_ident(Design*des, NetScope*scope,
+				       const PExpr*pe,
+				       bool need_const, bool emit_errors,
+				       uarray_slice_info_t&out)
+{
+      const PEIdent*id = dynamic_cast<const PEIdent*>(pe);
+      if (!id)
+	    return false;
+
+      symbol_search_results sr;
+      if (!symbol_search(id, des, scope, id->path(), id->lexical_pos(), &sr))
+	    return false;
+      if (!sr.net || !sr.path_tail.empty())
+	    return false;
+
+      NetNet*sig = sr.net;
+      unsigned D = sig->unpacked_dimensions();
+      if (D == 0)
+	    return false;
+
+      const std::list<index_component_t>&idxs = id->path().back().index;
+      size_t k = idxs.size();
+      if (k > D)
+	    return false;
+      if (k == D && idxs.back().sel == index_component_t::SEL_BIT)
+	    return false;
+
+      // Verify prefix indices 0 .. k-2 are all single-element SEL_BIT.
+      size_t pos = 0;
+      for (auto it = idxs.begin() ; it != idxs.end() ; ++it, ++pos) {
+	    if (pos + 1 < k && it->sel != index_component_t::SEL_BIT) {
+		  if (emit_errors) {
+			cerr << id->get_fileline() << ": error: Only the last "
+				"supplied unpacked index may be a slice." << endl;
+			des->errors += 1;
+		  }
+		  return false;
+	    }
+      }
+
+      out.sig = sig;
+      out.is_slice = (k > 0);
+      out.all_const = true;
+      out.dims.resize(D);
+      out.slice_counts.clear();
+
+      const auto&decl_dims = sig->unpacked_dims();
+      auto it = idxs.begin();
+      for (unsigned d = 0 ; d < D ; ++d) {
+	    const netrange_t&decl = decl_dims[d];
+	    bool decl_asc = decl.get_msb() < decl.get_lsb();
+	    if (d < k) {
+		  const index_component_t&ic = *it++;
+		  if (ic.sel == index_component_t::SEL_BIT) {
+			NetExpr*ex = elab_and_eval(des, scope, ic.msb, -1, need_const);
+			if (!ex)
+			      return false;
+			long cval = 0;
+			if (eval_as_long(cval, ex)) {
+			      delete ex;
+			      out.dims[d].kind = uarray_slice_dim_t::SINGLE_CONST;
+			      out.dims[d].left = cval;
+			      out.dims[d].count = 1;
+			} else {
+			      if (need_const) {
+				    if (emit_errors) {
+					  cerr << id->get_fileline() << ": error: "
+						  "Array slice index must be constant "
+						  "in continuous assignment." << endl;
+					  des->errors += 1;
+				    }
+				    delete ex;
+				    return false;
+			      }
+			      out.all_const = false;
+			      out.dims[d].kind = uarray_slice_dim_t::SINGLE_VAR;
+			      out.dims[d].expr = ex;
+			      out.dims[d].count = 1;
+			}
+		  } else if (ic.sel == index_component_t::SEL_PART) {
+			NetExpr*hi_e = elab_and_eval(des, scope, ic.msb, -1, true);
+			NetExpr*lo_e = elab_and_eval(des, scope, ic.lsb, -1, true);
+			long hi = 0, lo = 0;
+			if (!hi_e || !lo_e || !eval_as_long(hi, hi_e) || !eval_as_long(lo, lo_e)) {
+			      if (emit_errors) {
+				    cerr << id->get_fileline() << ": error: Unpacked "
+					    "array slice bounds must be constant." << endl;
+				    des->errors += 1;
+			      }
+			      delete hi_e;
+			      delete lo_e;
+			      return false;
+			}
+			delete hi_e;
+			delete lo_e;
+			if (hi != lo && ((hi < lo) != decl_asc)) {
+			      if (emit_errors) {
+				    cerr << id->get_fileline() << ": error: Unpacked "
+					    "slice [" << hi << ":" << lo << "] direction "
+					    "does not match declaration ["
+					 << decl.get_msb() << ":" << decl.get_lsb()
+					 << "]." << endl;
+				    des->errors += 1;
+			      }
+			      return false;
+			}
+			unsigned cnt = (hi >= lo) ? (unsigned)(hi - lo + 1)
+			                          : (unsigned)(lo - hi + 1);
+			out.dims[d].kind = uarray_slice_dim_t::SLICE_CONST;
+			out.dims[d].left = hi;
+			out.dims[d].step = (hi <= lo) ? 1 : -1;
+			out.dims[d].count = cnt;
+			out.slice_counts.push_back(cnt);
+		  } else if (ic.sel == index_component_t::SEL_IDX_UP ||
+			     ic.sel == index_component_t::SEL_IDX_DO) {
+			bool is_up = (ic.sel == index_component_t::SEL_IDX_UP);
+			NetExpr*base_e = elab_and_eval(des, scope, ic.msb, -1, need_const);
+			NetExpr*wid_e = elab_and_eval(des, scope, ic.lsb, -1, true);
+			long wid = 0;
+			if (!base_e || !wid_e || !eval_as_long(wid, wid_e) || wid <= 0) {
+			      if (emit_errors) {
+				    cerr << id->get_fileline() << ": error: Indexed "
+					    "slice width must be a positive constant."
+					 << endl;
+				    des->errors += 1;
+			      }
+			      delete base_e;
+			      delete wid_e;
+			      return false;
+			}
+			delete wid_e;
+			long base_c = 0;
+			if (eval_as_long(base_c, base_e)) {
+			      delete base_e;
+			      long left = 0;
+			      long step = decl_asc ? 1 : -1;
+			      if (decl_asc)
+				    left = is_up ? base_c : (base_c - (wid - 1));
+			      else
+				    left = is_up ? (base_c + (wid - 1)) : base_c;
+			      out.dims[d].kind = uarray_slice_dim_t::SLICE_CONST;
+			      out.dims[d].left = left;
+			      out.dims[d].step = step;
+			      out.dims[d].count = (unsigned)wid;
+			} else {
+			      if (need_const) {
+				    if (emit_errors) {
+					  cerr << id->get_fileline() << ": error: "
+						  "Array slice base must be constant "
+						  "in continuous assignment." << endl;
+					  des->errors += 1;
+				    }
+				    delete base_e;
+				    return false;
+			      }
+			      out.all_const = false;
+			      long delta = 0;
+			      long step = decl_asc ? 1 : -1;
+			      if (decl_asc && !is_up)
+				    delta = -(wid - 1);
+			      else if (!decl_asc && is_up)
+				    delta = (wid - 1);
+			      out.dims[d].kind = uarray_slice_dim_t::SLICE_IDX_VAR;
+			      out.dims[d].left = delta;
+			      out.dims[d].step = step;
+			      out.dims[d].count = (unsigned)wid;
+			      out.dims[d].expr = base_e;
+			}
+			out.slice_counts.push_back((unsigned)wid);
+		  } else {
+			return false;
+		  }
+	    } else {
+		  out.dims[d].kind = uarray_slice_dim_t::SLICE_CONST;
+		  out.dims[d].left = decl.get_msb();
+		  out.dims[d].step = (decl.get_msb() <= decl.get_lsb()) ? 1 : -1;
+		  out.dims[d].count = decl.width();
+		  out.slice_counts.push_back(decl.width());
+	    }
+      }
+
+      return !out.slice_counts.empty();
+}
+
+static NetExpr* build_uarray_slice_canon_word(const LineInfo&loc,
+					      const uarray_slice_info_t&info,
+					      unsigned linear_elem_idx)
+{
+      unsigned nslice = info.slice_counts.size();
+      std::vector<unsigned> coords(nslice, 0);
+      unsigned rem = linear_elem_idx;
+      for (int s = (int)nslice - 1 ; s >= 0 ; --s) {
+	    unsigned cnt = info.slice_counts[s];
+	    coords[s] = rem % cnt;
+	    rem /= cnt;
+      }
+
+      bool all_c = true;
+      std::list<long> const_idxs;
+      std::list<NetExpr*> var_idxs;
+      size_t s_pos = 0;
+      for (size_t d = 0 ; d < info.dims.size() ; ++d) {
+	    const uarray_slice_dim_t&dm = info.dims[d];
+	    if (dm.kind == uarray_slice_dim_t::SINGLE_CONST) {
+		  const_idxs.push_back(dm.left);
+		  NetExpr*ce = new NetEConst(verinum(dm.left));
+		  ce->set_line(loc);
+		  var_idxs.push_back(ce);
+	    } else if (dm.kind == uarray_slice_dim_t::SLICE_CONST) {
+		  long v = dm.left + dm.step * (long)coords[s_pos++];
+		  const_idxs.push_back(v);
+		  NetExpr*ce = new NetEConst(verinum(v));
+		  ce->set_line(loc);
+		  var_idxs.push_back(ce);
+	    } else if (dm.kind == uarray_slice_dim_t::SINGLE_VAR) {
+		  all_c = false;
+		  var_idxs.push_back(dm.expr->dup_expr());
+	    } else {
+		  all_c = false;
+		  long offset = dm.left + dm.step * (long)coords[s_pos++];
+		  NetExpr*ex = dm.expr->dup_expr();
+		  if (offset != 0) {
+			NetEConst*oc = new NetEConst(verinum(offset));
+			oc->set_line(loc);
+			unsigned w = max(ex->expr_width(), oc->expr_width()) + 1;
+			ex = new NetEBAdd('+', pad_to_width(ex, w, loc),
+					  pad_to_width(oc, w, loc), w, true);
+			ex->set_line(loc);
+			eval_expr(ex);
+		  }
+		  var_idxs.push_back(ex);
+	    }
+      }
+
+      if (all_c) {
+	    for (NetExpr*e : var_idxs)
+		  delete e;
+	    return normalize_variable_unpacked(info.sig, const_idxs);
+      }
+      return normalize_variable_unpacked(info.sig, var_idxs);
+}
+
+static void cache_slice_dynamic_indices(NetScope*scope, const LineInfo&loc,
+					uarray_slice_info_t&info,
+					NetBlock*blk)
+{
+      for (auto&dm : info.dims) {
+	    if (!dm.expr || dynamic_cast<NetEConst*>(dm.expr))
+		  continue;
+	    NetNet*tmp_sig = new NetNet(scope, scope->local_symbol(),
+					NetNet::REG, &netvector_t::atom2s32);
+	    tmp_sig->set_line(loc);
+	    tmp_sig->local_flag(true);
+	    tmp_sig->incr_lref();
+
+	    unsigned w = 32;
+	    NetExpr*init_rv = pad_to_width(dm.expr, w, dm.expr->has_sign(), loc);
+	    NetAssign_*init_lv = new NetAssign_(tmp_sig);
+	    NetAssign*init_st = new NetAssign(init_lv, init_rv);
+	    init_st->set_line(loc);
+	    blk->append(init_st);
+
+	    NetESignal*ref = new NetESignal(tmp_sig);
+	    ref->set_line(loc);
+	    dm.expr = ref;
+      }
+}
+
 void PGAssign::elaborate(Design*des, NetScope*scope) const
 {
       ivl_assert(*this, scope);
@@ -123,6 +412,83 @@ void PGAssign::elaborate(Design*des, NetScope*scope) const
 
       ivl_assert(*this, pin(0));
       ivl_assert(*this, pin(1));
+
+      {
+	    uarray_slice_info_t lhs_sl, rhs_sl;
+	    bool l_probe = inspect_uarray_slice_ident(des, scope, pin(0), false, false, lhs_sl);
+	    bool r_probe = inspect_uarray_slice_ident(des, scope, pin(1), false, false, rhs_sl);
+	    if ((l_probe && lhs_sl.is_slice) || (l_probe && r_probe && rhs_sl.is_slice)) {
+		  if (!gn_system_verilog()) {
+			cerr << get_fileline() << ": error: Continuous assignment "
+				"of an unpacked array slice requires SystemVerilog."
+			     << endl;
+			des->errors += 1;
+			return;
+		  }
+		  uarray_slice_info_t l_info, r_info;
+		  if (!inspect_uarray_slice_ident(des, scope, pin(0), true, true, l_info) ||
+		      !inspect_uarray_slice_ident(des, scope, pin(1), true, true, r_info))
+			return;
+		  if (l_info.slice_counts != r_info.slice_counts) {
+			cerr << get_fileline() << ": error: Unpacked slice dimensions "
+				"are not compatible in continuous assignment." << endl;
+			des->errors += 1;
+			return;
+		  }
+		  if (!l_info.sig->net_type()->type_equivalent(r_info.sig->net_type())) {
+			cerr << get_fileline() << ": error: Element types are not "
+				"compatible in array slice assignment." << endl;
+			des->errors += 1;
+			return;
+		  }
+		  if (!drive.has_drive() && gn_var_can_be_uwire() &&
+		      l_info.sig->type() == NetNet::REG) {
+			if (l_info.sig->peek_lref() > 0) {
+			      cerr << get_fileline() << ": error: Variable '"
+				   << l_info.sig->name()
+				   << "' cannot be driven by both continuous "
+				      "and procedural assignments." << endl;
+			      des->errors += 1;
+			      return;
+			}
+			l_info.sig->type(NetNet::UNRESOLVED_WIRE);
+		  }
+		  unsigned total = 1;
+		  for (unsigned c : l_info.slice_counts) total *= c;
+		  for (unsigned idx = 0 ; idx < total ; ++idx) {
+			NetExpr*lw = build_uarray_slice_canon_word(*this, l_info, idx);
+			NetExpr*rw = build_uarray_slice_canon_word(*this, r_info, idx);
+			long li_c = 0, ri_c = 0;
+			bool lok = lw && eval_as_long(li_c, lw);
+			bool rok = rw && eval_as_long(ri_c, rw);
+			delete lw;
+			delete rw;
+			if (!lok)
+			      continue;
+			NetBUFZ*drv = new NetBUFZ(scope, scope->local_symbol(),
+						  l_info.sig->vector_width(), false);
+			drv->set_line(*this);
+			des->add_node(drv);
+			if (rok) {
+			      connect(drv->pin(1), r_info.sig->pin(ri_c));
+			} else {
+			      bool is_2s = r_info.sig->data_type() == IVL_VT_BOOL;
+			      verinum def(is_2s ? verinum::V0 : verinum::Vx,
+					  l_info.sig->vector_width(), true);
+			      NetConst*cn = new NetConst(scope, scope->local_symbol(), def);
+			      cn->set_line(*this);
+			      des->add_node(cn);
+			      connect(drv->pin(1), cn->pin(0));
+			}
+			if (drive.has_drive())
+			      drv->pin(0).drive(drive);
+			if (delays.has_delay())
+			      drv->delay_times(delays);
+			connect(l_info.sig->pin(li_c), drv->pin(0));
+		  }
+		  return;
+	    }
+      }
 
 	/* Elaborate the l-value. */
         // A continuous assignment can drive a variable if the default strength is used.
@@ -3032,6 +3398,197 @@ static bool lval_not_program_variable(const NetAssign_*lv)
       return false;
 }
 
+static void flatten_array_pattern_exprs(const NetEArrayPattern*ap,
+					std::vector<NetExpr*>&out)
+{
+      for (size_t i = 0 ; i < ap->item_size() ; ++i) {
+	    const NetExpr*it = ap->item(i);
+	    if (const NetEArrayPattern*sub = dynamic_cast<const NetEArrayPattern*>(it))
+		  flatten_array_pattern_exprs(sub, out);
+	    else if (it)
+		  out.push_back(it->dup_expr());
+      }
+}
+
+static NetProc* elaborate_uarray_slice_proc_assign(Design*des, NetScope*scope,
+						   const LineInfo&loc,
+						   const PExpr*lpe, PExpr*rpe,
+						   bool is_nb, bool&intercepted)
+{
+      intercepted = false;
+      uarray_slice_info_t l_probe, r_probe;
+      bool l_is_ua = inspect_uarray_slice_ident(des, scope, lpe, false, false, l_probe);
+      bool r_is_ua = inspect_uarray_slice_ident(des, scope, rpe, false, false, r_probe);
+      if (!((l_is_ua && l_probe.is_slice) || (l_is_ua && r_is_ua && r_probe.is_slice)))
+	    return nullptr;
+
+      intercepted = true;
+      if (!gn_system_verilog()) {
+	    cerr << loc.get_fileline() << ": error: Assignment to an entire "
+		    "array or to an array slice requires SystemVerilog." << endl;
+	    des->errors += 1;
+	    return nullptr;
+      }
+
+      uarray_slice_info_t l_info;
+      if (!inspect_uarray_slice_ident(des, scope, lpe, false, true, l_info))
+	    return nullptr;
+
+      if (l_info.sig->type() != NetNet::REG) {
+	    cerr << loc.get_fileline() << ": error: Array '" << l_info.sig->name()
+		 << "' is not a valid procedural l-value." << endl;
+	    des->errors += 1;
+	    return nullptr;
+      }
+
+      unsigned total = 1;
+      for (unsigned c : l_info.slice_counts)
+	    total *= c;
+
+      NetBlock*blk = new NetBlock(NetBlock::SEQU, scope);
+      blk->set_line(loc);
+      cache_slice_dynamic_indices(scope, loc, l_info, blk);
+
+      ivl_type_t elem_type = l_info.sig->net_type();
+      unsigned elem_wid = l_info.sig->vector_width();
+
+      if (dynamic_cast<PEAssignPattern*>(rpe)) {
+	    netranges_t slice_ranges;
+	    for (unsigned c : l_info.slice_counts)
+		  slice_ranges.push_back(netrange_t(0, (long)c - 1));
+	    netuarray_t*slice_utype = new netuarray_t(slice_ranges, elem_type);
+	    NetExpr*rv_pat = elaborate_rval_expr(des, scope, slice_utype, rpe, false);
+	    const NetEArrayPattern*ap = dynamic_cast<const NetEArrayPattern*>(rv_pat);
+	    if (!ap) {
+		  delete rv_pat;
+		  delete blk;
+		  return nullptr;
+	    }
+	    std::vector<NetExpr*> items;
+	    flatten_array_pattern_exprs(ap, items);
+	    delete rv_pat;
+	    if (items.size() != total) {
+		  cerr << loc.get_fileline() << ": error: Array pattern size ("
+		       << items.size() << ") does not match slice size ("
+		       << total << ")." << endl;
+		  des->errors += 1;
+		  for (NetExpr*e : items) delete e;
+		  delete blk;
+		  return nullptr;
+	    }
+	    for (unsigned idx = 0 ; idx < total ; ++idx) {
+		  NetExpr*lw = build_uarray_slice_canon_word(loc, l_info, idx);
+		  if (!lw) {
+			delete items[idx];
+			continue;
+		  }
+		  l_info.sig->incr_lref();
+		  NetAssign_*lv = new NetAssign_(l_info.sig);
+		  lv->set_word(lw);
+		  NetProc*st = is_nb ? static_cast<NetProc*>(new NetAssignNB(lv, items[idx], 0, 0))
+		                     : static_cast<NetProc*>(new NetAssign(lv, items[idx]));
+		  st->set_line(loc);
+		  blk->append(st);
+	    }
+	    return blk;
+      }
+
+      uarray_slice_info_t r_info;
+      if (!inspect_uarray_slice_ident(des, scope, rpe, false, true, r_info)) {
+	    cerr << loc.get_fileline() << ": error: Incompatible RHS expression "
+		    "in unpacked array slice assignment." << endl;
+	    des->errors += 1;
+	    delete blk;
+	    return nullptr;
+      }
+
+      if (l_info.slice_counts != r_info.slice_counts) {
+	    cerr << loc.get_fileline() << ": error: Unpacked array slice "
+		    "dimensions do not match in assignment." << endl;
+	    des->errors += 1;
+	    delete blk;
+	    return nullptr;
+      }
+
+      if (!elem_type->type_compatible(r_info.sig->net_type())) {
+	    cerr << loc.get_fileline() << ": error: Element types are not "
+		    "compatible in unpacked array slice assignment." << endl;
+	    des->errors += 1;
+	    delete blk;
+	    return nullptr;
+      }
+
+      cache_slice_dynamic_indices(scope, loc, r_info, blk);
+
+      bool need_overlap_temps = !is_nb && (l_info.sig == r_info.sig);
+      std::vector<NetNet*> temps;
+      if (need_overlap_temps) {
+	    temps.resize(total, nullptr);
+	    for (unsigned idx = 0 ; idx < total ; ++idx) {
+		  NetNet*tsig = new NetNet(scope, scope->local_symbol(),
+					   NetNet::REG, elem_type);
+		  tsig->set_line(loc);
+		  tsig->local_flag(true);
+		  tsig->incr_lref();
+		  temps[idx] = tsig;
+
+		  NetExpr*rw = build_uarray_slice_canon_word(loc, r_info, idx);
+		  NetExpr*rv_el = nullptr;
+		  if (rw) {
+			rv_el = new NetESignal(r_info.sig, rw);
+			rv_el->set_line(loc);
+		  } else {
+			bool is_2s = r_info.sig->data_type() == IVL_VT_BOOL;
+			rv_el = is_2s ? static_cast<NetExpr*>(make_const_0(elem_wid))
+			              : static_cast<NetExpr*>(make_const_x(elem_wid));
+			rv_el->set_line(loc);
+		  }
+		  NetAssign_*tlv = new NetAssign_(tsig);
+		  NetAssign*tst = new NetAssign(tlv, rv_el);
+		  tst->set_line(loc);
+		  blk->append(tst);
+	    }
+      }
+
+      for (unsigned idx = 0 ; idx < total ; ++idx) {
+	    NetExpr*lw = build_uarray_slice_canon_word(loc, l_info, idx);
+	    if (!lw)
+		  continue;
+
+	    NetExpr*rv_el = nullptr;
+	    if (need_overlap_temps) {
+		  rv_el = new NetESignal(temps[idx]);
+		  rv_el->set_line(loc);
+	    } else {
+		  NetExpr*rw = build_uarray_slice_canon_word(loc, r_info, idx);
+		  if (rw) {
+			rv_el = new NetESignal(r_info.sig, rw);
+			rv_el->set_line(loc);
+		  } else {
+			bool is_2s = r_info.sig->data_type() == IVL_VT_BOOL;
+			if (r_info.sig->data_type() == IVL_VT_REAL)
+			      rv_el = new NetECReal(verireal(0.0));
+			else if (r_info.sig->data_type() == IVL_VT_STRING)
+			      rv_el = new NetECString("");
+			else
+			      rv_el = is_2s ? static_cast<NetExpr*>(make_const_0(elem_wid))
+			                    : static_cast<NetExpr*>(make_const_x(elem_wid));
+			rv_el->set_line(loc);
+		  }
+	    }
+
+	    l_info.sig->incr_lref();
+	    NetAssign_*lv = new NetAssign_(l_info.sig);
+	    lv->set_word(lw);
+	    NetProc*st = is_nb ? static_cast<NetProc*>(new NetAssignNB(lv, rv_el, 0, 0))
+	                       : static_cast<NetProc*>(new NetAssign(lv, rv_el));
+	    st->set_line(loc);
+	    blk->append(st);
+      }
+
+      return blk;
+}
+
 NetProc* PAssign::elaborate(Design*des, NetScope*scope) const
 {
       ivl_assert(*this, scope);
@@ -3040,6 +3597,14 @@ NetProc* PAssign::elaborate(Design*des, NetScope*scope) const
 	   elaboration in a specialized function. */
       if (op_ != 0)
 	    return elaborate_compressed_(des, scope);
+
+      if (delay_ == 0 && count_ == 0 && event_ == 0) {
+	    bool slice_intercepted = false;
+	    NetProc*slice_proc = elaborate_uarray_slice_proc_assign(
+		  des, scope, *this, lval(), rval(), false, slice_intercepted);
+	    if (slice_intercepted)
+		  return slice_proc;
+      }
 
 	/* elaborate the lval. This detects any part selects and mux
 	   expressions that might exist. */
@@ -3278,6 +3843,14 @@ NetProc* PAssignNB::elaborate(Design*des, NetScope*scope) const
 	            "assignments." << endl;
 	    des->errors += 1;
 	    return 0;
+      }
+
+      if (delay_ == 0 && count_ == 0 && event_ == 0) {
+	    bool slice_intercepted = false;
+	    NetProc*slice_proc = elaborate_uarray_slice_proc_assign(
+		  des, scope, *this, lval(), rval(), true, slice_intercepted);
+	    if (slice_intercepted)
+		  return slice_proc;
       }
 
 	/* Elaborate the l-value. */
