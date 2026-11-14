@@ -80,15 +80,25 @@ struct __vpiArrayVthrA : public __vpiHandle {
 		    /* Check to see if the value is defined. */
 		  vp.format = vpiVectorVal;
 		  address_handle->vpi_get_value(&vp);
-		  int words = (address_handle->vpi_get(vpiSize)-1)/32 + 1;
+		  int nbits = address_handle->vpi_get(vpiSize);
+		  int words = (nbits - 1)/32 + 1;
 		  for(int idx = 0; idx < words; idx += 1) {
 			  /* Return UINT_MAX to indicate an X base. */
 			if (vp.value.vector[idx].bval != 0) return UINT_MAX;
 		  }
-		    /* The value is defined so get and return it. */
-		  vp.format = vpiIntVal;
-		  address_handle->vpi_get_value(&vp);
-		  return vp.value.integer;
+		    /* Negative signed values or non-zero upper 32-bit words
+		       are out of bounds for canonical [0..size-1] addresses. */
+		  if (address_handle->vpi_get(vpiSigned) && nbits > 0) {
+			int sign_word = (nbits - 1) / 32;
+			int sign_bit  = (nbits - 1) % 32;
+			if ((vp.value.vector[sign_word].aval >> sign_bit) & 1U)
+			      return UINT_MAX;
+		  }
+		  for (int idx = 1; idx < words; idx += 1) {
+			if (vp.value.vector[idx].aval != 0)
+			      return UINT_MAX;
+		  }
+		  return static_cast<unsigned>(vp.value.vector[0].aval);
 	    }
 
 	    return address;
@@ -1093,17 +1103,33 @@ vvp_fun_arrayport_sa::~vvp_fun_arrayport_sa()
 {
 }
 
+static unsigned long vector4_to_array_addr(const vvp_vector4_t&bit,
+					   unsigned array_size)
+{
+      if (bit.has_xz())
+	    return array_size;
+      unsigned wid = bit.size();
+      for (unsigned idx = 32; idx < wid; idx += 1) {
+	    if (bit.value(idx) == BIT4_1)
+		  return array_size;
+      }
+      uint32_t v = 0;
+      unsigned lim = wid < 32 ? wid : 32;
+      for (unsigned idx = 0; idx < lim; idx += 1) {
+	    if (bit.value(idx) == BIT4_1)
+		  v |= (uint32_t(1) << idx);
+      }
+      return (v < array_size) ? static_cast<unsigned long>(v)
+			      : static_cast<unsigned long>(array_size);
+}
+
 void vvp_fun_arrayport_sa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit,
                                      vvp_context_t)
 {
-      bool addr_valid_flag;
-
       switch (port.port()) {
 
 	  case 0: // Address input
-	    addr_valid_flag = vector4_to_value(bit, addr_);
-	    if (! addr_valid_flag)
-		  addr_ = arr_->get_size();
+	    addr_ = vector4_to_array_addr(bit, arr_->get_size());
 	    if (vpi_array_is_real(arr_))
 		  port.ptr()->send_real(arr_->get_word_r(addr_), 0);
 	    else
@@ -1201,13 +1227,10 @@ void vvp_fun_arrayport_aa::recv_vec4(vvp_net_ptr_t port, const vvp_vector4_t&bit
             unsigned long*addr = static_cast<unsigned long*>
                   (vvp_get_context_item(context, context_idx_));
 
-            bool addr_valid_flag;
-
             switch (port.port()) {
 
                 case 0: // Address input
-                  addr_valid_flag = vector4_to_value(bit, *addr);
-                  if (! addr_valid_flag) *addr = arr_->get_size();
+                  *addr = vector4_to_array_addr(bit, arr_->get_size());
                   if (vpi_array_is_real(arr_)) {
 			port.ptr()->send_real(arr_->get_word_r(*addr),
 					      context);
@@ -1585,6 +1608,7 @@ void compile_array_alias(char*label, char*name, char*src)
       obj->vals4 = mem->vals4;
       obj->vals  = mem->vals;
       obj->vals_width = mem->vals_width;
+      obj->is_2state = mem->is_2state;
       obj->vals_words = mem->vals_words;
 
       obj->ports_ = 0;

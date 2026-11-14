@@ -1147,6 +1147,13 @@ bool of_ADD_WR(vthread_t thr, vvp_code_t)
       return true;
 }
 
+static inline bool array_index_in_bounds(vthread_t thr, vvp_array_t arr,
+					 int64_t adr)
+{
+      return (thr->flags[4] == BIT4_0) && (adr >= 0) &&
+             (static_cast<uint64_t>(adr) < arr->get_size());
+}
+
 static set<vvp_code_t> warned_array_write_oob;
 
 static void maybe_warn_array_write_oob(vthread_t thr, vvp_code_t cp,
@@ -1158,7 +1165,7 @@ static void maybe_warn_array_write_oob(vthread_t thr, vvp_code_t cp,
       assert(cp->array);
 
       bool index_undef = thr->flags[4] == BIT4_1;
-      if (!index_undef && adr >= 0 && (uint64_t) adr < cp->array->get_size())
+      if (array_index_in_bounds(thr, cp->array, adr))
 	    return;
 
       if (!warned_array_write_oob.insert(cp).second)
@@ -1191,17 +1198,15 @@ static void maybe_warn_array_write_oob(vthread_t thr, vvp_code_t cp,
  */
 bool of_ASSIGN_AR(vthread_t thr, vvp_code_t cp)
 {
-      long adr = thr->words[3].w_int;
+      int64_t adr = thr->words[3].w_int;
       unsigned delay = cp->bit_idx[0];
       double value = thr->pop_real();
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-      if (thr->flags[4] == BIT4_1)
-	    return true;
-
-      if (adr >= 0) {
-	    schedule_assign_array_word(cp->array, adr, value, delay);
+      if (array_index_in_bounds(thr, cp->array, adr)) {
+	    schedule_assign_array_word(cp->array, static_cast<unsigned>(adr),
+				       value, delay);
       }
 
       return true;
@@ -1214,17 +1219,15 @@ bool of_ASSIGN_AR(vthread_t thr, vvp_code_t cp)
  */
 bool of_ASSIGN_ARD(vthread_t thr, vvp_code_t cp)
 {
-      long adr = thr->words[3].w_int;
+      int64_t adr = thr->words[3].w_int;
       double value = thr->pop_real();
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-      if (thr->flags[4] == BIT4_1)
-	    return true;
-
-      if (adr >= 0) {
+      if (array_index_in_bounds(thr, cp->array, adr)) {
 	    vvp_time64_t delay = thr->words[cp->bit_idx[0]].w_uint;
-	    schedule_assign_array_word(cp->array, adr, value, delay);
+	    schedule_assign_array_word(cp->array, static_cast<unsigned>(adr),
+				       value, delay);
       }
 
       return true;
@@ -1239,20 +1242,18 @@ bool of_ASSIGN_ARD(vthread_t thr, vvp_code_t cp)
  */
 bool of_ASSIGN_ARE(vthread_t thr, vvp_code_t cp)
 {
-      long adr = thr->words[3].w_int;
+      int64_t adr = thr->words[3].w_int;
       double value = thr->pop_real();
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-      if (thr->flags[4] == BIT4_1)
-	    return true;
-
-      if (adr >= 0) {
+      if (array_index_in_bounds(thr, cp->array, adr)) {
 	    if (thr->ecount == 0) {
-		  schedule_assign_array_word(cp->array, adr, value, 0);
+		  schedule_assign_array_word(cp->array, static_cast<unsigned>(adr),
+					     value, 0);
 	    } else {
-		  schedule_evctl(cp->array, adr, value, thr->event,
-		                 thr->ecount);
+		  schedule_evctl(cp->array, static_cast<unsigned>(adr),
+				 value, thr->event, thr->ecount);
 	    }
       }
 
@@ -1327,21 +1328,20 @@ bool of_ASSIGN_VEC4_A_D(vthread_t thr, vvp_code_t cp)
 
       int64_t  off = off_idx ? thr->words[off_idx].w_int : 0;
       vvp_time64_t del = del_idx? thr->words[del_idx].w_uint : 0;
-      long     adr = thr->words[adr_idx].w_int;
+      int64_t  adr = thr->words[adr_idx].w_int;
 
       vvp_vector4_t val = thr->pop_vec4();
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-	// Abort if flags[4] is set. This can happen if the calculation
-	// into an index register failed.
-      if (thr->flags[4] == BIT4_1)
+	// Abort if address is undefined or out of bounds.
+      if (!array_index_in_bounds(thr, cp->array, adr))
 	    return true;
 
       if (!resize_rval_vec(val, off, cp->array->get_word_size()))
 	    return true;
 
-      schedule_assign_array_word(cp->array, adr, off, val, del);
+      schedule_assign_array_word(cp->array, static_cast<unsigned>(adr), off, val, del);
 
       return true;
 }
@@ -1355,24 +1355,23 @@ bool of_ASSIGN_VEC4_A_E(vthread_t thr, vvp_code_t cp)
       int adr_idx = 3;
 
       int64_t  off = off_idx ? thr->words[off_idx].w_int : 0;
-      long     adr = thr->words[adr_idx].w_int;
+      int64_t  adr = thr->words[adr_idx].w_int;
 
       vvp_vector4_t val = thr->pop_vec4();
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-	// Abort if flags[4] is set. This can happen if the calculation
-	// into an index register failed.
-      if (thr->flags[4] == BIT4_1)
+	// Abort if address is undefined or out of bounds.
+      if (!array_index_in_bounds(thr, cp->array, adr))
 	    return true;
 
       if (!resize_rval_vec(val, off, cp->array->get_word_size()))
 	    return true;
 
       if (thr->ecount == 0) {
-	    schedule_assign_array_word(cp->array, adr, off, val, 0);
+	    schedule_assign_array_word(cp->array, static_cast<unsigned>(adr), off, val, 0);
       } else {
-	    schedule_evctl(cp->array, adr, val, off, thr->event, thr->ecount);
+	    schedule_evctl(cp->array, static_cast<unsigned>(adr), val, off, thr->event, thr->ecount);
       }
 
       return true;
@@ -4288,12 +4287,12 @@ bool of_LOAD_AR(vthread_t thr, vvp_code_t cp)
       unsigned idx = cp->bit_idx[0];
       double word;
 
-	/* The result is 0.0 if the address is undefined. */
-      if (thr->flags[4] == BIT4_1) {
+	/* The result is 0.0 if the address is undefined or out of bounds. */
+      int64_t adr = thr->words[idx].w_int;
+      if (!array_index_in_bounds(thr, cp->array, adr)) {
 	    word = 0.0;
       } else {
-	    unsigned adr = thr->words[idx].w_int;
-	    word = cp->array->get_word_r(adr);
+	    word = cp->array->get_word_r(static_cast<unsigned>(adr));
       }
 
       thr->push_real(word);
@@ -4405,12 +4404,10 @@ bool of_LOAD_OBJA(vthread_t thr, vvp_code_t cp)
       unsigned idx = cp->bit_idx[0];
       vvp_object_t word;
 
-	/* The result is 0.0 if the address is undefined. */
-      if (thr->flags[4] == BIT4_1) {
-	    ; // Return nil
-      } else {
-	    unsigned adr = thr->words[idx].w_int;
-	    cp->array->get_word_obj(adr, word);
+	/* The result is nil if the address is undefined or out of bounds. */
+      int64_t adr = thr->words[idx].w_int;
+      if (array_index_in_bounds(thr, cp->array, adr)) {
+	    cp->array->get_word_obj(static_cast<unsigned>(adr), word);
       }
 
       thr->push_object(word);
@@ -4455,11 +4452,11 @@ bool of_LOAD_STRA(vthread_t thr, vvp_code_t cp)
       unsigned idx = cp->bit_idx[0];
       string word;
 
-      if (thr->flags[4] == BIT4_1) {
+      int64_t adr = thr->words[idx].w_int;
+      if (!array_index_in_bounds(thr, cp->array, adr)) {
 	    word = "";
       } else {
-	    unsigned adr = thr->words[idx].w_int;
-	    word = cp->array->get_word_str(adr);
+	    word = cp->array->get_word_str(static_cast<unsigned>(adr));
       }
 
       thr->push_str(word);
@@ -4490,19 +4487,16 @@ bool of_LOAD_VEC4A(vthread_t thr, vvp_code_t cp)
 {
       int adr_index = cp->bit_idx[0];
 
-      long adr = thr->words[adr_index].w_int;
+      int64_t adr = thr->words[adr_index].w_int;
 
-	// If flag[3] is set, then the calculation of the address
-	// failed, and this load should return X instead of the actual
-	// value.
-      if (thr->flags[4] == BIT4_1) {
+      if (!array_index_in_bounds(thr, cp->array, adr)) {
 	    vvp_bit4_t def = cp->array->is_2state ? BIT4_0 : BIT4_X;
 	    vvp_vector4_t tmp (cp->array->get_word_size(), def);
 	    thr->push_vec4(tmp);
 	    return true;
       }
 
-      vvp_vector4_t tmp (cp->array->get_word(adr));
+      vvp_vector4_t tmp (cp->array->get_word(static_cast<unsigned>(adr)));
       thr->push_vec4(tmp);
       return true;
 }
@@ -6557,10 +6551,10 @@ bool of_STORE_OBJA(vthread_t thr, vvp_code_t cp)
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-      if (thr->flags[4] == BIT4_1)
+      if (!array_index_in_bounds(thr, cp->array, adr))
 	    return true;
 
-      cp->array->set_word(adr, val);
+      cp->array->set_word(static_cast<unsigned>(adr), val);
 
       return true;
 }
@@ -7985,8 +7979,8 @@ static bool storea(vthread_t thr, vvp_code_t cp)
       int64_t adr = thr->words[idx].w_int;
       maybe_warn_array_write_oob(thr, cp, adr);
 
-      if (thr->flags[4] != BIT4_1) {
-	    cp->array->set_word(adr, val);
+      if (array_index_in_bounds(thr, cp->array, adr)) {
+	    cp->array->set_word(static_cast<unsigned>(adr), val);
       }
 
       return true;
@@ -8139,8 +8133,8 @@ bool of_STORE_VEC4A(vthread_t thr, vvp_code_t cp)
 
       maybe_warn_array_write_oob(thr, cp, adr);
 
-	// Suppress action if flags-4 is true.
-      if (thr->flags[4] == BIT4_1) {
+	// Suppress action if address is undefined or out of bounds.
+      if (!array_index_in_bounds(thr, cp->array, adr)) {
 	    thr->pop_vec4(1);
 	    return true;
       }
@@ -8152,7 +8146,7 @@ bool of_STORE_VEC4A(vthread_t thr, vvp_code_t cp)
 	    return true;
       }
 
-      cp->array->set_word(adr, off, value);
+      cp->array->set_word(static_cast<unsigned>(adr), off, value);
 
       thr->pop_vec4(1);
       return true;
@@ -8296,7 +8290,7 @@ bool of_TEST_NUL(vthread_t thr, vvp_code_t cp)
 bool of_TEST_NUL_A(vthread_t thr, vvp_code_t cp)
 {
       unsigned idx = cp->bit_idx[0];
-      unsigned adr = thr->words[idx].w_int;
+      int64_t adr = thr->words[idx].w_int;
       vvp_object_t word;
 
 	/* If the address is undefined, return true. */
@@ -8304,7 +8298,8 @@ bool of_TEST_NUL_A(vthread_t thr, vvp_code_t cp)
 	    return true;
       }
 
-      cp->array->get_word_obj(adr, word);
+      if (array_index_in_bounds(thr, cp->array, adr))
+	    cp->array->get_word_obj(static_cast<unsigned>(adr), word);
       if (word.test_nil())
 	    thr->flags[4] = BIT4_1;
       else
