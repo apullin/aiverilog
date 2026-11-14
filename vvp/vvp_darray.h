@@ -51,7 +51,7 @@ class vvp_darray : public vvp_object {
       virtual void reverse_elems(void);
 
 	/* sort: ascending if true, descending if false; shuffle randomizes. */
-      virtual void sort_elems(bool ascending);
+      virtual void sort_elems(bool ascending, bool is_signed = false);
       virtual void shuffle_elems(void);
 };
 
@@ -63,7 +63,7 @@ template <class TYPE> class vvp_darray_atom : public vvp_darray {
 
       size_t get_size(void) const override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
       void set_word(unsigned adr, const vvp_vector4_t&value) override;
       void get_word(unsigned adr, vvp_vector4_t&value) override;
@@ -89,7 +89,7 @@ class vvp_darray_vec4 : public vvp_darray {
       vvp_object* duplicate(void) const override;
       vvp_vector4_t get_bitstream(bool as_vec4) override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
 
     private:
@@ -106,7 +106,7 @@ class vvp_darray_vec2 : public vvp_darray {
 
       size_t get_size(void) const override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
       void set_word(unsigned adr, const vvp_vector4_t&value) override;
       void get_word(unsigned adr, vvp_vector4_t&value) override;
@@ -132,7 +132,7 @@ class vvp_darray_real : public vvp_darray {
       vvp_object* duplicate(void) const override;
       vvp_vector4_t get_bitstream(bool as_vec4) override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
 
     private:
@@ -151,7 +151,7 @@ class vvp_darray_string : public vvp_darray {
       void shallow_copy(const vvp_object*obj) override;
       vvp_object* duplicate(void) const override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
 
     private:
@@ -166,7 +166,7 @@ class vvp_darray_object : public vvp_darray {
 
       size_t get_size(void) const override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
       void set_word(unsigned adr, const vvp_object_t&value) override;
       void get_word(unsigned adr, vvp_object_t&value) override;
@@ -223,7 +223,7 @@ class vvp_queue_real : public vvp_queue {
       void erase(unsigned idx) override;
       void erase_tail(unsigned idx) override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
       vvp_object* duplicate(void) const override { return new vvp_queue_real(*this); }
 
@@ -247,7 +247,7 @@ class vvp_queue_string : public vvp_queue {
       void erase(unsigned idx) override;
       void erase_tail(unsigned idx) override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
       vvp_object* duplicate(void) const override { return new vvp_queue_string(*this); }
 
@@ -271,7 +271,7 @@ class vvp_queue_vec4 : public vvp_queue {
       void erase(unsigned idx) override;
       void erase_tail(unsigned idx) override;
       void reverse_elems(void) override;
-      void sort_elems(bool ascending) override;
+      void sort_elems(bool ascending, bool is_signed = false) override;
       void shuffle_elems(void) override;
       vvp_object* duplicate(void) const override { return new vvp_queue_vec4(*this); }
 

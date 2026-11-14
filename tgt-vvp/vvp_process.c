@@ -1880,7 +1880,8 @@ static int show_reverse_method(ivl_statement_t net)
 }
 
 static int show_array_order_method(ivl_statement_t net, const char*descr,
-				   const char*op_signal, const char*op_prop)
+				   const char*op_signal, const char*op_prop,
+				   bool check_elem_sign)
 {
       show_stmt_file_line(net, descr);
 
@@ -1895,16 +1896,33 @@ static int show_array_order_method(ivl_statement_t net, const char*descr,
 	    ivl_type_t arr_type = ivl_type_prop_type(sig_type, pidx);
 	    ivl_variable_type_t bt = ivl_type_base(arr_type);
 	    if (bt != IVL_VT_QUEUE && bt != IVL_VT_DARRAY) return 1;
+	    const char*sign_suf = "";
+	    if (check_elem_sign) {
+		  ivl_type_t et = ivl_type_element(arr_type);
+		  if ((ivl_type_base(et) == IVL_VT_BOOL ||
+		       ivl_type_base(et) == IVL_VT_LOGIC) &&
+		      ivl_type_signed(et))
+			sign_suf = "/s";
+	    }
 
 	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", clas);
-	    fprintf(vvp_out, "    %s %u;\n", op_prop, pidx);
+	    fprintf(vvp_out, "    %s%s %u;\n", op_prop, sign_suf, pidx);
 	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
 	    return 0;
       }
 
       assert(ivl_expr_type(parm) == IVL_EX_SIGNAL);
       ivl_signal_t var = ivl_expr_signal(parm);
-      fprintf(vvp_out, "    %s v%p_0;\n", op_signal, var);
+      const char*sign_suf = "";
+      if (check_elem_sign) {
+	    ivl_type_t arr_type = ivl_signal_net_type(var);
+	    ivl_type_t et = ivl_type_element(arr_type);
+	    if ((ivl_type_base(et) == IVL_VT_BOOL ||
+	         ivl_type_base(et) == IVL_VT_LOGIC) &&
+	        ivl_type_signed(et))
+		  sign_suf = "/s";
+      }
+      fprintf(vvp_out, "    %s%s v%p_0;\n", op_signal, sign_suf, var);
       return 0;
 }
 
@@ -2107,15 +2125,15 @@ static int show_system_task_call(ivl_statement_t net)
 
       if (strcmp(stmt_name,"$ivl_darray_method$sort") == 0)
 	    return show_array_order_method(net, "sort dynamic array or queue",
-					   "%sort/obj", "%sort/prop/obj");
+					   "%sort/obj", "%sort/prop/obj", true);
 
       if (strcmp(stmt_name,"$ivl_darray_method$rsort") == 0)
 	    return show_array_order_method(net, "rsort dynamic array or queue",
-					   "%rsort/obj", "%rsort/prop/obj");
+					   "%rsort/obj", "%rsort/prop/obj", true);
 
       if (strcmp(stmt_name,"$ivl_darray_method$shuffle") == 0)
 	    return show_array_order_method(net, "shuffle dynamic array or queue",
-					   "%shuffle/obj", "%shuffle/prop/obj");
+					   "%shuffle/obj", "%shuffle/prop/obj", false);
 
       if (strcmp(stmt_name,"$ivl_queue_method$insert") == 0)
 	    return show_insert_method(net);
