@@ -384,13 +384,33 @@ static void draw_signal_real(ivl_expr_t expr)
       }
 }
 
-static void increment(ivl_expr_t e, bool pre)
+static void draw_real_inc_dec(ivl_expr_t e, bool incr, bool pre)
 {
       ivl_signal_t sig = ivl_expr_signal(e);
+      const char*op = incr ? "%add/wr" : "%sub/wr";
+
+      if (ivl_signal_dimensions(sig) > 0) {
+	    int addr_index = allocate_word();
+	    int undef_flag = allocate_flag();
+
+	    draw_eval_expr_into_integer(ivl_expr_oper1(e), addr_index);
+	    fprintf(vvp_out, "    %%flag_mov %d, 4;\n", undef_flag);
+	    fprintf(vvp_out, "    %%load/ar v%p, %d;\n", sig, addr_index);
+	    if (!pre) fprintf(vvp_out, "    %%dup/real;\n");
+	    fprintf(vvp_out, "    %%pushi/real 1, 0x1000;\n");
+	    fprintf(vvp_out, "    %s;\n", op);
+	    if ( pre) fprintf(vvp_out, "    %%dup/real;\n");
+	    fprintf(vvp_out, "    %%flag_mov 4, %d;\n", undef_flag);
+	    fprintf(vvp_out, "    %%store/reala v%p, %d;\n", sig, addr_index);
+	    clr_flag(undef_flag);
+	    clr_word(addr_index);
+	    return;
+      }
+
       draw_eval_real(e);
       if (!pre) fprintf(vvp_out, "    %%dup/real;\n");
       fprintf(vvp_out, "    %%pushi/real 1, 0x1000;\n");
-      fprintf(vvp_out, "    %%add/wr;\n");
+      fprintf(vvp_out, "    %s;\n", op);
       if ( pre) fprintf(vvp_out, "    %%dup/real;\n");
       if (signal_is_return_value(sig)) {
 	    fprintf(vvp_out, "    %%ret/real 0;\n");
@@ -399,19 +419,14 @@ static void increment(ivl_expr_t e, bool pre)
       }
 }
 
+static void increment(ivl_expr_t e, bool pre)
+{
+      draw_real_inc_dec(e, true, pre);
+}
+
 static void decrement(ivl_expr_t e, bool pre)
 {
-      ivl_signal_t sig = ivl_expr_signal(e);
-      draw_eval_real(e);
-      if (!pre) fprintf(vvp_out, "    %%dup/real;\n");
-      fprintf(vvp_out, "    %%pushi/real 1, 0x1000;\n");
-      fprintf(vvp_out, "    %%sub/wr;\n");
-      if ( pre) fprintf(vvp_out, "    %%dup/real;\n");
-      if (signal_is_return_value(sig)) {
-	    fprintf(vvp_out, "    %%ret/real 0;\n");
-      } else {
-	    fprintf(vvp_out, "    %%store/real v%p_0;\n", sig);
-      }
+      draw_real_inc_dec(e, false, pre);
 }
 
 static void draw_unary_real(ivl_expr_t expr)
