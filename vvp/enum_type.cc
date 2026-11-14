@@ -193,6 +193,47 @@ void compile_enum4_type(char*label, long width, bool signed_flag,
       delete names;
 }
 
+static vvp_vector4_t extend_vec4_for_enum_cmp(const vvp_vector4_t&src,
+					      unsigned wid, bool is_signed)
+{
+      vvp_bit4_t pad = (is_signed && src.size() > 0)
+		     ? src.value(src.size() - 1) : BIT4_0;
+      vvp_vector4_t dst(wid, pad);
+      unsigned copy_w = src.size() < wid ? src.size() : wid;
+      if (copy_w > 0)
+	    dst.set_vec(0, src.subvalue(0, copy_w));
+      return dst;
+}
+
+bool vpip_enum_has_value(vpiHandle ref, const vvp_vector4_t&val, bool val_signed)
+{
+      const struct __vpiEnumTypespec*spec =
+	    dynamic_cast<const __vpiEnumTypespec*>(ref);
+      assert(spec);
+
+      if (spec->base_type_code == vpiBitVar && val.has_xz())
+	    return false;
+
+      for (size_t idx = 0 ; idx < spec->names.size() ; ++idx) {
+	    const enumconst_s&ec = spec->names[idx];
+	    vvp_vector4_t mval;
+	    if (ec.val4.size() > 0) {
+		  mval = ec.val4;
+	    } else {
+		  mval = vvp_vector4_t(ec.val2.size(), BIT4_0);
+		  for (unsigned b = 0 ; b < ec.val2.size() ; ++b)
+			mval.set_bit(b, ec.val2.value4(b));
+	    }
+	    unsigned cmp_wid = (val.size() > mval.size() ? val.size() : mval.size()) + 1;
+	    vvp_vector4_t v_ext = extend_vec4_for_enum_cmp(val, cmp_wid, val_signed);
+	    vvp_vector4_t m_ext = extend_vec4_for_enum_cmp(mval, cmp_wid, spec->is_signed);
+	    if (v_ext.eeq(m_ext))
+		  return true;
+      }
+
+      return false;
+}
+
 #ifdef CHECK_WITH_VALGRIND
 void enum_delete(vpiHandle item)
 {

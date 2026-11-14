@@ -1,0 +1,5 @@
+{
+    "type"          : "normal",
+    "source"        : "sv_enum_cast.v",
+    "iverilog-args" : [ "-g2012" ]
+}
