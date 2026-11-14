@@ -404,9 +404,11 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 	// .net, then we will remove that label.
       define_functor_symbol(my_label, node);
 
-      if (array)
+      if (array) {
+	    if (vpi_type_code == vpiIntVar)
+		  array->is_2state = true;
 	    array->attach_word(array_addr, obj);
-      else if (obj)
+      } else if (obj)
 	    vpip_attach_to_scope(scope,obj);
 
       free(my_label);
