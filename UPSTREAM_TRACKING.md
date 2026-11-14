@@ -11,7 +11,7 @@ Last reconciled: 2026-11-13
 - Latest upstream commit integrated at this checkpoint:
   [`985bc3f88`](https://github.com/steveicarus/iverilog/commit/985bc3f88).
 - Latest upstream-derived change before this ledger update:
-  [`a3a1367d6`](https://github.com/apullin/aiverilog/commit/a3a1367d6).
+  [`cd7302675`](https://github.com/apullin/aiverilog/commit/cd7302675).
 - `Landed` means that Aiverilog intentionally retains a fork delta.
 - `Elided` means that no fork delta remains or was needed, usually because
   upstream already supplied the behavior.
@@ -121,6 +121,13 @@ commits are included for batched PRs.
 | [#678](https://github.com/steveicarus/iverilog/issues/678) | [#56](https://github.com/apullin/aiverilog/issues/56), [PR #57](https://github.com/apullin/aiverilog/pull/57), [`9d5320cff`](https://github.com/apullin/aiverilog/commit/9d5320cff75cc9fde1b2062d70c54f5b3bd3b317) | Coalesce transient event propagation from atomic blocking vector assignments. A broad prototype with roughly 40% ordinary-fanout slowdown was rejected; the landed path is narrowly selected, leaves existing J-Core timing neutral, and passed all 12 CI jobs. NBA concatenations and unpacked-array word stores remain separate follow-ups. |
 | [#1466](https://github.com/steveicarus/iverilog/issues/1466) | [PR #68](https://github.com/apullin/aiverilog/pull/68), repaired as [`728323077`](https://github.com/apullin/aiverilog/commit/728323077e2c184e387db51451d3bbbe7908b58d) | Guard only: propagate packed-index calculation failure so the non-ANSI unpacked-array port case receives a source diagnostic instead of aborting in `eval_part_select_`. Full support for the legal construct remains separate work. |
 | [#1441](https://github.com/steveicarus/iverilog/issues/1441) | [PR #69](https://github.com/apullin/aiverilog/pull/69), replaced by [`b459ba79e`](https://github.com/apullin/aiverilog/commit/b459ba79ebafd46120dc14415fc42dac9cb1e781) | Carry explicit one-bit packed-vector identity through the VVP format and `__vpiSignal`, including nets, variables, aliases, and net-array words. VPI no longer guesses from a signal name or a collapsed range. |
+| [PR #1773](https://github.com/steveicarus/iverilog/pull/1773) | [#135](https://github.com/apullin/aiverilog/issues/135), [PR #146](https://github.com/apullin/aiverilog/pull/146), [`707e57435`](https://github.com/apullin/aiverilog/commit/707e57435) | Import and harden upstream PR #1773: fix heap-buffer-overflow on exact-fit string constant `vpiVectorVal` conversion and avoid signed `char` sign-extension/UB on high bytes (`>= 0x80`). |
+| [#1706](https://github.com/steveicarus/iverilog/issues/1706) | [#136](https://github.com/apullin/aiverilog/issues/136), [PR #147](https://github.com/apullin/aiverilog/pull/147), [`660714c85`](https://github.com/apullin/aiverilog/commit/660714c85) | Import [upstream PR #1740](https://github.com/steveicarus/iverilog/pull/1740): merge member directions across concatenated module ports so output members propagate to external nets. |
+| [#1511](https://github.com/steveicarus/iverilog/issues/1511) | [#137](https://github.com/apullin/aiverilog/issues/137), [PR #148](https://github.com/apullin/aiverilog/pull/148), [`36b3c7f28`](https://github.com/apullin/aiverilog/commit/36b3c7f28) | Import [upstream PR #1515](https://github.com/steveicarus/iverilog/pull/1515): let single gates with mismatched output widths reach port-width diagnostics and report mixed-width gate arrays cleanly instead of asserting. |
+| [#1586](https://github.com/steveicarus/iverilog/issues/1586) | [#138](https://github.com/apullin/aiverilog/issues/138), [PR #149](https://github.com/apullin/aiverilog/pull/149), [`b15de7e2c`](https://github.com/apullin/aiverilog/commit/b15de7e2c) | Share parsed `data_type_t` via `std::shared_ptr` across comma-separated class property declarations so module-scoped class destruction does not double-free. |
+| [#1547](https://github.com/steveicarus/iverilog/issues/1547) | [#139](https://github.com/apullin/aiverilog/issues/139), [PR #150](https://github.com/apullin/aiverilog/pull/150), [`1f3e76e78`](https://github.com/apullin/aiverilog/commit/1f3e76e78) | Resize wider vector expressions to the queue element width across variable and class-property `push_back`, `push_front`, and `insert` code generation. |
+| [#1551](https://github.com/steveicarus/iverilog/issues/1551) | [#140](https://github.com/apullin/aiverilog/issues/140), [PR #151](https://github.com/apullin/aiverilog/pull/151), [`cd7302675`](https://github.com/apullin/aiverilog/commit/cd7302675) | Diagnose null class handle property reads and writes at runtime and exit cleanly instead of aborting or segfaulting in `vthread.cc`. |
+| [#1585](https://github.com/steveicarus/iverilog/issues/1585) | [#141](https://github.com/apullin/aiverilog/issues/141), [PR #152](https://github.com/apullin/aiverilog/pull/152), [`3cc990738`](https://github.com/apullin/aiverilog/commit/3cc990738) | Resolve object-handle method roots and pre-body return signals in `resolve_call_chain_prefix_class` and `PECallFunction::test_width_chain_`. |
 
 ## Elided Or Already Present
 
@@ -142,6 +149,8 @@ upstream or existing behavior.
 | [#1411](https://github.com/steveicarus/iverilog/issues/1411) | Superseded in [`a3a1367d6`](https://github.com/apullin/aiverilog/commit/a3a1367d6) by upstream [PR #1412](https://github.com/steveicarus/iverilog/pull/1412) ([`5ab23063f`](https://github.com/steveicarus/iverilog/commit/5ab23063f)); `br_gh1411.v` retained. |
 | [#1128](https://github.com/steveicarus/iverilog/issues/1128) | Already present. VVP accepts `exit` as a prompt synonym for `finish`. |
 | [#1194](https://github.com/steveicarus/iverilog/issues/1194) | No clear missing behavior after reviewing existing extended-argument support and documentation. No fork patch. |
+| [#1513](https://github.com/steveicarus/iverilog/issues/1513) | Already present in [`a3a1367d6`](https://github.com/apullin/aiverilog/commit/a3a1367d6) via upstream [PR #1514](https://github.com/steveicarus/iverilog/pull/1514) ([`5591c2dde`](https://github.com/steveicarus/iverilog/commit/5591c2dde)). Both `bufif1` and real feedback-loop reproducers pass without stack overflow. |
+| [#1546](https://github.com/steveicarus/iverilog/issues/1546) | Already present in [`a3a1367d6`](https://github.com/apullin/aiverilog/commit/a3a1367d6) via upstream [`576cca651`](https://github.com/steveicarus/iverilog/commit/576cca651) and [PR #1768](https://github.com/steveicarus/iverilog/pull/1768) ([`deaad9914`](https://github.com/steveicarus/iverilog/commit/deaad9914)). Both plain and compound member writes on unpacked arrays of packed structs pass. |
 
 ## Reviewed And Deferred
 
@@ -163,6 +172,8 @@ the next prerequisite.
 | [#560](https://github.com/steveicarus/iverilog/issues/560) | Deep `tranif1` strength/storage semantics; not accepted as a quick patch. |
 | [#449](https://github.com/steveicarus/iverilog/issues/449) | `$finish(2)` accounting needs a cross-platform definition of process and dump-thread resource reporting. |
 | [#284](https://github.com/steveicarus/iverilog/issues/284) | Large numeric module attributes require a target-API representation decision beyond native `long`. |
+| [#1543](https://github.com/steveicarus/iverilog/issues/1543) / [#1561](https://github.com/steveicarus/iverilog/issues/1561) | Fixed-size unpacked-array class properties currently have incomplete target/runtime representation (`vvp_cobject` only indexes object-handle arrays, and `tgt-vvp` emits scalar property metadata for vector/real/string unpacked arrays). Needs coordinated `ivl_target`, `tgt-vvp`, and `vvp_cobject` support. |
+| [#1705](https://github.com/steveicarus/iverilog/issues/1705) | Whole-container nonblocking assignments to queues and dynamic arrays require a dedicated `%assign/obj` NBA scheduler path with container deep-copy semantics; reporter noted an upstream patch in progress. |
 
 ## Fork Work Not Derived From Upstream Issues
 
@@ -177,7 +188,13 @@ number to match:
   performance campaign, including benchmark oracles and the optimized build
   harness.
 - [PR #26](https://github.com/apullin/aiverilog/pull/26) adds the separately
-  measured constant nonblocking-assignment fusion left after PR #23.
+  measured constant nonblocking-assignment fusion left after PR #23, followed
+  by the August–September 2026 VVP/elaborator performance series through
+  [PR #133](https://github.com/apullin/aiverilog/pull/133).
+- Post-sync correctness audit fixes in November 2026:
+  [#142](https://github.com/apullin/aiverilog/issues/142) / [PR #145](https://github.com/apullin/aiverilog/pull/145) ([`a7af0903b`](https://github.com/apullin/aiverilog/commit/a7af0903b), `ICARUS_VPI_CONST` function-type UBSan fix in `ivl`),
+  [#143](https://github.com/apullin/aiverilog/issues/143) / [PR #153](https://github.com/apullin/aiverilog/pull/153) ([`c35c1d647`](https://github.com/apullin/aiverilog/commit/c35c1d647), unpacked-array of packed-array of packed-struct l-value index stripping), and
+  [#144](https://github.com/apullin/aiverilog/issues/144) / [PR #154](https://github.com/apullin/aiverilog/pull/154) ([`3bf4ccb85`](https://github.com/apullin/aiverilog/commit/3bf4ccb85), dynamic-array `new[N](init)` elementary variable assertion and 6-bit offset truncation fix).
 
 These changes should be compared semantically against incoming upstream work;
 the absence of a matching upstream issue number is not evidence that they can
