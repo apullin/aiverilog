@@ -3486,7 +3486,7 @@ NetExpr* PECallFunction::elaborate_sfunc_(Design*des, NetScope*scope,
 	    des->errors += 1;
       }
 
-      if (is_overridden_ || !fun->is_built_in()) {
+      if (is_overridden_ || (!fun->is_built_in() && name != "$cast")) {
 	    if (scope->need_const_func()) {
 		  cerr << get_fileline() << ": error: " << name
 		       << " is not a built-in function, so cannot"
