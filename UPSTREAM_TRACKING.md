@@ -6,12 +6,12 @@ This is the reconciliation ledger between
 work derived from upstream issues, work that upstream later made unnecessary,
 and reviewed reports for which the fork deliberately carries no patch.
 
-Last reconciled: 2026-11-13
+Last reconciled: 2026-11-14
 
 - Latest upstream commit integrated at this checkpoint:
   [`985bc3f88`](https://github.com/steveicarus/iverilog/commit/985bc3f88).
 - Latest upstream-derived change before this ledger update:
-  [`cd7302675`](https://github.com/apullin/aiverilog/commit/cd7302675).
+  [`2dffae282`](https://github.com/apullin/aiverilog/commit/2dffae282).
 - `Landed` means that Aiverilog intentionally retains a fork delta.
 - `Elided` means that no fork delta remains or was needed, usually because
   upstream already supplied the behavior.
@@ -128,6 +128,19 @@ commits are included for batched PRs.
 | [#1547](https://github.com/steveicarus/iverilog/issues/1547) | [#139](https://github.com/apullin/aiverilog/issues/139), [PR #150](https://github.com/apullin/aiverilog/pull/150), [`1f3e76e78`](https://github.com/apullin/aiverilog/commit/1f3e76e78) | Resize wider vector expressions to the queue element width across variable and class-property `push_back`, `push_front`, and `insert` code generation. |
 | [#1551](https://github.com/steveicarus/iverilog/issues/1551) | [#140](https://github.com/apullin/aiverilog/issues/140), [PR #151](https://github.com/apullin/aiverilog/pull/151), [`cd7302675`](https://github.com/apullin/aiverilog/commit/cd7302675) | Diagnose null class handle property reads and writes at runtime and exit cleanly instead of aborting or segfaulting in `vthread.cc`. |
 | [#1585](https://github.com/steveicarus/iverilog/issues/1585) | [#141](https://github.com/apullin/aiverilog/issues/141), [PR #152](https://github.com/apullin/aiverilog/pull/152), [`3cc990738`](https://github.com/apullin/aiverilog/commit/3cc990738) | Resolve object-handle method roots and pre-body return signals in `resolve_call_chain_prefix_class` and `PECallFunction::test_width_chain_`. |
+| [#1545](https://github.com/steveicarus/iverilog/issues/1545) | [#156](https://github.com/apullin/aiverilog/issues/156), [PR #165](https://github.com/apullin/aiverilog/pull/165), [`4d29cf28d`](https://github.com/apullin/aiverilog/commit/4d29cf28d) | Swap `(rise_exp, fall_exp)` on the control `.delay` node for active-low `tranif0`/`rtranif0` so two-delay `#(d_on, d_off)` applies turn-on on control fall and turn-off on control rise. |
+| [#1544](https://github.com/steveicarus/iverilog/issues/1544) | [#157](https://github.com/apullin/aiverilog/issues/157), [PR #166](https://github.com/apullin/aiverilog/pull/166), [`9e241921c`](https://github.com/apullin/aiverilog/commit/9e241921c) | Preserve drive strengths through `vvp_fun_part_sa`, `vvp_fun_part_aa`, and `vvp_fun_part_var_sa` (`recv_vec8`) and propagate strength awareness through `IVL_LPM_PART_VP` when its source nexus is strength-aware. |
+| [#1552](https://github.com/steveicarus/iverilog/issues/1552) | [#158](https://github.com/apullin/aiverilog/issues/158), [PR #171](https://github.com/apullin/aiverilog/pull/171), [`b6f28fa51`](https://github.com/apullin/aiverilog/commit/b6f28fa51) | Return `'0` (instead of `'x`) for out-of-bounds and undefined-index reads of 2-state fixed-size unpacked arrays during constant folding and at runtime (`__vpiArray::get_word` and `of_LOAD_VEC4A`). |
+| [#1574](https://github.com/steveicarus/iverilog/issues/1574) | [#159](https://github.com/apullin/aiverilog/issues/159), [PR #172](https://github.com/apullin/aiverilog/pull/172), [`397868299`](https://github.com/apullin/aiverilog/commit/397868299) | Part 2 (procedural unpacked-array copy; Part 1 constant `$clog2` was already fixed upstream): expose unpacked dimension ranges to target modules and copy elements in left-to-right dimension order in `draw_array_copy` (including string arrays and subroutine ports). |
+| [#1061](https://github.com/steveicarus/iverilog/issues/1061) | [#163](https://github.com/apullin/aiverilog/issues/163), [PR #170](https://github.com/apullin/aiverilog/pull/170), [`7b36e5746`](https://github.com/apullin/aiverilog/commit/7b36e5746) | Allow combining `local`/`protected` and `virtual` qualifiers in any order on class methods (including `pure virtual`), while diagnosing conflicting qualifier combinations. |
+| [#278](https://github.com/steveicarus/iverilog/issues/278) | [#164](https://github.com/apullin/aiverilog/issues/164), [PR #173](https://github.com/apullin/aiverilog/pull/173), [`4336d0edb`](https://github.com/apullin/aiverilog/commit/4336d0edb) | Support `-F <cmdfile>` on the `iverilog` CLI and inside command files, resolving relative source, library, include, and nested command-file paths against `<cmdfile>`'s directory. |
+| [#1611](https://github.com/steveicarus/iverilog/issues/1611) | [#174](https://github.com/apullin/aiverilog/issues/174), [PR #183](https://github.com/apullin/aiverilog/pull/183), [`2de9a481b`](https://github.com/apullin/aiverilog/commit/2de9a481b) | Evaluate non-shift compound assignment RHS operands at `max(lval_width, rval_self_width)` with combined `(lhs && rhs)` signedness, and keep shift amounts self-determined. |
+| [#1560](https://github.com/steveicarus/iverilog/issues/1560) | [#175](https://github.com/apullin/aiverilog/issues/175), [PR #186](https://github.com/apullin/aiverilog/pull/186), [`28e4dffb2`](https://github.com/apullin/aiverilog/commit/28e4dffb2) | Support reading and assigning members and bit/part-selects of packed-struct and packed-vector class properties via `%set/vec4`. |
+| [#1564](https://github.com/steveicarus/iverilog/issues/1564) / [#1587](https://github.com/steveicarus/iverilog/issues/1587) | [#176](https://github.com/apullin/aiverilog/issues/176), [PR #192](https://github.com/apullin/aiverilog/pull/192), [`5e7735ff0`](https://github.com/apullin/aiverilog/commit/5e7735ff0) | Support bit-select, part-select, and indexed part-select reads and writes on dynamic-array and queue elements (including `[$]` and class queue/darray property reads). |
+| [#416](https://github.com/steveicarus/iverilog/issues/416) | [#180](https://github.com/apullin/aiverilog/issues/180), [PR #185](https://github.com/apullin/aiverilog/pull/185), [`91b38d3ef`](https://github.com/apullin/aiverilog/commit/91b38d3ef) | Implement IEEE 1800-2017 §20.6.1 `$typename(expr_or_type)` as a side-effect-free compile-time string constant. |
+| [#536](https://github.com/steveicarus/iverilog/issues/536) | [#182](https://github.com/apullin/aiverilog/issues/182), [PR #187](https://github.com/apullin/aiverilog/pull/187), [`40f7bef08`](https://github.com/apullin/aiverilog/commit/40f7bef08) | Support unpacked array slices (`arr[i]`, `arr[hi:lo]`, `arr[base +: wid]`, `arr[base -: wid]`) in blocking, nonblocking, assignment-pattern, and continuous assignments. |
+| [#1092](https://github.com/steveicarus/iverilog/issues/1092) | [#179](https://github.com/apullin/aiverilog/issues/179), [PR #190](https://github.com/apullin/aiverilog/pull/190), [`9f00167ab`](https://github.com/apullin/aiverilog/commit/9f00167ab) | Implement IEEE 1800-2017 §11.4.13 `inside` expressions (wildcard `==?`, 4-state `1'bx`, `[lo:hi]`/`[$:hi]`/`[lo:$]` ranges, unpacked arrays, queues, dynamic arrays, reals, strings, continuous assignments, and `localparam`). |
+| [#1759](https://github.com/steveicarus/iverilog/issues/1759) | [#181](https://github.com/apullin/aiverilog/issues/181), [PR #193](https://github.com/apullin/aiverilog/pull/193), [`2dffae282`](https://github.com/apullin/aiverilog/commit/2dffae282) | Extend dynamic `$cast(dest_var, source_expr)` (function and task forms, plus constant functions) to enumeration targets via `%cast/enum`. |
 
 ## Elided Or Already Present
 
@@ -151,6 +164,9 @@ upstream or existing behavior.
 | [#1194](https://github.com/steveicarus/iverilog/issues/1194) | No clear missing behavior after reviewing existing extended-argument support and documentation. No fork patch. |
 | [#1513](https://github.com/steveicarus/iverilog/issues/1513) | Already present in [`a3a1367d6`](https://github.com/apullin/aiverilog/commit/a3a1367d6) via upstream [PR #1514](https://github.com/steveicarus/iverilog/pull/1514) ([`5591c2dde`](https://github.com/steveicarus/iverilog/commit/5591c2dde)). Both `bufif1` and real feedback-loop reproducers pass without stack overflow. |
 | [#1546](https://github.com/steveicarus/iverilog/issues/1546) | Already present in [`a3a1367d6`](https://github.com/apullin/aiverilog/commit/a3a1367d6) via upstream [`576cca651`](https://github.com/steveicarus/iverilog/commit/576cca651) and [PR #1768](https://github.com/steveicarus/iverilog/pull/1768) ([`deaad9914`](https://github.com/steveicarus/iverilog/commit/deaad9914)). Both plain and compound member writes on unpacked arrays of packed structs pass. |
+| [#413](https://github.com/steveicarus/iverilog/issues/413) | Already present (`ivtest/ivltests/br_gh413.v` in `regress-vvp.list`). |
+| [#1213](https://github.com/steveicarus/iverilog/issues/1213) | Already present. `module a(output uwire o1 [0:1]); endmodule` compiles and runs cleanly without `ivl_signal_nex` assertion. |
+| [#1230](https://github.com/steveicarus/iverilog/issues/1230) | Already present on current `master`. |
 
 ## Reviewed And Deferred
 
@@ -174,6 +190,7 @@ the next prerequisite.
 | [#284](https://github.com/steveicarus/iverilog/issues/284) | Large numeric module attributes require a target-API representation decision beyond native `long`. |
 | [#1543](https://github.com/steveicarus/iverilog/issues/1543) / [#1561](https://github.com/steveicarus/iverilog/issues/1561) | Fixed-size unpacked-array class properties currently have incomplete target/runtime representation (`vvp_cobject` only indexes object-handle arrays, and `tgt-vvp` emits scalar property metadata for vector/real/string unpacked arrays). Needs coordinated `ivl_target`, `tgt-vvp`, and `vvp_cobject` support. |
 | [#1705](https://github.com/steveicarus/iverilog/issues/1705) | Whole-container nonblocking assignments to queues and dynamic arrays require a dedicated `%assign/obj` NBA scheduler path with container deep-copy semantics; reporter noted an upstream patch in progress. |
+| [#1196](https://github.com/steveicarus/iverilog/issues/1196) | Deferred ([#189](https://github.com/apullin/aiverilog/issues/189) / [PR #191](https://github.com/apullin/aiverilog/pull/191)): existing upstream regression `ivtest/ivltests/signed_a.v:21` (`b[120] = 1'b1; // This should be stripped!`) explicitly requires 32-bit index stripping on `&A<>`. |
 
 ## Fork Work Not Derived From Upstream Issues
 
@@ -193,8 +210,13 @@ number to match:
   [PR #133](https://github.com/apullin/aiverilog/pull/133).
 - Post-sync correctness audit fixes in November 2026:
   [#142](https://github.com/apullin/aiverilog/issues/142) / [PR #145](https://github.com/apullin/aiverilog/pull/145) ([`a7af0903b`](https://github.com/apullin/aiverilog/commit/a7af0903b), `ICARUS_VPI_CONST` function-type UBSan fix in `ivl`),
-  [#143](https://github.com/apullin/aiverilog/issues/143) / [PR #153](https://github.com/apullin/aiverilog/pull/153) ([`c35c1d647`](https://github.com/apullin/aiverilog/commit/c35c1d647), unpacked-array of packed-array of packed-struct l-value index stripping), and
-  [#144](https://github.com/apullin/aiverilog/issues/144) / [PR #154](https://github.com/apullin/aiverilog/pull/154) ([`3bf4ccb85`](https://github.com/apullin/aiverilog/commit/3bf4ccb85), dynamic-array `new[N](init)` elementary variable assertion and 6-bit offset truncation fix).
+  [#143](https://github.com/apullin/aiverilog/issues/143) / [PR #153](https://github.com/apullin/aiverilog/pull/153) ([`c35c1d647`](https://github.com/apullin/aiverilog/commit/c35c1d647), unpacked-array of packed-array of packed-struct l-value index stripping),
+  [#144](https://github.com/apullin/aiverilog/issues/144) / [PR #154](https://github.com/apullin/aiverilog/pull/154) ([`3bf4ccb85`](https://github.com/apullin/aiverilog/commit/3bf4ccb85), dynamic-array `new[N](init)` elementary variable assertion and 6-bit offset truncation fix),
+  [#160](https://github.com/apullin/aiverilog/issues/160) / [PR #167](https://github.com/apullin/aiverilog/pull/167) ([`ee0d5e679`](https://github.com/apullin/aiverilog/commit/ee0d5e679), constant `string.getc()` 64-bit index segfault, byte width, raw parameter string unescaping, and `<ctype.h>` `unsigned char` UB),
+  [#161](https://github.com/apullin/aiverilog/issues/161) / [PR #168](https://github.com/apullin/aiverilog/pull/168) ([`8814bf273`](https://github.com/apullin/aiverilog/commit/8814bf273), out-of-bounds read on allocated-but-empty queue dereferencing `queue[0]`),
+  [#162](https://github.com/apullin/aiverilog/issues/162) / [PR #169](https://github.com/apullin/aiverilog/pull/169) ([`370a4f863`](https://github.com/apullin/aiverilog/commit/370a4f863), pre/post `++`/`--` expressions in constant functions and unpacked-array words in `tgt-vvp`),
+  [#177](https://github.com/apullin/aiverilog/issues/177) / [PR #184](https://github.com/apullin/aiverilog/pull/184) ([`05aa22fb8`](https://github.com/apullin/aiverilog/commit/05aa22fb8), signed comparison in queue/darray `sort()`, `rsort()`, `min()`, and `max()`), and
+  [#178](https://github.com/apullin/aiverilog/issues/178) / [PR #188](https://github.com/apullin/aiverilog/pull/188) ([`dfb7bc429`](https://github.com/apullin/aiverilog/commit/dfb7bc429), compile-time and runtime diagnostics for negative or X/Z `new[n]` dynamic-array sizes).
 
 These changes should be compared semantically against incoming upstream work;
 the absence of a matching upstream issue number is not evidence that they can
