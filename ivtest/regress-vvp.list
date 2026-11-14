@@ -628,6 +628,7 @@ sv_cast_indexed_target_fail	vvp_tests/sv_cast_indexed_target_fail.json
 sv_cast_type_dimension		vvp_tests/sv_cast_type_dimension.json
 sv_cast_type_error_once_fail	vvp_tests/sv_cast_type_error_once_fail.json
 sv_cast_type_parameter_scope	vvp_tests/sv_cast_type_parameter_scope.json
+sv_cfunc_incdec_expr		vvp_tests/sv_cfunc_incdec_expr.json
 sv_chained_constructor1		vvp_tests/sv_chained_constructor1.json
 sv_chained_constructor2		vvp_tests/sv_chained_constructor2.json
 sv_chained_constructor3		vvp_tests/sv_chained_constructor3.json

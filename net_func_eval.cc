@@ -1139,6 +1139,90 @@ NetExpr* NetETernary::evaluate_function(const LineInfo&loc,
 NetExpr* NetEUnary::evaluate_function(const LineInfo&loc,
 				map<perm_string,LocalVar>&context_map) const
 {
+      if (op_ == 'I' || op_ == 'i' || op_ == 'D' || op_ == 'd') {
+	    const NetESignal*sig = dynamic_cast<const NetESignal*>(expr_.get());
+	    if (sig == 0)
+		  return 0;
+
+	    map<perm_string,LocalVar>::iterator ptr = context_map.find(sig->name());
+	    if (ptr == context_map.end())
+		  return 0;
+
+	    LocalVar*var = &ptr->second;
+	    while (var->nwords == -1) {
+		  ivl_assert(*this, var->ref);
+		  var = var->ref;
+	    }
+
+	    int word = 0;
+	    bool word_valid = true;
+	    if (var->nwords > 0) {
+		  ivl_assert(loc, sig->word_index());
+		  NetExpr*word_res = sig->word_index()->evaluate_function(loc, context_map);
+		  if (word_res == 0)
+			return 0;
+		  const NetEConst*word_const = dynamic_cast<const NetEConst*>(word_res);
+		  ivl_assert(loc, word_const);
+		  if (!word_const->value().is_defined()) {
+			word_valid = false;
+		  } else {
+			word = word_const->value().as_long();
+			if (word < 0 || word >= var->nwords)
+			      word_valid = false;
+		  }
+		  delete word_res;
+	    }
+
+	    NetExpr*old_val = expr_->evaluate_function(loc, context_map);
+	    if (old_val == 0)
+		  return 0;
+
+	    bool is_inc = (op_ == 'I' || op_ == 'i');
+	    bool is_pre = (op_ == 'I' || op_ == 'D');
+	    NetExpr*new_val = 0;
+
+	    if (const NetECReal*rc = dynamic_cast<const NetECReal*>(old_val)) {
+		  double nv = rc->value().as_double() + (is_inc ? 1.0 : -1.0);
+		  new_val = new NetECReal(verireal(nv));
+		  new_val->set_line(loc);
+	    } else if (const NetEConst*cc = dynamic_cast<const NetEConst*>(old_val)) {
+		  unsigned wid = expr_width();
+		  verinum nv;
+		  if (!cc->value().is_defined()) {
+			nv = verinum(verinum::Vx, wid, true);
+		  } else {
+			verinum one(uint64_t(1), wid);
+			verinum cur = cast_to_width(cc->value(), wid);
+			nv = is_inc ? (cur + one) : (cur - one);
+			nv = cast_to_width(nv, wid);
+		  }
+		  nv.has_sign(sig->sig()->get_signed());
+		  new_val = new NetEConst(nv);
+		  new_val->set_line(loc);
+	    } else {
+		  delete old_val;
+		  return 0;
+	    }
+
+	    if (var->nwords > 0) {
+		  if (word_valid) {
+			delete var->array[word];
+			var->array[word] = new_val->dup_expr();
+		  }
+	    } else {
+		  delete var->value;
+		  var->value = new_val->dup_expr();
+	    }
+
+	    NetExpr*res = is_pre ? new_val : old_val;
+	    if (is_pre)
+		  delete old_val;
+	    else
+		  delete new_val;
+	    res->cast_signed(has_sign());
+	    return res;
+      }
+
       NetExpr*val = expr_->evaluate_function(loc, context_map);
       if (val == 0) return 0;
 

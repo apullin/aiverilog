@@ -992,6 +992,35 @@ static void draw_unary_inc_dec(ivl_expr_t sub, bool incr, bool pre)
 	    break;
       }
 
+      if (ivl_expr_type(sub) == IVL_EX_SIGNAL &&
+          ivl_signal_dimensions(sig) > 0) {
+	    int addr_index = allocate_word();
+	    int undef_flag = allocate_flag();
+	    const char*cmd = incr ? "%add" : "%sub";
+
+	    draw_eval_expr_into_integer(ivl_expr_oper1(sub), addr_index);
+	    fprintf(vvp_out, "    %%flag_mov %d, 4;\n", undef_flag);
+	    fprintf(vvp_out, "    %%load/vec4a v%p, %d;\n", sig, addr_index);
+
+	    if (pre) {
+		  fprintf(vvp_out, "    %si 1, 0, %u;\n", cmd, wid);
+		  if (ivl_signal_data_type(sig) == IVL_VT_BOOL)
+			fprintf(vvp_out, "    %%cast2;\n");
+		  fprintf(vvp_out, "    %%dup/vec4;\n");
+	    } else {
+		  fprintf(vvp_out, "    %%dup/vec4;\n");
+		  fprintf(vvp_out, "    %si 1, 0, %u;\n", cmd, wid);
+		  if (ivl_signal_data_type(sig) == IVL_VT_BOOL)
+			fprintf(vvp_out, "    %%cast2;\n");
+	    }
+
+	    fprintf(vvp_out, "    %%flag_mov 4, %d;\n", undef_flag);
+	    fprintf(vvp_out, "    %%store/vec4a v%p, %d, 0;\n", sig, addr_index);
+	    clr_flag(undef_flag);
+	    clr_word(addr_index);
+	    return;
+      }
+
       draw_eval_vec4(sub);
 
       const char*cmd = incr? "%add" : "%sub";
