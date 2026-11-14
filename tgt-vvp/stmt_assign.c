@@ -1437,20 +1437,52 @@ static int show_stmt_assign_sig_cobject(ivl_statement_t net)
 
 	    if (ivl_type_base(prop_type) == IVL_VT_BOOL ||
 	        ivl_type_base(prop_type) == IVL_VT_LOGIC) {
-		  if (ivl_stmt_opcode(net) != 0) {
-			fprintf(vvp_out, "    %%prop/v %d;\n", prop_idx);
-			draw_compressed_vector_op(ivl_stmt_opcode(net),
-						  lwid, rval);
-		  } else {
-			draw_eval_vec4(rval);
-			resize_vec4_wid(rval, lwid);
-		  }
-		  if (ivl_type_base(prop_type) == IVL_VT_BOOL)
-			fprintf(vvp_out, "    %%cast2;\n");
+		  ivl_expr_t part_off_ex = ivl_lval_part_off(lval);
+		  if (part_off_ex) {
+			unsigned prop_wid = ivl_type_packed_width(prop_type);
+			int part_idx = allocate_word();
+			int undef_flag = allocate_flag();
 
-		  fprintf(vvp_out, "    %%store/prop/v %d, %u; Store in logic property %s\n",
-			  prop_idx, lwid, ivl_type_prop_name(sig_type, prop_idx));
-		  fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+			draw_eval_expr_into_integer(part_off_ex, part_idx);
+			fprintf(vvp_out, "    %%flag_mov %d, 4;\n", undef_flag);
+			fprintf(vvp_out, "    %%prop/v %d;\n", prop_idx);
+			if (ivl_stmt_opcode(net) != 0) {
+			      fprintf(vvp_out, "    %%dup/vec4;\n");
+			      fprintf(vvp_out, "    %%push/ix/vec4 %d, 32, 1;\n", part_idx);
+			      fprintf(vvp_out, "    %%part/s %u;\n", lwid);
+			      draw_compressed_vector_op(ivl_stmt_opcode(net),
+							lwid, rval);
+			} else {
+			      draw_eval_vec4(rval);
+			      resize_vec4_wid(rval, lwid);
+			}
+
+			fprintf(vvp_out, "    %%flag_mov 4, %d;\n", undef_flag);
+			fprintf(vvp_out, "    %%set/vec4 %d, %u;\n", part_idx, lwid);
+			if (ivl_type_base(prop_type) == IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+
+			fprintf(vvp_out, "    %%store/prop/v %d, %u; Store slice in property %s\n",
+				prop_idx, prop_wid, ivl_type_prop_name(sig_type, prop_idx));
+			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+			clr_flag(undef_flag);
+			clr_word(part_idx);
+		  } else {
+			if (ivl_stmt_opcode(net) != 0) {
+			      fprintf(vvp_out, "    %%prop/v %d;\n", prop_idx);
+			      draw_compressed_vector_op(ivl_stmt_opcode(net),
+							lwid, rval);
+			} else {
+			      draw_eval_vec4(rval);
+			      resize_vec4_wid(rval, lwid);
+			}
+			if (ivl_type_base(prop_type) == IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+
+			fprintf(vvp_out, "    %%store/prop/v %d, %u; Store in logic property %s\n",
+				prop_idx, lwid, ivl_type_prop_name(sig_type, prop_idx));
+			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+		  }
 
 	    } else if (ivl_type_base(prop_type) == IVL_VT_REAL) {
 

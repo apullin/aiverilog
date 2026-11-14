@@ -255,6 +255,7 @@ extern bool of_SCOPY(vthread_t thr, vvp_code_t code);
 extern bool of_SET_DAR_OBJ_REAL(vthread_t thr, vvp_code_t code);
 extern bool of_SET_DAR_OBJ_STR(vthread_t thr, vvp_code_t code);
 extern bool of_SET_DAR_OBJ_VEC4(vthread_t thr, vvp_code_t code);
+extern bool of_SET_VEC4(vthread_t thr, vvp_code_t code);
 extern bool of_SHIFTL(vthread_t thr, vvp_code_t code);
 extern bool of_SHIFTLI(vthread_t thr, vvp_code_t code);
 extern bool of_SHIFTR(vthread_t thr, vvp_code_t code);
