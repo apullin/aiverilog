@@ -2966,22 +2966,34 @@ NetProc* PAssign::elaborate_compressed_(Design*des, NetScope*scope) const
 	// equivalent uncompressed assignments. This means we need
 	// to take the type of the LHS into account when determining
 	// the type of the RHS expression.
-      bool force_unsigned;
+      const auto lval_info = get_lval_info(lv);
+      NetExpr*rv = 0;
       switch (op_) {
 	  case 'l':
 	  case 'r':
 	  case 'R':
 	      // The right-hand operand of shift operations is
-	      // self-determined.
-	    force_unsigned = false;
+	      // self-determined (IEEE 1800-2017 11.4.1, 11.6.1).
+	    rv = elaborate_rval_(des, scope, 0, IVL_VT_LOGIC, 0, false);
 	    break;
-	  default:
-	    force_unsigned = !lv->get_signed();
-	    break;
+	  default: {
+		bool force_unsigned = !lv->get_signed();
+		unsigned op_wid = lval_info.width;
+		ivl_variable_type_t use_type = lval_info.type;
+		if (use_type == IVL_VT_BOOL || use_type == IVL_VT_LOGIC) {
+		      PExpr::width_mode_t mode = PExpr::SIZED;
+		      rval()->test_width(des, scope, mode);
+		      if (type_is_vectorable(rval()->expr_type())) {
+			    if (rval()->expr_width() > op_wid)
+				  op_wid = rval()->expr_width();
+			    use_type = IVL_VT_LOGIC;
+		      }
+		}
+		rv = elaborate_rval_(des, scope, 0, use_type,
+				     op_wid, force_unsigned);
+		break;
+	  }
       }
-      const auto lval_info = get_lval_info(lv);
-      NetExpr*rv = elaborate_rval_(des, scope, 0, lval_info.type,
-				   lval_info.width, force_unsigned);
       if (rv == 0) return 0;
 
 	// The ivl_target API doesn't support signalling the type
