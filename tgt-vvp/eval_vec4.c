@@ -672,7 +672,8 @@ static void draw_select_vec4(ivl_expr_t expr)
       }
 
 	/* Class property that is a queue or dynamic array: c.q[idx] */
-      if (ivl_expr_type(subexpr) == IVL_EX_PROPERTY) {
+      if (ivl_expr_type(subexpr) == IVL_EX_PROPERTY &&
+          ivl_expr_oper1(subexpr) == 0) {
 	    ivl_signal_t clas = ivl_expr_signal(subexpr);
 	    unsigned pidx = ivl_expr_property_idx(subexpr);
 	    ivl_type_t cls_type = ivl_signal_net_type(clas);

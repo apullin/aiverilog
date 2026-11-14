@@ -4171,26 +4171,77 @@ NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 						   comp.index, tmp_ua, false);
 		  }
 	    }
-      } else if (dynamic_cast<const netdarray_t*>(tmp_type)) {
+      } else if (const netdarray_t*tmp_da = dynamic_cast<const netdarray_t*>(tmp_type)) {
 	      /* Queue or dynamic-array property: optional index, e.g. c.q[i]
-	       * or whole-container reference c.q. */
+	       * or c.q[i][msb:lsb], or whole-container reference c.q. */
 	    const std::list<index_component_t>*idx_list = &comp.index;
 	    if (idx_list->empty() && !path_.back().index.empty()) {
 		  idx_list = &path_.back().index;
 	    }
 	    if (idx_list->size() == 0) {
 		  canon_index = nullptr;
-	    } else if (idx_list->size() != 1) {
-		  cerr << get_fileline() << ": error: "
-		       << "Got " << idx_list->size() << " indices, "
-		       << "expecting 0 or 1 for the queue/dynamic-array property "
-		       << class_type->get_prop_name(pidx) << "." << endl;
-		  des->errors++;
 	    } else {
-		  const index_component_t&use_index = idx_list->back();
+		  const index_component_t&use_index = idx_list->front();
 		  ivl_assert(*this, use_index.msb != 0);
 		  ivl_assert(*this, use_index.lsb == 0);
 		  canon_index = elab_and_eval(des, scope, use_index.msb, -1, false);
+		  if (idx_list->size() > 1) {
+			const netvector_t*vtype =
+			      dynamic_cast<const netvector_t*>(tmp_da->element_type());
+			if (!vtype || vtype->packed_dims().size() != 1) {
+			      cerr << get_fileline() << ": error: "
+				   << "Too many indices for queue/dynamic-array property "
+				   << class_type->get_prop_name(pidx) << "." << endl;
+			      des->errors++;
+			      return nullptr;
+			}
+			NetEProperty*prop = new NetEProperty(sr.net, pidx, canon_index);
+			prop->set_line(*this);
+			const index_component_t&tail = idx_list->back();
+			const netrange_t&rng = vtype->packed_dims().back();
+			if (idx_list->size() > 2) {
+			      cerr << get_fileline() << ": error: Too many indices "
+				      "for queue/dynamic-array element." << endl;
+			      des->errors++;
+			      delete prop;
+			      return nullptr;
+			}
+			if (tail.sel == index_component_t::SEL_BIT) {
+			      NetExpr*bit = elab_and_eval(des, scope, tail.msb, -1, false);
+			      if (!bit) { delete prop; return nullptr; }
+			      if (rng.get_msb() >= rng.get_lsb() && rng.get_lsb() != 0) {
+				    NetEConst*c = new NetEConst(verinum(-rng.get_lsb()));
+				    c->set_line(*this);
+				    unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+				    bit = new NetEBAdd('+', pad_to_width(bit, w, *this),
+						       pad_to_width(c, w, *this), w, true);
+				    bit->set_line(*this);
+			      }
+			      NetESelect*sel = new NetESelect(prop, bit, 1);
+			      sel->set_line(*this);
+			      return sel;
+			}
+			long tail_off = 0;
+			unsigned long tail_wid = 0;
+			if (!calculate_part(this, des, scope, tail, tail_off, tail_wid)) {
+			      delete prop;
+			      return nullptr;
+			}
+			long loff = 0;
+			unsigned long lwid = 0;
+			list<long>empty_prefix;
+			if (!prefix_to_slice(vtype->packed_dims(), empty_prefix,
+					     tail_off, loff, lwid)) {
+			      delete prop;
+			      NetEConst*oob = make_const_x(lwid * tail_wid);
+			      oob->set_line(*this);
+			      return oob;
+			}
+			NetESelect*sel = new NetESelect(prop, make_const_val(loff),
+							lwid * tail_wid);
+			sel->set_line(*this);
+			return sel;
+		  }
 	    }
       } else if (!comp.index.empty()) {
 	    /* IEEE 1800-2023 §11.5.1: bit-select on a scalar packed property,
@@ -9266,6 +9317,158 @@ NetExpr* PEIdent::elaborate_expr_net_bit_last_(Design*des, NetScope*,
       return ss;
 }
 
+static NetExpr* elaborate_darray_elem_slice_rval(Design*des, NetScope*scope,
+						 const LineInfo*li,
+						 NetExpr*elem,
+						 const netdarray_t*darray,
+						 const std::list<index_component_t>&rem_indices,
+						 bool need_const)
+{
+      const netvector_t*vtype = dynamic_cast<const netvector_t*>(darray->element_type());
+      if (!vtype) {
+	    cerr << li->get_fileline() << ": error: Cannot bit/part-select "
+		    "non-vector dynamic array or queue element." << endl;
+	    des->errors += 1;
+	    delete elem;
+	    return 0;
+      }
+
+      const netranges_t&pdims = vtype->packed_dims();
+      if (rem_indices.size() > pdims.size()) {
+	    cerr << li->get_fileline() << ": error: Too many index expressions "
+		    "for dynamic array or queue element." << endl;
+	    des->errors += 1;
+	    delete elem;
+	    return 0;
+      }
+
+      list<long>prefix_indices;
+      if (!evaluate_index_prefix(des, scope, prefix_indices, rem_indices)) {
+	    delete elem;
+	    return 0;
+      }
+
+      const index_component_t&tail = rem_indices.back();
+      if (pdims.size() == 1 && tail.sel == index_component_t::SEL_BIT) {
+	    const netrange_t&rng = pdims.back();
+	    NetExpr*bit = elab_and_eval(des, scope, tail.msb, -1, need_const);
+	    if (!bit) {
+		  delete elem;
+		  return 0;
+	    }
+	    long bit_const;
+	    if (eval_as_long(bit_const, bit)) {
+		  delete bit;
+		  long loff = (rng.get_msb() >= rng.get_lsb())
+		            ? (bit_const - rng.get_lsb())
+		            : (rng.get_lsb() - bit_const);
+		  if (loff < 0 || (unsigned long)loff >= rng.width()) {
+			delete elem;
+			NetEConst*oob = make_const_x(1);
+			oob->set_line(*li);
+			return oob;
+		  }
+		  bit = make_const_val(loff);
+	    } else if (rng.get_msb() >= rng.get_lsb()) {
+		  if (rng.get_lsb() != 0) {
+			NetEConst*c = new NetEConst(verinum(-rng.get_lsb()));
+			c->set_line(*li);
+			unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+			bit = new NetEBAdd('+', pad_to_width(bit, w, *li),
+					   pad_to_width(c, w, *li), w, true);
+			bit->set_line(*li);
+		  }
+	    } else {
+		  NetEConst*c = new NetEConst(verinum(rng.get_lsb()));
+		  c->set_line(*li);
+		  unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+		  bit = new NetEBAdd('-', pad_to_width(c, w, *li),
+				     pad_to_width(bit, w, *li), w, true);
+		  bit->set_line(*li);
+	    }
+	    bit->set_line(*li);
+	    NetESelect*sel = new NetESelect(elem, bit, 1);
+	    sel->set_line(*li);
+	    return sel;
+      }
+
+      if (tail.sel == index_component_t::SEL_BIT ||
+          tail.sel == index_component_t::SEL_PART) {
+	    long tail_off = 0;
+	    unsigned long tail_wid = 0;
+	    if (!calculate_part(li, des, scope, tail, tail_off, tail_wid)) {
+		  delete elem;
+		  return 0;
+	    }
+	    long loff;
+	    unsigned long lwid;
+	    if (!prefix_to_slice(pdims, prefix_indices, tail_off, loff, lwid)) {
+		  delete elem;
+		  NetEConst*oob = make_const_x(lwid * tail_wid);
+		  oob->set_line(*li);
+		  return oob;
+	    }
+	    NetExpr*off_ex = make_const_val(loff);
+	    off_ex->set_line(*li);
+	    NetESelect*sel = new NetESelect(elem, off_ex, lwid * tail_wid);
+	    sel->set_line(*li);
+	    return sel;
+      }
+
+      if (pdims.size() == 1 &&
+          (tail.sel == index_component_t::SEL_IDX_UP ||
+           tail.sel == index_component_t::SEL_IDX_DO)) {
+	    const netrange_t&rng = pdims.back();
+	    NetExpr*base = elab_and_eval(des, scope, tail.msb, -1, need_const);
+	    NetExpr*wid_ex = elab_and_eval(des, scope, tail.lsb, -1, true);
+	    long wid_val = 0;
+	    if (!base || !wid_ex || !eval_as_long(wid_val, wid_ex) || wid_val <= 0) {
+		  cerr << li->get_fileline() << ": error: Indexed part-select width "
+			  "must be a positive constant." << endl;
+		  des->errors += 1;
+		  delete base;
+		  delete wid_ex;
+		  delete elem;
+		  return 0;
+	    }
+	    delete wid_ex;
+	    bool asc = rng.get_msb() < rng.get_lsb();
+	    if (!asc) {
+		  long adj = -rng.get_lsb();
+		  if (tail.sel == index_component_t::SEL_IDX_DO)
+			adj -= (wid_val - 1);
+		  if (adj != 0) {
+			NetEConst*c = new NetEConst(verinum(adj));
+			c->set_line(*li);
+			unsigned w = max(base->expr_width(), c->expr_width()) + 1;
+			base = new NetEBAdd('+', pad_to_width(base, w, *li),
+					    pad_to_width(c, w, *li), w, true);
+			base->set_line(*li);
+		  }
+	    } else {
+		  long adj = rng.get_lsb();
+		  if (tail.sel == index_component_t::SEL_IDX_UP)
+			adj -= (wid_val - 1);
+		  NetEConst*c = new NetEConst(verinum(adj));
+		  c->set_line(*li);
+		  unsigned w = max(base->expr_width(), c->expr_width()) + 1;
+		  base = new NetEBAdd('-', pad_to_width(c, w, *li),
+				      pad_to_width(base, w, *li), w, true);
+		  base->set_line(*li);
+	    }
+	    eval_expr(base);
+	    NetESelect*sel = new NetESelect(elem, base, wid_val);
+	    sel->set_line(*li);
+	    return sel;
+      }
+
+      cerr << li->get_fileline() << ": sorry: Unsupported select on dynamic "
+	      "array or queue element." << endl;
+      des->errors += 1;
+      delete elem;
+      return 0;
+}
+
 NetExpr* PEIdent::elaborate_expr_net(Design*des, NetScope*scope,
 				     NetNet*net, NetScope*found_in,
                                      unsigned expr_wid,
@@ -9288,6 +9491,52 @@ NetExpr* PEIdent::elaborate_expr_net(Design*des, NetScope*scope,
 
       NetESignal*node = new NetESignal(net);
       node->set_line(*this);
+
+      if (const netdarray_t*darray = net->darray_type()) {
+	    const std::list<index_component_t>&idxs = path_.name.back().index;
+	    if (idxs.size() > 1) {
+		  const index_component_t&idx0 = idxs.front();
+		  NetExpr*mux = 0;
+		  if (idx0.sel == index_component_t::SEL_BIT_LAST) {
+			if (!net->queue_type()) {
+			      cerr << get_fileline() << ": error: The $ index "
+				      "is only allowed for queues." << endl;
+			      des->errors += 1;
+			      delete node;
+			      return 0;
+			}
+			if (need_const) {
+			      cerr << get_fileline() << ": error: Expression "
+				      "with \"[$]\" is not constant." << endl;
+			      delete node;
+			      return 0;
+			}
+			mux = new NetELast(net);
+			mux->set_line(*this);
+		  } else if (idx0.sel == index_component_t::SEL_BIT) {
+			mux = elab_and_eval(des, scope, idx0.msb, -1, need_const);
+			if (!mux) {
+			      delete node;
+			      return 0;
+			}
+		  } else {
+			cerr << get_fileline() << ": error: Invalid element "
+				"index on dynamic array or queue." << endl;
+			des->errors += 1;
+			delete node;
+			return 0;
+		  }
+
+		  NetESelect*elem = new NetESelect(node, mux,
+						   darray->element_width(),
+						   darray->element_type());
+		  elem->set_line(*this);
+		  std::list<index_component_t>rem = idxs;
+		  rem.pop_front();
+		  return elaborate_darray_elem_slice_rval(des, scope, this, elem,
+							  darray, rem, need_const);
+	    }
+      }
 
       index_component_t::ctype_t use_sel = index_component_t::SEL_NONE;
       if (! path_.name.back().index.empty())
