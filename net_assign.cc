@@ -136,6 +136,10 @@ ivl_variable_type_t NetAssign_::expr_type() const
       if (ntype)
 	    return ntype->base_type();
 
+      auto btype = base_component_type();
+      if (btype)
+	    return btype->base_type();
+
       ivl_assert(*this, sig_);
       return sig_->data_type();
 }
@@ -148,14 +152,8 @@ ivl_type_t NetAssign_::net_type() const
       return component_type();
 }
 
-ivl_type_t NetAssign_::component_type() const
+ivl_type_t NetAssign_::base_component_type() const
 {
-      if (more) return nullptr;
-
-	// A selected member can have its own data type.
-      if (base_)
-	    return part_data_type_;
-
       ivl_type_t ntype;
       if (nest_) {
 	    ntype = nest_->net_type();
@@ -182,6 +180,17 @@ ivl_type_t NetAssign_::component_type() const
       }
 
       return ntype;
+}
+
+ivl_type_t NetAssign_::component_type() const
+{
+      if (more) return nullptr;
+
+	// A selected member can have its own data type.
+      if (base_)
+	    return part_data_type_;
+
+      return base_component_type();
 }
 
 perm_string NetAssign_::name() const

@@ -6263,6 +6263,34 @@ bool of_SET_DAR_OBJ_VEC4(vthread_t thr, vvp_code_t cp)
       return set_dar_obj<vvp_vector4_t>(thr, cp);
 }
 
+/*
+ * %set/vec4 <idx_reg>, <wid>
+ *   Pop a <wid>-bit slice from the vec4 stack and overwrite bits
+ *   [off .. off + wid - 1] of the new top-of-stack vec4 value when
+ *   flag 4 is 0 (defined offset). Out-of-range bit positions are ignored.
+ */
+bool of_SET_VEC4(vthread_t thr, vvp_code_t cp)
+{
+      int idx_reg = cp->number;
+      unsigned wid = cp->bit_idx[0];
+      int64_t off = thr->words[idx_reg].w_int;
+
+      vvp_vector4_t part = thr->pop_vec4();
+      assert(part.size() >= wid);
+      vvp_vector4_t&target = thr->peek_vec4();
+
+      if (thr->flags[4] != BIT4_0)
+	    return true;
+
+      for (unsigned k = 0 ; k < wid ; k += 1) {
+	    int64_t dst = off + static_cast<int64_t>(k);
+	    if (dst >= 0 && static_cast<uint64_t>(dst) < target.size())
+		  target.set_bit(static_cast<unsigned>(dst), part.value(k));
+      }
+
+      return true;
+}
+
 static inline void shift_left(vvp_vector4_t&val, uint64_t shift)
 {
       unsigned wid = val.size();

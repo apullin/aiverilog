@@ -3113,6 +3113,7 @@ class NetAssign_ {
 	// if more components follow. Unlike net_type(), this retains the type
 	// when the component is marked untyped.
       ivl_type_t component_type() const;
+      ivl_type_t base_component_type() const;
 
 	// Nested l-value. If this is set, sig_ must NOT be set!
       NetAssign_*nest_;

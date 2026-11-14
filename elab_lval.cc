@@ -1104,6 +1104,310 @@ bool PEIdent::elaborate_lval_net_idx_(Design*des,
  * member_path=c. if path_=obj.base.x, and base_path=obj, then sig is
  * obj, and member_path=base.x.
  */
+static bool resolve_packed_struct_member_path(Design*des, NetScope*scope,
+					      const LineInfo*li,
+					      const netstruct_t*struct_type,
+					      perm_string base_name,
+					      pform_name_t&member_path,
+					      unsigned long&off,
+					      unsigned long&use_width,
+					      ivl_type_t&member_type,
+					      bool&out_of_range)
+{
+      off = 0;
+      use_width = struct_type->packed_width();
+      member_type = nullptr;
+      out_of_range = false;
+
+      pform_name_t completed_path;
+      do {
+	    const name_component_t member_comp = member_path.front();
+	    const perm_string&member_name = member_comp.name;
+
+	    unsigned long tmp_off;
+	    const netstruct_t::member_t*member =
+		  struct_type->packed_member(member_name, tmp_off);
+	    if (member == 0) {
+		  cerr << li->get_fileline() << ": error: Member " << member_name
+		       << " is not a member of struct type of "
+		       << base_name;
+		  if (!completed_path.empty())
+			cerr << "." << completed_path;
+		  cerr << "." << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+
+	    off += tmp_off;
+	    use_width = member->net_type->packed_width();
+	    member_type = member->net_type;
+
+	    index_component_t::ctype_t use_sel = index_component_t::SEL_NONE;
+	    if (!member_comp.index.empty())
+		  use_sel = member_comp.index.back().sel;
+
+	    if (use_sel != index_component_t::SEL_NONE
+		&& use_sel != index_component_t::SEL_BIT
+		&& use_sel != index_component_t::SEL_PART) {
+		  cerr << li->get_fileline() << ": sorry: Assignments to part selects of "
+			"a struct member are not yet supported." << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+
+	    if (const netvector_t*mem_vec = dynamic_cast<const netvector_t*>(member->net_type)) {
+		  if (!member_comp.index.empty()) {
+			const netranges_t&mem_packed_dims = mem_vec->packed_dims();
+			if (member_comp.index.size() > mem_packed_dims.size()) {
+			      cerr << li->get_fileline() << ": error: "
+				   << "Too many index expressions for member." << endl;
+			      des->errors += 1;
+			      return false;
+			}
+			list<long>prefix_indices;
+			if (!evaluate_index_prefix(des, scope, prefix_indices, member_comp.index))
+			      return false;
+			long tail_off = 0;
+			unsigned long tail_wid = 0;
+			if (!calculate_part(li, des, scope, member_comp.index.back(),
+					    tail_off, tail_wid))
+			      return false;
+			long loff;
+			unsigned long lwid;
+			if (!prefix_to_slice(mem_packed_dims, prefix_indices, tail_off, loff, lwid)) {
+			      if (warn_ob_select) {
+				    cerr << li->get_fileline() << ": warning: "
+					 << "L-value select of member " << member_name
+					 << " is out of range and is ignored." << endl;
+			      }
+			      use_width = lwid * tail_wid;
+			      member_type = nullptr;
+			      out_of_range = true;
+			      return true;
+			}
+			off += loff;
+			use_width = lwid * tail_wid;
+			member_type = nullptr;
+		  }
+		  struct_type = 0;
+
+	    } else if (const netparray_t*array = dynamic_cast<const netparray_t*>(member->net_type)) {
+		  ivl_assert(*li, array->packed());
+		  if (member_comp.index.empty()) {
+			struct_type = 0;
+			completed_path.push_back(member_comp);
+			member_path.pop_front();
+			continue;
+		  }
+		  const netranges_t&mem_packed_dims = array->static_dimensions();
+		  if (member_comp.index.size() > mem_packed_dims.size()) {
+			cerr << li->get_fileline() << ": error: "
+			     << "Too many index expressions for member "
+			     << member_name << "." << endl;
+			des->errors += 1;
+			return false;
+		  }
+		  list<long>prefix_indices;
+		  if (!evaluate_index_prefix(des, scope, prefix_indices, member_comp.index))
+			return false;
+		  NetExpr*texpr = elab_and_eval(des, scope, member_comp.index.back().msb, -1, true);
+		  long tmp;
+		  if (texpr == 0 || !eval_as_long(tmp, texpr)) {
+			cerr << li->get_fileline() << ": error: "
+			     << "Array index expressions for member " << member_name
+			     << " must be constant here." << endl;
+			des->errors += 1;
+			return false;
+		  }
+		  delete texpr;
+		  long loff;
+		  unsigned long lwid;
+		  bool in_range = prefix_to_slice(mem_packed_dims, prefix_indices, tmp, loff, lwid);
+		  ivl_type_t element_type = array->element_type();
+		  long element_width = element_type->packed_width();
+		  if (!in_range) {
+			if (warn_ob_select) {
+			      cerr << li->get_fileline() << ": warning: "
+				   << "L-value select of member " << member_name
+				   << " is out of range and is ignored." << endl;
+			}
+			use_width = lwid * element_width;
+			member_type = nullptr;
+			out_of_range = true;
+			return true;
+		  }
+		  off += loff * element_width;
+		  use_width = lwid * element_width;
+		  member_type = element_type;
+		  struct_type = dynamic_cast<const netstruct_t*>(element_type);
+
+	    } else if (const netstruct_t*tmp_struct = dynamic_cast<const netstruct_t*>(member->net_type)) {
+		  struct_type = tmp_struct;
+
+	    } else if (dynamic_cast<const netenum_t*>(member->net_type)) {
+		  struct_type = 0;
+
+	    } else {
+		  cerr << li->get_fileline() << ": internal error: "
+		       << "Unexpected member type? " << *(member->net_type)
+		       << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+
+	    completed_path.push_back(member_comp);
+	    member_path.pop_front();
+      } while (!member_path.empty() && struct_type != 0);
+
+      if (!member_path.empty()) {
+	    cerr << li->get_fileline() << ": error: Member "
+		 << member_path.front().name << " is not a member of "
+		 << base_name << "." << completed_path << "." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+      return true;
+}
+
+static NetExpr* add_const_offset(const LineInfo*li, NetExpr*expr, long delta)
+{
+      if (delta == 0)
+	    return expr;
+      NetEConst*c = new NetEConst(verinum(delta));
+      c->set_line(*li);
+      unsigned w = max(expr->expr_width(), c->expr_width()) + 1;
+      NetExpr*res = new NetEBAdd('+', pad_to_width(expr, w, *li),
+				 pad_to_width(c, w, *li), w, true);
+      res->set_line(*li);
+      return res;
+}
+
+static bool elaborate_packed_vector_slice_lval(Design*des, NetScope*scope,
+					       const LineInfo*li,
+					       const netvector_t*vtype,
+					       const std::list<index_component_t>&indices,
+					       NetAssign_*lv)
+{
+      const netranges_t&pdims = vtype->packed_dims();
+      if (indices.size() > pdims.size()) {
+	    cerr << li->get_fileline() << ": error: Too many index expressions "
+		    "for vector property." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+
+      list<long>prefix_indices;
+      if (!evaluate_index_prefix(des, scope, prefix_indices, indices))
+	    return false;
+
+      const index_component_t&tail = indices.back();
+      if (pdims.size() == 1 && tail.sel == index_component_t::SEL_BIT) {
+	    const netrange_t&rng = pdims.back();
+	    NetExpr*bit = elab_and_eval(des, scope, tail.msb, -1, false);
+	    if (!bit) return false;
+	    long bit_const;
+	    if (eval_as_long(bit_const, bit)) {
+		  delete bit;
+		  long loff = (rng.get_msb() >= rng.get_lsb())
+		            ? (bit_const - rng.get_lsb())
+		            : (rng.get_lsb() - bit_const);
+		  if (loff < 0 || (unsigned long)loff >= rng.width()) {
+			lv->set_part(new NetEConst(verinum(verinum::Vx)), 1);
+		  } else {
+			lv->set_part(new NetEConst(verinum(loff)), 1);
+		  }
+	    } else {
+		  if (rng.get_msb() >= rng.get_lsb()) {
+			if (rng.get_lsb() != 0)
+			      bit = add_const_offset(li, bit, -rng.get_lsb());
+		  } else {
+			NetEConst*lsb_c = new NetEConst(verinum(rng.get_lsb()));
+			lsb_c->set_line(*li);
+			unsigned w = max(bit->expr_width(), lsb_c->expr_width()) + 1;
+			bit = pad_to_width(bit, w, *li);
+			NetExpr*lhs = pad_to_width(lsb_c, w, *li);
+			bit = new NetEBAdd('-', lhs, bit, w, true);
+			bit->set_line(*li);
+		  }
+		  lv->set_part(bit, 1);
+	    }
+	    lv->set_untyped();
+	    return true;
+      }
+
+      if (tail.sel == index_component_t::SEL_BIT ||
+          tail.sel == index_component_t::SEL_PART) {
+	    long tail_off = 0;
+	    unsigned long tail_wid = 0;
+	    if (!calculate_part(li, des, scope, tail, tail_off, tail_wid))
+		  return false;
+	    long loff;
+	    unsigned long lwid;
+	    if (!prefix_to_slice(pdims, prefix_indices, tail_off, loff, lwid)) {
+		  lv->set_part(new NetEConst(verinum(verinum::Vx)), lwid * tail_wid);
+	    } else {
+		  lv->set_part(new NetEConst(verinum(loff)), lwid * tail_wid);
+	    }
+	    lv->set_untyped();
+	    return true;
+      }
+
+      if (pdims.size() == 1 &&
+          (tail.sel == index_component_t::SEL_IDX_UP ||
+           tail.sel == index_component_t::SEL_IDX_DO)) {
+	    const netrange_t&rng = pdims.back();
+	    NetExpr*base = elab_and_eval(des, scope, tail.msb, -1, false);
+	    NetExpr*wid_ex = elab_and_eval(des, scope, tail.lsb, -1, true);
+	    long wid_val = 0;
+	    if (!base || !wid_ex || !eval_as_long(wid_val, wid_ex) || wid_val <= 0) {
+		  cerr << li->get_fileline() << ": error: Indexed part-select width "
+			  "must be a positive constant." << endl;
+		  des->errors += 1;
+		  delete base;
+		  delete wid_ex;
+		  return false;
+	    }
+	    delete wid_ex;
+	    bool asc = rng.get_msb() < rng.get_lsb();
+	    long adj = 0;
+	    if (!asc) {
+		  adj = -rng.get_lsb();
+		  if (tail.sel == index_component_t::SEL_IDX_DO)
+			adj -= (wid_val - 1);
+	    } else {
+		  adj = rng.get_lsb();
+		  if (tail.sel == index_component_t::SEL_IDX_UP)
+			adj -= (wid_val - 1);
+		  NetEConst*c = new NetEConst(verinum(adj));
+		  c->set_line(*li);
+		  unsigned w = max(base->expr_width(), c->expr_width()) + 1;
+		  base = new NetEBAdd('-', pad_to_width(c, w, *li),
+				      pad_to_width(base, w, *li), w, true);
+		  base->set_line(*li);
+		  eval_expr(base);
+		  lv->set_part(base, wid_val,
+			       tail.sel == index_component_t::SEL_IDX_UP
+			       ? IVL_SEL_IDX_UP : IVL_SEL_IDX_DOWN);
+		  lv->set_untyped();
+		  return true;
+	    }
+	    if (adj != 0)
+		  base = add_const_offset(li, base, adj);
+	    eval_expr(base);
+	    lv->set_part(base, wid_val,
+			 tail.sel == index_component_t::SEL_IDX_UP
+			 ? IVL_SEL_IDX_UP : IVL_SEL_IDX_DOWN);
+	    lv->set_untyped();
+	    return true;
+      }
+
+      cerr << li->get_fileline() << ": sorry: Unsupported select on class "
+	      "property." << endl;
+      des->errors += 1;
+      return false;
+}
+
 NetAssign_* PEIdent::elaborate_lval_net_class_member_(Design*des, NetScope*scope,
 				    bool is_force, bool is_cassign,
 				    const netclass_t *class_type, NetAssign_*lv,
@@ -1220,6 +1524,54 @@ NetAssign_* PEIdent::elaborate_lval_net_class_member_(Design*des, NetScope*scope
 			des->errors += 1;
 		  }
 	    }
+
+	    if (!member_path.empty()) {
+		  if (const netstruct_t*st = dynamic_cast<const netstruct_t*>(ptype)) {
+			if (!st->packed()) {
+			      cerr << get_fileline() << ": sorry: Only packed "
+				      "structures are supported in l-value."
+				   << endl;
+			      des->errors += 1;
+			      return 0;
+			}
+			if (!member_cur.index.empty()) {
+			      cerr << get_fileline() << ": error: Index "
+				      "expressions do not apply to struct "
+				      "property " << method_name << "." << endl;
+			      des->errors += 1;
+			      return 0;
+			}
+			unsigned long off = 0;
+			unsigned long use_width = 0;
+			ivl_type_t member_type = nullptr;
+			bool oob = false;
+			if (!resolve_packed_struct_member_path(
+				  des, scope, this, st, method_name,
+				  member_path, off, use_width, member_type, oob))
+			      return 0;
+			if (oob) {
+			      lv->set_part(new NetEConst(verinum(verinum::Vx)),
+					   use_width);
+			} else if (member_type) {
+			      lv->set_part(new NetEConst(verinum(off)),
+					   member_type);
+			} else {
+			      lv->set_part(new NetEConst(verinum(off)),
+					   use_width);
+			}
+			break;
+		  }
+	    }
+
+	    if (!member_cur.index.empty() && member_path.empty()) {
+		  if (const netvector_t*vtype = dynamic_cast<const netvector_t*>(ptype)) {
+			if (!elaborate_packed_vector_slice_lval(
+				  des, scope, this, vtype, member_cur.index, lv))
+			      return 0;
+			break;
+		  }
+	    }
+
 	    NetExpr *canon_index = nullptr;
 	    if (!member_cur.index.empty()) {
 		  if (const netsarray_t *stype = dynamic_cast<const netsarray_t*>(ptype)) {
@@ -1263,6 +1615,13 @@ NetAssign_* PEIdent::elaborate_lval_net_class_member_(Design*des, NetScope*scope
 	      // type. We may wind up iterating, and need the proper
 	      // class type.
 	    class_type = dynamic_cast<const netclass_t*>(ptype);
+	    if (!member_path.empty() && class_type == 0) {
+		  cerr << get_fileline() << ": error: Property " << method_name
+		       << " does not have a member named "
+		       << member_path.front().name << "." << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
 
       } while (!member_path.empty());
 
