@@ -2075,6 +2075,8 @@ extern int         ivl_signal_array_base(ivl_signal_t net);
 extern unsigned    ivl_signal_array_count(ivl_signal_t net);
 extern unsigned    ivl_signal_array_addr_swapped(ivl_signal_t net);
 extern unsigned    ivl_signal_dimensions(ivl_signal_t net);
+extern int         ivl_signal_unpacked_msb(ivl_signal_t net, unsigned dim);
+extern int         ivl_signal_unpacked_lsb(ivl_signal_t net, unsigned dim);
 extern ivl_discipline_t ivl_signal_discipline(ivl_signal_t net);
 extern unsigned    ivl_signal_packed_dimensions(ivl_signal_t net);
 extern int         ivl_signal_packed_msb(ivl_signal_t net, unsigned dim);

@@ -757,9 +757,10 @@ struct ivl_signal_s {
       unsigned array_dimensions_ : 8;
       unsigned array_addr_swapped : 1;
 
-	/* These encode the declared packed dimensions for the
-	   signal, in case they are needed by the run-time */
+	/* These encode the declared packed and unpacked dimensions for
+	   the signal, in case they are needed by the run-time */
       netranges_t packed_dims;
+      netranges_t unpacked_dims;
 
       perm_string name_;
       ivl_scope_t scope_;
