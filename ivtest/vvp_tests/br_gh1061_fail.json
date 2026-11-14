@@ -1,0 +1,5 @@
+{
+    "type"          : "CE",
+    "source"        : "br_gh1061_fail.v",
+    "iverilog-args" : [ "-g2012" ]
+}
