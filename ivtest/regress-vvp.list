@@ -916,6 +916,7 @@ sv_statement_label_for_scope	vvp_tests/sv_statement_label_for_scope.json
 sv_statement_label_loop_hierarchy	vvp_tests/sv_statement_label_loop_hierarchy.json
 sv_statement_label_multiple_fail	vvp_tests/sv_statement_label_multiple_fail.json
 sv_string_getc			vvp_tests/sv_string_getc.json
+sv_string_getc_const_oob	vvp_tests/sv_string_getc_const_oob.json
 sv_string_getc_err		vvp_tests/sv_string_getc_err.json
 sv_string_i_compare		vvp_tests/sv_string_i_compare.json
 sv_string_i_compare_err		vvp_tests/sv_string_i_compare_err.json

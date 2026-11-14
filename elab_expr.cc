@@ -4952,6 +4952,22 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
       return 0;
 }
 
+static string verinum_raw_string(const verinum&val)
+{
+      unsigned nbits = val.len();
+      string res;
+      res.reserve(nbits / 8);
+      for (unsigned idx = nbits; idx >= 8; idx -= 8) {
+	    unsigned char ch = 0;
+	    for (unsigned b = 0; b < 8; ++b) {
+		  if (val.get(idx - 1 - b) == verinum::V1)
+			ch |= (0x80U >> b);
+	    }
+	    res.push_back(static_cast<char>(ch));
+      }
+      return res;
+}
+
 static string get_const_str_param(Design*des, NetScope*scope, PExpr*expr,
                                   const perm_string name, const LineInfo &loc)
 {
@@ -4959,7 +4975,7 @@ static string get_const_str_param(Design*des, NetScope*scope, PExpr*expr,
       const NetExpr*tmp = elab_and_eval(des, scope, expr, -1, true);
       const NetEConst*cval = dynamic_cast<const NetEConst*>(tmp);
       if (cval && cval->value().is_string()) {
-	    ret = cval->value().as_string();
+	    ret = verinum_raw_string(cval->value());
       } else {
 	    cerr << loc.get_fileline() << ": error: string method '"
 	         << name << "()' argument (" << *expr
@@ -5014,7 +5030,7 @@ NetExpr* PECallFunction::elaborate_expr_method_par_(Design*des, NetScope*scope,
 
 	    const NetECString*par_string = dynamic_cast<const NetECString*>(par_val);
 	    ivl_assert(*par_val, par_string);
-	    string par_value = par_string->value().as_string();
+	    string par_value = verinum_raw_string(par_string->value());
 
 	    if (method_name == "len") {
 		  check_number_of_args(des, method_name, *this, 0, parms_.size());
@@ -5035,15 +5051,23 @@ NetExpr* PECallFunction::elaborate_expr_method_par_(Design*des, NetScope*scope,
 		  check_number_of_args(des, method_name, *this, 1, parms_.size());
 		  long idx = -1;
 		  if (parms_.size() > 0) {
-			idx = get_const_int_param(des, scope, parms_[0].parm,
-			                          method_name, *this);
+			static const std::vector<perm_string> parm_names = {
+			      perm_string::literal("i"),
+			};
+			auto args = map_named_args(des, parm_names, parms_);
+			if (args[0]) {
+			      idx = get_const_int_param(des, scope, args[0],
+			                                method_name, *this);
+			      idx = static_cast<int32_t>(idx);
+			}
 		  }
-		  NetEConst*ret_val;
-		  if ((idx < 0) || (static_cast<unsigned>(idx) > par_value.size())) {
-			ret_val = make_const_val_s(0);
-		  } else {
-			ret_val = make_const_val_s(par_value[idx]);
+		  uint8_t ch = 0;
+		  if ((idx >= 0) && (static_cast<size_t>(idx) < par_value.size())) {
+			ch = static_cast<uint8_t>(par_value[idx]);
 		  }
+		  verinum val(static_cast<uint64_t>(ch), 8);
+		  val.has_sign(true);
+		  NetEConst*ret_val = new NetEConst(val);
 		  ret_val->set_line(*this);
 		  return ret_val;
 	    }
