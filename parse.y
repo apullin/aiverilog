@@ -1133,6 +1133,8 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 
       PExpr*expr;
       std::list<PExpr*>*exprs;
+      PEInside::item_t inside_item;
+      std::vector<PEInside::item_t>*inside_items;
       std::list<pattern_item_t>*pattern_items;
 
       PEIdent*identifier;
@@ -1392,6 +1394,8 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 %type <expr>  class_new dynamic_array_new
 %type <expr>  net_decl_initializer_opt var_decl_initializer_opt initializer_opt
 %type <expr>  inc_or_dec_expression inside_expression lpvalue
+%type <inside_item> value_range
+%type <inside_items> open_range_list
 %type <expr>  branch_probe_expression streaming_concatenation
 %type <expr>  delay_value delay_value_simple
 %type <exprs> delay1 delay3 delay3_opt delay_value_list
@@ -1497,14 +1501,14 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 %nonassoc K_PLUS_EQ K_MINUS_EQ K_MUL_EQ K_DIV_EQ K_MOD_EQ K_AND_EQ K_OR_EQ
 %nonassoc K_XOR_EQ K_LS_EQ K_RS_EQ K_RSS_EQ K_NB_TRIGGER
 %right K_TRIGGER K_LEQUIV
-%right '?' ':' K_inside
+%right '?' ':'
 %left K_LOR
 %left K_LAND
 %left '|'
 %left '^' K_NXOR K_NOR
 %left '&' K_NAND
 %left K_EQ K_NE K_CEQ K_CNE K_WEQ K_WNE
-%left K_GE K_LE '<' '>'
+%left K_GE K_LE '<' '>' K_inside
 %left K_LS K_RS K_RSS
 %left '+' '-'
 %left '*' '/' '%'
@@ -2556,10 +2560,20 @@ inc_or_dec_expression /* IEEE1800-2005: A.4.3 */
       }
   ;
 
-inside_expression /* IEEE1800-2005 A.8.3 */
+inside_expression /* IEEE1800-2017 A.8.3 */
   : expression K_inside '{' open_range_list '}'
-      { yyerror(@2, "sorry: \"inside\" expressions not supported yet.");
-	$$ = 0;
+      { if (pform_requires_sv(@2, "\"inside\" expression")) {
+	      PEInside*tmp = new PEInside($1, $4);
+	      FILE_NAME(tmp, @2);
+	      $$ = tmp;
+	} else {
+	      for (const auto&it : *$4) {
+		    delete it.lo;
+		    delete it.hi;
+	      }
+	      delete $4;
+	      $$ = $1;
+	}
       }
   ;
 
@@ -3022,9 +3036,16 @@ number
 	$$ = $1; based_size = 0;}
   ;
 
-open_range_list /* IEEE1800-2005 A.2.11 */
+open_range_list /* IEEE1800-2017 A.2.11 */
   : open_range_list ',' value_range
+      { $1->push_back($3);
+	$$ = $1;
+      }
   | value_range
+      { auto tmp = new std::vector<PEInside::item_t>;
+	tmp->push_back($1);
+	$$ = tmp;
+      }
   ;
 
 package_declaration /* IEEE1800-2005 A.1.2 */
@@ -3746,11 +3767,35 @@ timeunits_declaration_opt
   | timeunits_declaration timeunits_declaration
   ;
 
-value_range /* IEEE1800-2005: A.8.3 */
+value_range /* IEEE1800-2017: A.8.3 */
   : expression
-      { }
+      { PEInside::item_t it;
+	it.lo = $1;
+	it.hi = nullptr;
+	it.is_range = false;
+	$$ = it;
+      }
   | '[' expression ':' expression ']'
-      { }
+      { PEInside::item_t it;
+	it.lo = $2;
+	it.hi = $4;
+	it.is_range = true;
+	$$ = it;
+      }
+  | '[' '$' ':' expression ']'
+      { PEInside::item_t it;
+	it.lo = nullptr;
+	it.hi = $4;
+	it.is_range = true;
+	$$ = it;
+      }
+  | '[' expression ':' '$' ']'
+      { PEInside::item_t it;
+	it.lo = $2;
+	it.hi = nullptr;
+	it.is_range = true;
+	$$ = it;
+      }
   ;
 
 index_component

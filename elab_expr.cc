@@ -1775,6 +1775,385 @@ NetExpr* PEBComp::elaborate_expr(Design*des, NetScope*scope,
       return pad_to_width(tmp, expr_wid, signed_flag_, *this);
 }
 
+unsigned PEInside::test_width(Design*, NetScope*, width_mode_t&)
+{
+      expr_type_   = IVL_VT_LOGIC;
+      expr_width_  = 1;
+      min_width_   = 1;
+      signed_flag_ = false;
+      return 1;
+}
+
+static string verinum_raw_string(const verinum&val);
+
+static NetExpr* make_inside_singular_cmp(Design*des, NetScope*scope,
+					 const LineInfo*li,
+					 PExpr*lhs_pe, NetExpr*lhs_base,
+					 unsigned lhs_wid, bool lhs_signed,
+					 ivl_variable_type_t lhs_vt,
+					 PExpr*rhs_pe, unsigned flags)
+{
+      bool need_const = (flags & PExpr::NEED_CONST) != 0;
+
+      // Check if rhs_pe is a whole fixed-size unpacked array, dynamic array,
+      // or queue identifier.
+      if (const PEIdent*id = dynamic_cast<const PEIdent*>(rhs_pe)) {
+	    symbol_search_results sr;
+	    if (symbol_search(id, des, scope, id->path(), id->lexical_pos(), &sr) &&
+		sr.net && sr.path_tail.empty() &&
+		sr.path_head.back().index.empty()) {
+		  NetNet*arr = sr.net;
+		  if (arr->unpacked_dimensions() > 0) {
+			unsigned cnt = arr->unpacked_count();
+			NetExpr*acc = nullptr;
+			for (unsigned idx = 0 ; idx < cnt ; ++idx) {
+			      NetESignal*elem = new NetESignal(arr, make_const_val(idx));
+			      elem->set_line(*li);
+			      NetExpr*cmp = nullptr;
+			      if (lhs_vt == IVL_VT_REAL || arr->data_type() == IVL_VT_REAL) {
+				    NetExpr*l = (lhs_vt == IVL_VT_REAL)
+				              ? lhs_base->dup_expr()
+				              : cast_to_real(lhs_base->dup_expr());
+				    NetExpr*r = (arr->data_type() == IVL_VT_REAL)
+				              ? static_cast<NetExpr*>(elem)
+				              : cast_to_real(elem);
+				    cmp = new NetEBComp('e', l, r);
+			      } else if (lhs_vt == IVL_VT_STRING ||
+					 arr->data_type() == IVL_VT_STRING) {
+				    cmp = new NetEBComp('e', lhs_base->dup_expr(), elem);
+			      } else {
+				    unsigned w = max<unsigned>(lhs_wid, arr->vector_width());
+				    bool s = lhs_signed && arr->get_signed();
+				    NetExpr*l = pad_to_width(lhs_base->dup_expr(), w, lhs_signed, *li);
+				    NetExpr*r = pad_to_width(elem, w, arr->get_signed(), *li);
+				    l->cast_signed(s);
+				    r->cast_signed(s);
+				    cmp = new NetEBComp('w', l, r);
+			      }
+			      cmp->set_line(*li);
+			      eval_expr(cmp);
+			      if (!acc) {
+				    acc = cmp;
+			      } else {
+				    acc = new NetEBBits('|', acc, cmp, 1, false);
+				    acc->set_line(*li);
+				    eval_expr(acc);
+			      }
+			}
+			if (!acc) {
+			      acc = make_const_0(1);
+			      acc->set_line(*li);
+			}
+			return acc;
+		  }
+		  if (const netdarray_t*da = arr->darray_type()) {
+			if (need_const) {
+			      cerr << li->get_fileline() << ": error: Dynamic "
+				      "array or queue inside item is not constant."
+				   << endl;
+			      des->errors += 1;
+			      return nullptr;
+			}
+			ivl_type_t et = da->element_type();
+			ivl_variable_type_t ebt = et->base_type();
+			NetExpr*l = lhs_base->dup_expr();
+			if (ebt == IVL_VT_REAL) {
+			      if (lhs_vt != IVL_VT_REAL)
+				    l = cast_to_real(l);
+			} else if (ebt == IVL_VT_STRING) {
+			      if (l->expr_type() != IVL_VT_STRING) {
+				    if (const NetEConst*lc = dynamic_cast<const NetEConst*>(l)) {
+					  NetECString*sc = new NetECString(verinum_raw_string(lc->value()));
+					  sc->set_line(*li);
+					  delete l;
+					  l = sc;
+				    }
+			      }
+			} else if (ebt == IVL_VT_BOOL || ebt == IVL_VT_LOGIC) {
+			      unsigned ew = et->packed_width();
+			      unsigned w = max(lhs_wid, ew);
+			      bool s = lhs_signed && et->get_signed();
+			      l = pad_to_width(l, w, lhs_signed, *li);
+			      l->cast_signed(s);
+			}
+			NetESignal*asig = new NetESignal(arr);
+			asig->set_line(*li);
+			NetESFunc*sf = new NetESFunc("$ivl_inside_darray",
+						     &netvector_t::scalar_logic, 2);
+			sf->set_line(*li);
+			sf->parm(0, l);
+			sf->parm(1, asig);
+			return sf;
+		  }
+	    }
+      }
+
+      PExpr::width_mode_t r_mode = PExpr::SIZED;
+      unsigned r_wid = rhs_pe->test_width(des, scope, r_mode);
+      ivl_variable_type_t r_vt = rhs_pe->expr_type();
+      bool r_signed = rhs_pe->has_sign();
+
+      if (lhs_vt == IVL_VT_REAL || r_vt == IVL_VT_REAL) {
+	    NetExpr*l = lhs_base->dup_expr();
+	    if (lhs_vt != IVL_VT_REAL) l = cast_to_real(l);
+	    NetExpr*r = elab_and_eval(des, scope, rhs_pe, -1, need_const);
+	    if (!r) { delete l; return nullptr; }
+	    if (r->expr_type() != IVL_VT_REAL) r = cast_to_real(r);
+	    NetExpr*cmp = new NetEBComp('e', l, r);
+	    cmp->set_line(*li);
+	    eval_expr(cmp);
+	    return cmp;
+      }
+
+      if (lhs_vt == IVL_VT_STRING || r_vt == IVL_VT_STRING) {
+	    NetExpr*l = lhs_base->dup_expr();
+	    NetExpr*r = elab_and_eval(des, scope, rhs_pe, -1, need_const);
+	    if (!r) { delete l; return nullptr; }
+	    if (l->expr_type() != IVL_VT_STRING) {
+		  if (const NetEConst*lc = dynamic_cast<const NetEConst*>(l)) {
+			NetECString*sc = new NetECString(verinum_raw_string(lc->value()));
+			sc->set_line(*li);
+			delete l;
+			l = sc;
+		  }
+	    }
+	    if (r->expr_type() != IVL_VT_STRING) {
+		  if (const NetEConst*rc = dynamic_cast<const NetEConst*>(r)) {
+			NetECString*sc = new NetECString(verinum_raw_string(rc->value()));
+			sc->set_line(*li);
+			delete r;
+			r = sc;
+		  }
+	    }
+	    if (dynamic_cast<NetEConst*>(l) && dynamic_cast<NetEConst*>(r)) {
+		  unsigned w = max(l->expr_width(), r->expr_width());
+		  l = pad_to_width(l, w, false, *li);
+		  r = pad_to_width(r, w, false, *li);
+	    }
+	    NetExpr*cmp = new NetEBComp('e', l, r);
+	    cmp->set_line(*li);
+	    eval_expr(cmp);
+	    return cmp;
+      }
+
+      unsigned use_wid = max(lhs_wid, r_wid);
+      bool both_signed = lhs_signed && r_signed;
+      if ((lhs_pe->expr_type() == IVL_VT_LOGIC || lhs_pe->expr_type() == IVL_VT_BOOL) &&
+          (r_vt == IVL_VT_LOGIC || r_vt == IVL_VT_BOOL)) {
+	    NetExpr*l = pad_to_width(lhs_base->dup_expr(), use_wid, lhs_signed, *li);
+	    // Elaborate RHS with its own sign first so signed literals sign-extend
+	    // when both operands are signed, and zero-extend when either is unsigned.
+	    if (!both_signed)
+		  rhs_pe->cast_signed(false);
+	    NetExpr*r = rhs_pe->elaborate_expr(des, scope, use_wid, flags);
+	    if (!r) { delete l; return nullptr; }
+	    eval_expr(r, use_wid);
+	    r = pad_to_width(r, use_wid, both_signed, *li);
+	    l->cast_signed(both_signed);
+	    r->cast_signed(both_signed);
+	    NetExpr*cmp = new NetEBComp('w', l, r);
+	    cmp->set_line(*li);
+	    eval_expr(cmp);
+	    return cmp;
+      }
+
+      cerr << li->get_fileline() << ": error: Incompatible operand types in "
+	      "inside expression." << endl;
+      des->errors += 1;
+      return nullptr;
+}
+
+static NetExpr* make_inside_range_cmp(Design*des, NetScope*scope,
+				      const LineInfo*li,
+				      NetExpr*lhs_base,
+				      unsigned lhs_wid, bool lhs_signed,
+				      ivl_variable_type_t lhs_vt,
+				      PExpr*lo_pe, PExpr*hi_pe, unsigned flags)
+{
+      bool need_const = (flags & PExpr::NEED_CONST) != 0;
+
+      if (!lo_pe && !hi_pe) {
+	    NetExpr*one = make_const_val(1);
+	    one->set_line(*li);
+	    return pad_to_width(one, 1, false, *li);
+      }
+
+      PExpr::width_mode_t lo_mode = PExpr::SIZED;
+      PExpr::width_mode_t hi_mode = PExpr::SIZED;
+      unsigned lo_wid = lo_pe ? lo_pe->test_width(des, scope, lo_mode) : lhs_wid;
+      unsigned hi_wid = hi_pe ? hi_pe->test_width(des, scope, hi_mode) : lhs_wid;
+      ivl_variable_type_t lo_vt = lo_pe ? lo_pe->expr_type() : lhs_vt;
+      ivl_variable_type_t hi_vt = hi_pe ? hi_pe->expr_type() : lhs_vt;
+      bool lo_signed = lo_pe ? lo_pe->has_sign() : lhs_signed;
+      bool hi_signed = hi_pe ? hi_pe->has_sign() : lhs_signed;
+
+      if (lhs_vt == IVL_VT_REAL || lo_vt == IVL_VT_REAL || hi_vt == IVL_VT_REAL) {
+	    NetExpr*l1 = (lhs_vt == IVL_VT_REAL) ? lhs_base->dup_expr()
+	                                         : cast_to_real(lhs_base->dup_expr());
+	    NetExpr*ge = nullptr;
+	    NetExpr*le = nullptr;
+	    NetExpr*lo_e = nullptr;
+	    NetExpr*hi_e = nullptr;
+	    if (lo_pe) {
+		  lo_e = elab_and_eval(des, scope, lo_pe, -1, need_const);
+		  if (!lo_e) { delete l1; return nullptr; }
+		  if (lo_e->expr_type() != IVL_VT_REAL) lo_e = cast_to_real(lo_e);
+		  ge = new NetEBComp('G', l1->dup_expr(), lo_e->dup_expr());
+		  ge->set_line(*li);
+		  eval_expr(ge);
+	    }
+	    if (hi_pe) {
+		  hi_e = elab_and_eval(des, scope, hi_pe, -1, need_const);
+		  if (!hi_e) { delete l1; delete lo_e; delete ge; return nullptr; }
+		  if (hi_e->expr_type() != IVL_VT_REAL) hi_e = cast_to_real(hi_e);
+		  le = new NetEBComp('L', l1->dup_expr(), hi_e->dup_expr());
+		  le->set_line(*li);
+		  eval_expr(le);
+	    }
+	    delete l1;
+	    if (ge && le) {
+		  NetExpr*valid = new NetEBComp('L', lo_e, hi_e);
+		  valid->set_line(*li);
+		  eval_expr(valid);
+		  NetExpr*both = new NetEBBits('&', ge, le, 1, false);
+		  both->set_line(*li);
+		  eval_expr(both);
+		  NetExpr*zero = make_const_0(1);
+		  zero->set_line(*li);
+		  NetExpr*res = new NetETernary(valid, both, zero, 1, false);
+		  res->set_line(*li);
+		  eval_expr(res);
+		  return res;
+	    }
+	    delete lo_e;
+	    delete hi_e;
+	    return ge ? ge : le;
+      }
+
+      unsigned use_wid = max(lhs_wid, max(lo_wid, hi_wid));
+      bool all_signed = lhs_signed && lo_signed && hi_signed;
+
+      NetExpr*lo_e = nullptr;
+      NetExpr*hi_e = nullptr;
+      NetExpr*ge = nullptr;
+      NetExpr*le = nullptr;
+
+      if (lo_pe) {
+	    if (!all_signed) lo_pe->cast_signed(false);
+	    lo_e = lo_pe->elaborate_expr(des, scope, use_wid, flags);
+	    if (!lo_e) return nullptr;
+	    eval_expr(lo_e, use_wid);
+	    lo_e = pad_to_width(lo_e, use_wid, all_signed, *li);
+	    lo_e->cast_signed(all_signed);
+	    NetExpr*l = pad_to_width(lhs_base->dup_expr(), use_wid, lhs_signed, *li);
+	    l->cast_signed(all_signed);
+	    ge = new NetEBComp('G', l, lo_e->dup_expr());
+	    ge->set_line(*li);
+	    eval_expr(ge);
+      }
+
+      if (hi_pe) {
+	    if (!all_signed) hi_pe->cast_signed(false);
+	    hi_e = hi_pe->elaborate_expr(des, scope, use_wid, flags);
+	    if (!hi_e) { delete lo_e; delete ge; return nullptr; }
+	    eval_expr(hi_e, use_wid);
+	    hi_e = pad_to_width(hi_e, use_wid, all_signed, *li);
+	    hi_e->cast_signed(all_signed);
+	    NetExpr*l = pad_to_width(lhs_base->dup_expr(), use_wid, lhs_signed, *li);
+	    l->cast_signed(all_signed);
+	    le = new NetEBComp('L', l, hi_e->dup_expr());
+	    le->set_line(*li);
+	    eval_expr(le);
+      }
+
+      if (ge && le) {
+	    NetExpr*valid = new NetEBComp('L', lo_e, hi_e);
+	    valid->set_line(*li);
+	    eval_expr(valid);
+	    NetExpr*both = new NetEBBits('&', ge, le, 1, false);
+	    both->set_line(*li);
+	    eval_expr(both);
+	    if (const NetEConst*vc = dynamic_cast<const NetEConst*>(valid)) {
+		  if (vc->value().is_defined() && vc->value().is_zero()) {
+			delete valid;
+			delete both;
+			NetExpr*zero = make_const_0(1);
+			zero->set_line(*li);
+			return zero;
+		  }
+		  if (vc->value().is_defined() && !vc->value().is_zero()) {
+			delete valid;
+			return both;
+		  }
+	    }
+	    NetExpr*zero = make_const_0(1);
+	    zero->set_line(*li);
+	    NetExpr*res = new NetETernary(valid, both, zero, 1, false);
+	    res->set_line(*li);
+	    eval_expr(res);
+	    return res;
+      }
+
+      delete lo_e;
+      delete hi_e;
+      return ge ? ge : le;
+}
+
+NetExpr* PEInside::elaborate_expr(Design*des, NetScope*scope,
+				  unsigned expr_wid, unsigned flags) const
+{
+      flags &= ~SYS_TASK_ARG;
+      bool need_const = (flags & NEED_CONST) != 0;
+
+      width_mode_t l_mode = SIZED;
+      unsigned lhs_wid = lhs_->test_width(des, scope, l_mode);
+      ivl_variable_type_t lhs_vt = lhs_->expr_type();
+      bool lhs_signed = lhs_->has_sign();
+
+      NetExpr*lhs_base = nullptr;
+      if (lhs_vt == IVL_VT_REAL || lhs_vt == IVL_VT_STRING) {
+	    lhs_base = elab_and_eval(des, scope, lhs_, -1, need_const);
+      } else {
+	    lhs_base = lhs_->elaborate_expr(des, scope, lhs_wid, flags);
+	    if (lhs_base) eval_expr(lhs_base, lhs_wid);
+      }
+      if (!lhs_base)
+	    return nullptr;
+
+      NetExpr*acc = nullptr;
+      for (const auto&it : items_) {
+	    NetExpr*term = nullptr;
+	    if (it.is_range) {
+		  term = make_inside_range_cmp(des, scope, this, lhs_base,
+					       lhs_wid, lhs_signed, lhs_vt,
+					       it.lo, it.hi, flags);
+	    } else {
+		  term = make_inside_singular_cmp(des, scope, this, lhs_,
+						  lhs_base, lhs_wid, lhs_signed,
+						  lhs_vt, it.lo, flags);
+	    }
+	    if (!term) {
+		  delete lhs_base;
+		  delete acc;
+		  return nullptr;
+	    }
+	    if (!acc) {
+		  acc = term;
+	    } else {
+		  acc = new NetEBBits('|', acc, term, 1, false);
+		  acc->set_line(*this);
+		  eval_expr(acc);
+	    }
+      }
+
+      delete lhs_base;
+      if (!acc) {
+	    acc = make_const_0(1);
+	    acc->set_line(*this);
+      }
+      return pad_to_width(acc, expr_wid, false, *this);
+}
+
 unsigned PEBLogic::test_width(Design*, NetScope*, width_mode_t&)
 {
 	// The width and type of a logical operation are fixed.
