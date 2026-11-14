@@ -527,6 +527,81 @@ static void draw_stmt_assign_vector_opcode(unsigned char opcode, bool is_signed)
  * Emitted straight-line rather than as a loop. That keeps this independent of
  * the label allocator, and matches draw_array_pattern, which unrolls too.
  */
+static void draw_array_copy_elem(ivl_signal_t dst, unsigned idx_l,
+                                 ivl_signal_t src, unsigned idx_r)
+{
+      switch (ivl_signal_data_type(dst)) {
+	  case IVL_VT_BOOL:
+	  case IVL_VT_LOGIC:
+	    fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx_r);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+	    fprintf(vvp_out, "    %%load/vec4a v%p, 3;\n", src);
+	    if (ivl_signal_data_type(dst) == IVL_VT_BOOL &&
+	        ivl_signal_data_type(src) != IVL_VT_BOOL)
+		  fprintf(vvp_out, "    %%cast2;\n");
+	    fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx_l);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+	    fprintf(vvp_out, "    %%store/vec4a v%p, 3, 0;\n", dst);
+	    break;
+	  case IVL_VT_REAL:
+	    fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx_r);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+	    fprintf(vvp_out, "    %%load/ar v%p, 3;\n", src);
+	    fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx_l);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+	    fprintf(vvp_out, "    %%store/reala v%p, 3;\n", dst);
+	    break;
+	  case IVL_VT_STRING:
+	    fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx_r);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+	    fprintf(vvp_out, "    %%load/stra v%p, 3;\n", src);
+	    fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx_l);
+	    fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
+	    fprintf(vvp_out, "    %%store/stra v%p, 3;\n", dst);
+	    break;
+	  default:
+	    assert(0);
+	    break;
+      }
+}
+
+static void draw_array_copy_dim(ivl_signal_t dst, ivl_signal_t src,
+                                unsigned ndims, const unsigned*stride,
+                                unsigned dim, unsigned idx_l, unsigned idx_r)
+{
+      int msb_l = ivl_signal_unpacked_msb(dst, dim);
+      int lsb_l = ivl_signal_unpacked_lsb(dst, dim);
+      int msb_r = ivl_signal_unpacked_msb(src, dim);
+      int lsb_r = ivl_signal_unpacked_lsb(src, dim);
+
+      unsigned dim_len = (msb_l >= lsb_l) ? (unsigned)(msb_l - lsb_l + 1)
+                                          : (unsigned)(lsb_l - msb_l + 1);
+      bool up_l = msb_l < lsb_l;
+      bool up_r = msb_r < lsb_r;
+
+      int inc_l = (int)stride[dim];
+      int inc_r = (int)stride[dim];
+
+      if (!up_l) {
+	    idx_l += stride[dim] * (dim_len - 1);
+	    inc_l = -inc_l;
+      }
+      if (!up_r) {
+	    idx_r += stride[dim] * (dim_len - 1);
+	    inc_r = -inc_r;
+      }
+
+      for (unsigned idx = 0 ; idx < dim_len ; idx += 1) {
+	    if (dim + 1 == ndims)
+		  draw_array_copy_elem(dst, idx_l, src, idx_r);
+	    else
+		  draw_array_copy_dim(dst, src, ndims, stride, dim + 1,
+		                      idx_l, idx_r);
+	    idx_l = (unsigned)((int)idx_l + inc_l);
+	    idx_r = (unsigned)((int)idx_r + inc_r);
+      }
+}
+
 int draw_array_copy(ivl_signal_t dst, ivl_expr_t rval)
 {
       ivl_signal_t src = ivl_expr_signal(rval);
@@ -549,31 +624,32 @@ int draw_array_copy(ivl_signal_t dst, ivl_expr_t rval)
       switch (ivl_signal_data_type(dst)) {
 	  case IVL_VT_BOOL:
 	  case IVL_VT_LOGIC:
-	    for (unsigned idx = 0 ; idx < count ; idx += 1) {
-		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
-		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-		  fprintf(vvp_out, "    %%load/vec4a v%p, 3;\n", src);
-		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
-		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-		  fprintf(vvp_out, "    %%store/vec4a v%p, 3, 0;\n", dst);
-	    }
-	    return 0;
 	  case IVL_VT_REAL:
-	    for (unsigned idx = 0 ; idx < count ; idx += 1) {
-		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
-		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-		  fprintf(vvp_out, "    %%load/ar v%p, 3;\n", src);
-		  fprintf(vvp_out, "    %%ix/load 3, %u, 0;\n", idx);
-		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
-		  fprintf(vvp_out, "    %%store/reala v%p, 3;\n", dst);
-	    }
-	    return 0;
+	  case IVL_VT_STRING:
+	    break;
 	  default:
 	    fprintf(stderr, "%s:%u: sorry: copying an unpacked array of this "
 		    "element type is not supported.\n",
 		    ivl_expr_file(rval), ivl_expr_lineno(rval));
 	    return 1;
       }
+
+      unsigned ndims = ivl_signal_dimensions(dst);
+      assert(ndims > 0 && ndims == ivl_signal_dimensions(src));
+
+      unsigned*stride = calloc(ndims, sizeof(unsigned));
+      stride[ndims - 1] = 1;
+      for (unsigned d = ndims - 1 ; d > 0 ; d -= 1) {
+	    int msb = ivl_signal_unpacked_msb(dst, d);
+	    int lsb = ivl_signal_unpacked_lsb(dst, d);
+	    unsigned len = (msb >= lsb) ? (unsigned)(msb - lsb + 1)
+	                                : (unsigned)(lsb - msb + 1);
+	    stride[d - 1] = stride[d] * len;
+      }
+
+      draw_array_copy_dim(dst, src, ndims, stride, 0, 0, 0);
+      free(stride);
+      return 0;
 }
 
 static int show_stmt_assign_vector(ivl_statement_t net)
@@ -888,6 +964,10 @@ static int show_stmt_assign_sig_string(ivl_statement_t net)
       if (ivl_expr_type(rval) == IVL_EX_ARRAY_PATTERN) {
 	    draw_array_pattern(var, rval, 0);
 	    return 0;
+      }
+
+      if (ivl_expr_type(rval) == IVL_EX_ARRAY) {
+	    return draw_array_copy(var, rval);
       }
 
 	/* Special case: If the l-value signal (string) is named after

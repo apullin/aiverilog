@@ -283,6 +283,8 @@ ivl_signal_port
 ivl_signal_scope
 ivl_signal_signed
 ivl_signal_type
+ivl_signal_unpacked_lsb
+ivl_signal_unpacked_msb
 ivl_signal_width
 
 ivl_statement_type

@@ -2588,6 +2588,11 @@ void dll_target::signal(const NetNet*net)
 		   ; cur != net->packed_dims().end() ; ++cur, idx += 1) {
 	    obj->packed_dims[idx] = *cur;
 	}
+	obj->unpacked_dims.resize(net->unpacked_dims().size());
+	for (cur = net->unpacked_dims().begin(), idx = 0
+		   ; cur != net->unpacked_dims().end() ; ++cur, idx += 1) {
+	    obj->unpacked_dims[idx] = *cur;
+	}
       }
 
       obj->net_type = net->net_type();
