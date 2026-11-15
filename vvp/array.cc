@@ -809,7 +809,7 @@ vpiHandle vpip_make_array(const char*label, const char*name,
 	    first_addr = tmp;
       }
       assert(last_addr >= first_addr);
-      unsigned array_count = last_addr+1-first_addr;
+      unsigned array_count = (unsigned)((int64_t)last_addr + 1 - (int64_t)first_addr);
 
 	// For now, treat all arrays as memories. This is not quite
 	// correct, as arrays are arrays with memories a special case.
@@ -903,7 +903,7 @@ void compile_var_array(char*label, char*name, int last, int first,
       struct __vpiArray*arr = dynamic_cast<__vpiArray*>(obj);
 
 	/* Make the words. */
-      arr->vals_width = labs(msb-lsb) + 1;
+      arr->vals_width = (unsigned)(std::abs((int64_t)msb - (int64_t)lsb) + 1);
       if (vpip_peek_current_scope()->is_automatic()) {
             arr->vals4 = new vvp_vector4array_aa(arr->vals_width,
 						 arr->get_size());
@@ -931,7 +931,7 @@ void compile_var2_array(char*label, char*name, int last, int first,
 	/* Make the words. */
       arr->msb.set_value(msb);
       arr->lsb.set_value(lsb);
-      arr->vals_width = labs(msb-lsb) + 1;
+      arr->vals_width = (unsigned)(std::abs((int64_t)msb - (int64_t)lsb) + 1);
       arr->is_2state = true;
 
       assert(! arr->nets);

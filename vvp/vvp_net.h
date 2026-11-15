@@ -565,7 +565,7 @@ inline void vvp_vector4_t::allocate_words_(unsigned long inita,
                                            unsigned long initb)
 {
       if (size_ > BITS_PER_WORD) {
-	    unsigned cnt = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD;
+	    unsigned cnt = (std::size_t(size_) + BITS_PER_WORD - 1) / BITS_PER_WORD;
 	    abits_ptr_ = alloc_block_(cnt);
 	    bbits_ptr_ = abits_ptr_ + cnt;
 	    for (unsigned idx = 0 ; idx < cnt ; idx += 1)
@@ -630,7 +630,7 @@ inline vvp_vector4_t::vvp_vector4_t(unsigned size__, unsigned long aval,
 inline vvp_vector4_t::~vvp_vector4_t()
 {
       if (size_ > BITS_PER_WORD) {
-	    free_block_((size_+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
+	    free_block_((std::size_t(size_)+BITS_PER_WORD-1)/BITS_PER_WORD, abits_ptr_);
 	      // bbits_ptr_ actually points half-way into a
 	      // double-length array started at abits_ptr_
       }

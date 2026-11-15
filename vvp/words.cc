@@ -175,7 +175,9 @@ void compile_variable(char*label, char*name,
 		      bool signed_flag, bool vector_flag,
 		      bool local_flag, char*enum_label)
 {
-      unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
+      unsigned wid = (unsigned)(((msb > lsb)
+                                 ? (int64_t)msb - (int64_t)lsb
+                                 : (int64_t)lsb - (int64_t)msb) + 1);
 
       vvp_net_t*net = new vvp_net_t;
 
@@ -352,7 +354,9 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 			   bool variable_flag,
 			   const vvp_vector4_t&variable_mask)
 {
-      unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
+      unsigned wid = (unsigned)(((msb > lsb)
+                                 ? (int64_t)msb - (int64_t)lsb
+                                 : (int64_t)lsb - (int64_t)msb) + 1);
       assert(node);
 
       bool variable_init = variable_mask.size() != 0;
@@ -434,7 +438,9 @@ static void __compile_net(char*label,
 	    assert(c4string_test(argv[1].text));
 	    variable_mask = c4string_to_vector4(argv[1].text);
 	    free(argv[1].text);
-	    unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
+	    unsigned wid = (unsigned)(((msb > lsb)
+	                               ? (int64_t)msb - (int64_t)lsb
+	                               : (int64_t)lsb - (int64_t)msb) + 1);
 	    assert(variable_mask.size() == wid);
       }
       vvp_net_t*node = vvp_net_lookup(argv[0].text);
