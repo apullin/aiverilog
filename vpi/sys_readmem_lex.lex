@@ -86,8 +86,8 @@ static void make_hex_value(void)
 
       cur = vecval;
       while ((width < word_max) && (end > beg)) {
-	    int aval = 0;
-	    int bval = 0;
+	    PLI_UINT32 aval = 0;
+	    PLI_UINT32 bval = 0;
 
 	    end -= 1;
 	    if (*end == '_') continue;

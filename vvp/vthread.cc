@@ -344,6 +344,14 @@ struct vthread_s {
 
 inline vthread_s::vthread_s()
 {
+      flags[0] = BIT4_0;
+      flags[1] = BIT4_1;
+      flags[2] = BIT4_X;
+      flags[3] = BIT4_Z;
+      for (int idx = 4; idx < FLAGS_COUNT; idx += 1)
+	    flags[idx] = BIT4_X;
+      for (int idx = 0; idx < WORDS_COUNT; idx += 1)
+	    words[idx].w_uint = 0;
       stack_vec4_top_ = stack_vec4_.begin();
       stack_obj_size_ = 0;
       filenm_ = 0;
