@@ -6,12 +6,12 @@ This is the reconciliation ledger between
 work derived from upstream issues, work that upstream later made unnecessary,
 and reviewed reports for which the fork deliberately carries no patch.
 
-Last reconciled: 2026-11-14
+Last reconciled: 2026-11-15
 
 - Latest upstream commit integrated at this checkpoint:
-  [`985bc3f88`](https://github.com/steveicarus/iverilog/commit/985bc3f88).
-- Latest upstream-derived change before this ledger update:
-  [`2dffae282`](https://github.com/apullin/aiverilog/commit/2dffae282).
+  [`e6b789157`](https://github.com/steveicarus/iverilog/commit/e6b789157).
+- Latest fork change before this ledger update:
+  [`9b649516b`](https://github.com/apullin/aiverilog/commit/9b649516b).
 - `Landed` means that Aiverilog intentionally retains a fork delta.
 - `Elided` means that no fork delta remains or was needed, usually because
   upstream already supplied the behavior.
@@ -63,6 +63,14 @@ unwinding superseded fork code deltas for GH #716, #1112, #1134, #1268,
 #1298/#1459, #1407, and #1411 while adapting retained fork fixes and performance
 paths to upstream's owned AST pointers, unpacked-array subroutine ports, enum
 FST metadata, and scalar specify/SDF pulse rearming.
+
+The fourth sync on 2026-11-15 merged 60 upstream commits (`985bc3f88..e6b789157`)
+via [`9b649516b`](https://github.com/apullin/aiverilog/commit/9b649516b),
+integrating upstream out-of-block `extern` class methods ([PR #1770](https://github.com/steveicarus/iverilog/pull/1770)),
+`ref`/`const ref` subroutine arguments ([PR #1772](https://github.com/steveicarus/iverilog/pull/1772) / [PR #1776](https://github.com/steveicarus/iverilog/pull/1776)),
+parameterized classes ([PR #1777](https://github.com/steveicarus/iverilog/pull/1777)),
+mixed concatenation target conversions ([PR #1778](https://github.com/steveicarus/iverilog/pull/1778) / [PR #1790](https://github.com/steveicarus/iverilog/pull/1790)),
+and upstream merges of [PR #1740](https://github.com/steveicarus/iverilog/pull/1740) and [PR #1773](https://github.com/steveicarus/iverilog/pull/1773).
 
 ## Landed Before Fork Issue Bookkeeping
 
@@ -121,8 +129,8 @@ commits are included for batched PRs.
 | [#678](https://github.com/steveicarus/iverilog/issues/678) | [#56](https://github.com/apullin/aiverilog/issues/56), [PR #57](https://github.com/apullin/aiverilog/pull/57), [`9d5320cff`](https://github.com/apullin/aiverilog/commit/9d5320cff75cc9fde1b2062d70c54f5b3bd3b317) | Coalesce transient event propagation from atomic blocking vector assignments. A broad prototype with roughly 40% ordinary-fanout slowdown was rejected; the landed path is narrowly selected, leaves existing J-Core timing neutral, and passed all 12 CI jobs. NBA concatenations and unpacked-array word stores remain separate follow-ups. |
 | [#1466](https://github.com/steveicarus/iverilog/issues/1466) | [PR #68](https://github.com/apullin/aiverilog/pull/68), repaired as [`728323077`](https://github.com/apullin/aiverilog/commit/728323077e2c184e387db51451d3bbbe7908b58d) | Guard only: propagate packed-index calculation failure so the non-ANSI unpacked-array port case receives a source diagnostic instead of aborting in `eval_part_select_`. Full support for the legal construct remains separate work. |
 | [#1441](https://github.com/steveicarus/iverilog/issues/1441) | [PR #69](https://github.com/apullin/aiverilog/pull/69), replaced by [`b459ba79e`](https://github.com/apullin/aiverilog/commit/b459ba79ebafd46120dc14415fc42dac9cb1e781) | Carry explicit one-bit packed-vector identity through the VVP format and `__vpiSignal`, including nets, variables, aliases, and net-array words. VPI no longer guesses from a signal name or a collapsed range. |
-| [PR #1773](https://github.com/steveicarus/iverilog/pull/1773) | [#135](https://github.com/apullin/aiverilog/issues/135), [PR #146](https://github.com/apullin/aiverilog/pull/146), [`707e57435`](https://github.com/apullin/aiverilog/commit/707e57435) | Import and harden upstream PR #1773: fix heap-buffer-overflow on exact-fit string constant `vpiVectorVal` conversion and avoid signed `char` sign-extension/UB on high bytes (`>= 0x80`). |
-| [#1706](https://github.com/steveicarus/iverilog/issues/1706) | [#136](https://github.com/apullin/aiverilog/issues/136), [PR #147](https://github.com/apullin/aiverilog/pull/147), [`660714c85`](https://github.com/apullin/aiverilog/commit/660714c85) | Import [upstream PR #1740](https://github.com/steveicarus/iverilog/pull/1740): merge member directions across concatenated module ports so output members propagate to external nets. |
+| [PR #1773](https://github.com/steveicarus/iverilog/pull/1773) | [#135](https://github.com/apullin/aiverilog/issues/135), [PR #146](https://github.com/apullin/aiverilog/pull/146), [`707e57435`](https://github.com/apullin/aiverilog/commit/707e57435) | Upstream merged PR #1773 in [`27a70c82a`](https://github.com/steveicarus/iverilog/commit/27a70c82a); fork retains `unsigned char` high-byte (`>= 0x80`) sign-extension/UB hardening and test coverage in `string_const_vec_val.v`. |
+| [#1706](https://github.com/steveicarus/iverilog/issues/1706) | [#136](https://github.com/apullin/aiverilog/issues/136), [PR #147](https://github.com/apullin/aiverilog/pull/147), [`660714c85`](https://github.com/apullin/aiverilog/commit/660714c85) | Upstream merged [PR #1740](https://github.com/steveicarus/iverilog/pull/1740) in [`ce6047a2b`](https://github.com/steveicarus/iverilog/commit/ce6047a2b); fork retains `"TE"` `vlog95` expectation in `br_gh1706.json` for `vvp_reg.py`. |
 | [#1511](https://github.com/steveicarus/iverilog/issues/1511) | [#137](https://github.com/apullin/aiverilog/issues/137), [PR #148](https://github.com/apullin/aiverilog/pull/148), [`36b3c7f28`](https://github.com/apullin/aiverilog/commit/36b3c7f28) | Import [upstream PR #1515](https://github.com/steveicarus/iverilog/pull/1515): let single gates with mismatched output widths reach port-width diagnostics and report mixed-width gate arrays cleanly instead of asserting. |
 | [#1586](https://github.com/steveicarus/iverilog/issues/1586) | [#138](https://github.com/apullin/aiverilog/issues/138), [PR #149](https://github.com/apullin/aiverilog/pull/149), [`b15de7e2c`](https://github.com/apullin/aiverilog/commit/b15de7e2c) | Share parsed `data_type_t` via `std::shared_ptr` across comma-separated class property declarations so module-scoped class destruction does not double-free. |
 | [#1547](https://github.com/steveicarus/iverilog/issues/1547) | [#139](https://github.com/apullin/aiverilog/issues/139), [PR #150](https://github.com/apullin/aiverilog/pull/150), [`1f3e76e78`](https://github.com/apullin/aiverilog/commit/1f3e76e78) | Resize wider vector expressions to the queue element width across variable and class-property `push_back`, `push_front`, and `insert` code generation. |
@@ -217,6 +225,28 @@ number to match:
   [#162](https://github.com/apullin/aiverilog/issues/162) / [PR #169](https://github.com/apullin/aiverilog/pull/169) ([`370a4f863`](https://github.com/apullin/aiverilog/commit/370a4f863), pre/post `++`/`--` expressions in constant functions and unpacked-array words in `tgt-vvp`),
   [#177](https://github.com/apullin/aiverilog/issues/177) / [PR #184](https://github.com/apullin/aiverilog/pull/184) ([`05aa22fb8`](https://github.com/apullin/aiverilog/commit/05aa22fb8), signed comparison in queue/darray `sort()`, `rsort()`, `min()`, and `max()`), and
   [#178](https://github.com/apullin/aiverilog/issues/178) / [PR #188](https://github.com/apullin/aiverilog/pull/188) ([`dfb7bc429`](https://github.com/apullin/aiverilog/commit/dfb7bc429), compile-time and runtime diagnostics for negative or X/Z `new[n]` dynamic-array sizes).
+- Differential, sanitizer, and mutational fuzzing campaign fixes in November 2026
+  (20 upstream-copyable fork issues and PRs):
+  [#195](https://github.com/apullin/aiverilog/issues/195) / [PR #199](https://github.com/apullin/aiverilog/pull/199) ([`9f10a4849`](https://github.com/apullin/aiverilog/commit/9f10a4849), >64-bit `vvp_vector2_t` `div_mod` MSB mask overflow),
+  [#196](https://github.com/apullin/aiverilog/issues/196) / [PR #200](https://github.com/apullin/aiverilog/pull/200) ([`319b94620`](https://github.com/apullin/aiverilog/commit/319b94620), `delete[]` vs `free()` in `compile_darray_port`),
+  [#197](https://github.com/apullin/aiverilog/issues/197) / [PR #201](https://github.com/apullin/aiverilog/pull/201) ([`c76b27300`](https://github.com/apullin/aiverilog/commit/c76b27300), non-power-of-two signed 2-state `bit` class properties `sb<N>`),
+  [#198](https://github.com/apullin/aiverilog/issues/198) / [PR #202](https://github.com/apullin/aiverilog/pull/202) ([`25061fe67`](https://github.com/apullin/aiverilog/commit/25061fe67), avoid duplicate `CLASS` scope/method emission in `NetScope`),
+  [#203](https://github.com/apullin/aiverilog/issues/203) / [PR #215](https://github.com/apullin/aiverilog/pull/215) ([`705f8e6dc`](https://github.com/apullin/aiverilog/commit/705f8e6dc), VPI `&PV<>`/`&APV<>` `vpiObjTypeVal`, OOB bounds, 2-state `'0` padding, and shift UB),
+  [#204](https://github.com/apullin/aiverilog/issues/204) / [PR #216](https://github.com/apullin/aiverilog/pull/216) ([`aee795767`](https://github.com/apullin/aiverilog/commit/aee795767), `'0` on OOB/undefined selects of 2-state packed vectors),
+  [#205](https://github.com/apullin/aiverilog/issues/205) / [PR #217](https://github.com/apullin/aiverilog/pull/217) ([`04979c1c7`](https://github.com/apullin/aiverilog/commit/04979c1c7), `tgt-blif` aliased output ports, wide XOR/XNOR reductions, and shift UB),
+  [#206](https://github.com/apullin/aiverilog/issues/206) / [PR #218](https://github.com/apullin/aiverilog/pull/218) ([`10e2cca8b`](https://github.com/apullin/aiverilog/commit/10e2cca8b), bit/part-selects and width check on timing-check delayed signals),
+  [#207](https://github.com/apullin/aiverilog/issues/207) / [PR #219](https://github.com/apullin/aiverilog/pull/219) ([`5a5482db2`](https://github.com/apullin/aiverilog/commit/5a5482db2), `NetESelect::expr_type` element base type for queues and darrays),
+  [#208](https://github.com/apullin/aiverilog/issues/208) / [PR #220](https://github.com/apullin/aiverilog/pull/220) ([`53ad36e54`](https://github.com/apullin/aiverilog/commit/53ad36e54), constant-function uninitialized compound assigns and 2-state `NaN`/`X` casts),
+  [#209](https://github.com/apullin/aiverilog/issues/209) / [PR #221](https://github.com/apullin/aiverilog/pull/221) ([`13d50609c`](https://github.com/apullin/aiverilog/commit/13d50609c), `+:`/`-:` part-select l-values on packed struct/union members),
+  [#210](https://github.com/apullin/aiverilog/issues/210) / [PR #222](https://github.com/apullin/aiverilog/pull/222) ([`9ca9b3e49`](https://github.com/apullin/aiverilog/commit/9ca9b3e49), signed shift UB in `tgt-vlog95`/`sys_time` and null `userdata` guard in `sys_convert`),
+  [#211](https://github.com/apullin/aiverilog/issues/211) / [PR #223](https://github.com/apullin/aiverilog/pull/223) ([`f67280906`](https://github.com/apullin/aiverilog/commit/f67280906), 32-bit word-count overflow in `vvp_vector4_t` and signed range overflow in `vvp`),
+  [#212](https://github.com/apullin/aiverilog/issues/212) / [PR #224](https://github.com/apullin/aiverilog/pull/224) ([`3bfd23c60`](https://github.com/apullin/aiverilog/commit/3bfd23c60), `specify` path error-recovery segfault, scope unwinding, and UDP guards),
+  [#213](https://github.com/apullin/aiverilog/issues/213) / [PR #225](https://github.com/apullin/aiverilog/pull/225) ([`242f808bc`](https://github.com/apullin/aiverilog/commit/242f808bc), cfunc struct/union reads, class prop methods/slices, locator iterators, and object arrays),
+  [#214](https://github.com/apullin/aiverilog/issues/214) / [PR #226](https://github.com/apullin/aiverilog/pull/226) ([`2ee1052df`](https://github.com/apullin/aiverilog/commit/2ee1052df), oversized dimensions, `darray` allocations, cfunc recursion, and error recovery),
+  [#227](https://github.com/apullin/aiverilog/issues/227) / [PR #231](https://github.com/apullin/aiverilog/pull/231) ([`7f8d84e8d`](https://github.com/apullin/aiverilog/commit/7f8d84e8d), element type equivalence check in dynamic-array and queue assignments),
+  [#228](https://github.com/apullin/aiverilog/issues/228) / [PR #232](https://github.com/apullin/aiverilog/pull/232) ([`844cdad91`](https://github.com/apullin/aiverilog/commit/844cdad91), `$readmemh` shift UB, `vthread` flags/words init, and `vector4_from_text` bounds),
+  [#229](https://github.com/apullin/aiverilog/issues/229) / [PR #233](https://github.com/apullin/aiverilog/pull/233) ([`9414f1e7c`](https://github.com/apullin/aiverilog/commit/9414f1e7c), out-of-range port part-select diagnostic and null concatenated subport guard), and
+  [#230](https://github.com/apullin/aiverilog/issues/230) / [PR #234](https://github.com/apullin/aiverilog/pull/234) ([`ca6a7b0a0`](https://github.com/apullin/aiverilog/commit/ca6a7b0a0), parser error recovery for constructors, `for`-loops, functions, classes, and `modport`s).
 
 These changes should be compared semantically against incoming upstream work;
 the absence of a matching upstream issue number is not evidence that they can
