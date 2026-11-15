@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "vpi_pv_oob_clog2.v",
+    "iverilog-args" : [ "-g2012" ]
+}
