@@ -510,8 +510,11 @@ void NetScope::emit_scope(struct target_t*tgt) const
 	    tgt->enumeration(this, cur->second);
 
       for (map<hname_t,NetScope*>::const_iterator cur = children_.begin()
-		 ; cur != children_.end() ; ++ cur )
+		 ; cur != children_.end() ; ++ cur ) {
+	    if (cur->second->type() == CLASS)
+		  continue;
 	    cur->second->emit_scope(tgt);
+      }
 
       for (signals_map_iter_t cur = signals_map_.begin()
 		 ; cur != signals_map_.end() ; ++ cur ) {
@@ -550,8 +553,11 @@ bool NetScope::emit_defs(struct target_t*tgt) const
 	  case PACKAGE:
 	  case MODULE:
 	    for (map<hname_t,NetScope*>::const_iterator cur = children_.begin()
-		       ; cur != children_.end() ; ++ cur )
+		       ; cur != children_.end() ; ++ cur ) {
+		  if (cur->second->type() == CLASS)
+			continue;
 		  flag &= cur->second->emit_defs(tgt);
+	    }
 	    for (map<perm_string,netclass_t*>::const_iterator cur = classes_.begin()
 		       ; cur != classes_.end() ; ++ cur)
 		  flag &= cur->second->emit_defs(tgt);
