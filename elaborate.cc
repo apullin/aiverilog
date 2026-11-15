@@ -8489,8 +8489,12 @@ Design* elaborate(list<perm_string>roots)
 	// module and elaborate what I find.
       Design*des = new Design;
 
-	// Elaborate the compilation unit scopes. From here on, these are
-	// treated as an additional set of packages.
+	// Create the compilation unit scopes first so packages can attach to
+	// their enclosing unit scope (and VHDL packages can still see unit
+	// typedefs), but schedule named package scope elaboration before unit
+	// scope elaboration so unit-level classes and typedefs can extend or
+	// specialize classes declared in packages.
+      vector<elaborator_work_item_t*> unit_work_items;
       if (gn_system_verilog()) {
 	    for (vector<PPackage*>::iterator pkg = pform_units.begin()
 		       ; pkg != pform_units.end() ; ++pkg) {
@@ -8498,10 +8502,10 @@ Design* elaborate(list<perm_string>roots)
 		  NetScope*scope = des->make_package_scope(unit->pscope_name(), 0, true);
 		  scope->set_line(unit);
 		  scope->add_imports(&unit->explicit_imports);
+		  scope->add_typedefs(&unit->typedefs);
 		  set_scope_timescale(des, scope, unit);
 
-		  elaborator_work_item_t*es = new elaborate_package_t(des, scope, unit);
-		  des->elaboration_work_list.push_back(es);
+		  unit_work_items.push_back(new elaborate_package_t(des, scope, unit));
 
 		  pack_elems[i].pack = unit;
 		  pack_elems[i].scope = scope;
@@ -8525,13 +8529,15 @@ Design* elaborate(list<perm_string>roots)
 	    scope->add_imports(&pack->explicit_imports);
 	    set_scope_timescale(des, scope, pack);
 
-	    elaborator_work_item_t*es = new elaborate_package_t(des, scope, pack);
-	    des->elaboration_work_list.push_back(es);
+	    des->elaboration_work_list.push_back(new elaborate_package_t(des, scope, pack));
 
 	    pack_elems[i].pack = pack;
 	    pack_elems[i].scope = scope;
 	    i += 1;
       }
+
+      for (elaborator_work_item_t*es : unit_work_items)
+	    des->elaboration_work_list.push_back(es);
 
 	// Scan the root modules by name, and elaborate their scopes.
       i = 0;
