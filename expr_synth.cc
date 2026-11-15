@@ -83,7 +83,7 @@ static bool process_binary_args(Design*des, NetScope*scope, NetExpr*root,
 
 NetNet* NetExpr::synthesize(Design*des, NetScope*, NetExpr*)
 {
-      cerr << get_fileline() << ": internal error: cannot synthesize expression: "
+      cerr << get_fileline() << ": sorry: cannot synthesize expression: "
 	   << *this << endl;
       des->errors += 1;
       return 0;
@@ -100,6 +100,12 @@ NetNet* NetEBAdd::synthesize(Design*des, NetScope*scope, NetExpr*root)
       bool real_args=false;
       if (process_binary_args(des, scope, root, left_, right_, lsig, rsig,
                               real_args)) {
+	    return 0;
+      }
+
+      if (des->errors > 0 &&
+	  (expr_width() < lsig->vector_width() ||
+	   expr_width() < rsig->vector_width())) {
 	    return 0;
       }
 

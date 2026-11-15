@@ -1793,6 +1793,8 @@ bool NetCondit::synth_sync(Design*des, NetScope*scope,
       for (unsigned idx = 0 ;  idx < events_in.size() ;  idx += 1) {
 
 	    NetEvProbe*ev = events_in[idx];
+	    if (ev == 0)
+		  continue;
 	    NexusSet pin_set;
 	    pin_set.add(ev->pin(0).nexus(), 0, 0);
 
@@ -1801,6 +1803,10 @@ bool NetCondit::synth_sync(Design*des, NetScope*scope,
 
 	      // Synthesize the set/reset input expression.
 	    NetNet*rst = expr_->synthesize(des, scope, expr_.get());
+	    if (rst == 0) {
+		  delete expr_input;
+		  return false;
+	    }
 	    ivl_assert(*this, rst->pin_count() == 1);
 
 	      // Check that the edge used on the set/reset input is correct.
