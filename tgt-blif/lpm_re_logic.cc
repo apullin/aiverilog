@@ -44,6 +44,37 @@ int print_lpm_re_logic(FILE*fd, ivl_lpm_t net)
       assert(1 == q_wid);
 
       size_t d_wid = ned_d->get_width();
+      if ((ivl_lpm_type(net) == IVL_LPM_RE_XOR ||
+           ivl_lpm_type(net) == IVL_LPM_RE_XNOR) && d_wid > 4) {
+	    bool is_xnor = (ivl_lpm_type(net) == IVL_LPM_RE_XNOR);
+	    for (size_t idx = 1; idx < d_wid; idx += 1) {
+		  char lhs_buf[256];
+		  char out_buf[256];
+		  if (idx == 1) {
+			snprintf(lhs_buf, sizeof lhs_buf, "%s%s",
+				 ned_d->get_name(), ned_d->get_name_index(0));
+		  } else {
+			snprintf(lhs_buf, sizeof lhs_buf, "%s$rxor%zu",
+				 ned_q->get_name(), idx - 1);
+		  }
+		  if (idx + 1 == d_wid) {
+			snprintf(out_buf, sizeof out_buf, "%s%s",
+				 ned_q->get_name(), ned_q->get_name_index(0));
+		  } else {
+			snprintf(out_buf, sizeof out_buf, "%s$rxor%zu",
+				 ned_q->get_name(), idx);
+		  }
+		  fprintf(fd, ".names %s %s%s %s\n",
+			  lhs_buf, ned_d->get_name(), ned_d->get_name_index(idx), out_buf);
+		  if (idx + 1 == d_wid && is_xnor) {
+			fprintf(fd, "00 1\n11 1\n");
+		  } else {
+			fprintf(fd, "01 1\n10 1\n");
+		  }
+	    }
+	    return 0;
+      }
+
       fprintf(fd, ".names");
       for (size_t idx = 0 ; idx < d_wid ; idx += 1) {
 	    fprintf(fd, " %s%s", ned_d->get_name(), ned_d->get_name_index(idx));
