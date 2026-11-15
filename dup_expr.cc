@@ -224,7 +224,8 @@ NetENull* NetENull::dup_expr() const
 NetEProperty* NetEProperty::dup_expr() const
 {
       auto index = index_ ? index_->dup_expr() : nullptr;
-      auto result = new NetEProperty(net_.get(), pidx_, index);
+      auto arr_idx = array_idx_ ? array_idx_->dup_expr() : nullptr;
+      auto result = new NetEProperty(net_.get(), pidx_, index, arr_idx);
       result->set_line(*this);
       return result;
 }

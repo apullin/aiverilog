@@ -870,6 +870,7 @@ sv_named_type_var_fail		vvp_tests/sv_named_type_var_fail.json
 sv_net_array_decl_assign	vvp_tests/sv_net_array_decl_assign.json
 sv_net_decl_assign		vvp_tests/sv_net_decl_assign.json
 sv_null_default_argument	vvp_tests/sv_null_default_argument.json
+sv_obj_array_prop_cfunc		vvp_tests/sv_obj_array_prop_cfunc.json
 sv_package_delay		vvp_tests/sv_package_delay.json
 sv_package_empty_item		vvp_tests/sv_package_empty_item.json
 sv_package_event_control_select_fail	vvp_tests/sv_package_event_control_select_fail.json

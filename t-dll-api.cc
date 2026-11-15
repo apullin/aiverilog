@@ -567,6 +567,9 @@ extern "C" ivl_expr_t ivl_expr_oper2(ivl_expr_t net)
 	  case IVL_EX_NEW:
 	    return net->u_.new_.init_val;
 
+	  case IVL_EX_PROPERTY:
+	    return net->u_.property_.array_idx;
+
 	  case IVL_EX_SELECT:
 	    return net->u_.select_.base_;
 
