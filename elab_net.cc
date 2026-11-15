@@ -1141,6 +1141,15 @@ NetNet* PEIdent::elaborate_subport(Design*des, NetScope*scope) const
       if (! eval_part_select_(des, scope, sig, midx, lidx))
 	    return 0;
 
+      if (lidx < 0 || midx < 0 ||
+          (unsigned long)lidx >= sig->vector_width() ||
+          (unsigned long)midx >= sig->vector_width()) {
+	    cerr << get_fileline() << ": error: Part select of port "
+		 << sig->name() << " is out of range." << endl;
+	    des->errors += 1;
+	    return 0;
+      }
+
 	/* If this is a part select of the entire signal (or no part
 	   select at all) then we're done. */
       if ((lidx == 0) && (midx == (long)sig->vector_width()-1)) {
