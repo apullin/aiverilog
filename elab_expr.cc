@@ -4502,7 +4502,7 @@ NetExpr* PECallFunction::elaborate_expr_(Design*des, NetScope*scope,
 	    des->errors += 1;
 	    return 0;
       }
-      NetFuncDef*def = search_results.scope->func_def();
+      NetFuncDef*def = find_function_definition(des, scope, search_results.scope);
 
       ivl_assert(*this, def);
       ivl_assert(*this, def->scope() == search_results.scope);
