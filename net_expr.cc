@@ -451,6 +451,13 @@ ivl_variable_type_t NetESelect::expr_type() const
       if (type == IVL_VT_STRING && expr_width()==8)
 	    return IVL_VT_BOOL;
 
+	// If selecting an element from a dynamic array or queue, the
+	// resulting expression has the element's base data type.
+      if ((type == IVL_VT_DARRAY || type == IVL_VT_QUEUE) && base_ != 0) {
+	    if (const netdarray_t*da = dynamic_cast<const netdarray_t*>(expr_->net_type()))
+		  return da->element_type()->base_type();
+      }
+
       return type;
 }
 
