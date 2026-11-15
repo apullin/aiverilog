@@ -1066,6 +1066,14 @@ vvp_context_item_t vthread_get_rd_context_item(unsigned context_idx)
       return vvp_get_context_item(running_thread->rd_context, context_idx);
 }
 
+vvp_context_t vthread_swap_rd_context(vvp_context_t ctx)
+{
+      assert(running_thread);
+      vvp_context_t old = running_thread->rd_context;
+      running_thread->rd_context = ctx;
+      return old;
+}
+
 /*
  * %abs/wr
  */
@@ -5782,8 +5790,9 @@ bool of_PUTC_STR_VEC4(vthread_t thr, vvp_code_t cp)
       vvp_vector4_t val = thr->pop_vec4();
       assert(val.size() == 8);
 
-      if (mux < 0)
-	    return true;
+      if (thr->flags[4] == BIT4_1) return true;
+
+      if (mux < 0) return true;
 
 	/* Get the existing value of the string. If we find that the
 	   index is too big for the string, then give up. */
@@ -5792,19 +5801,16 @@ bool of_PUTC_STR_VEC4(vthread_t thr, vvp_code_t cp)
       assert(fun);
 
       string tmp = fun->get_string();
-      if (tmp.size() <= (size_t)mux)
-	    return true;
+      if (tmp.size() <= (size_t)mux) return true;
 
       char val_str = 0;
       for (size_t idx = 0 ; idx < 8 ; idx += 1) {
-	    if (val.value(idx)==BIT4_1)
-		  val_str |= 1<<idx;
+	    if (val.value(idx)==BIT4_1) val_str |= 1<<idx;
       }
 
 	// It is a quirk of the Verilog standard that putc(..., 'h00)
 	// has no effect. Test for that case here.
-      if (val_str == 0)
-	    return true;
+      if (val_str == 0) return true;
 
       tmp[mux] = val_str;
 
@@ -6032,6 +6038,79 @@ bool of_RELEASE_NET(vthread_t, vvp_code_t cp)
 bool of_RELEASE_REG(vthread_t, vvp_code_t cp)
 {
       return do_release_vec(cp, false);
+}
+
+/*
+ * %ref/bind <var-label>
+ *
+ * Pop a reference from the object stack and bind the ref formal
+ * <var-label> to it. The formal is in the context that %alloc pushed
+ * onto the write context stack, and the reference was made by the
+ * caller.
+ */
+bool of_REF_BIND(vthread_t thr, vvp_code_t cp)
+{
+      automatic_signal_base*sig = dynamic_cast<automatic_signal_base*> (cp->net->fil);
+      assert(sig);
+
+      vvp_object_t ref;
+      thr->pop_object(ref);
+      sig->bind_ref(thr->wt_context, ref);
+
+      return true;
+}
+
+/*
+ * %ref/get <var-label>
+ *
+ * Push the reference that the ref formal <var-label> is bound to, to
+ * pass it on to another ref formal.
+ */
+bool of_REF_GET(vthread_t thr, vvp_code_t cp)
+{
+      automatic_signal_base*sig = dynamic_cast<automatic_signal_base*> (cp->net->fil);
+      assert(sig);
+
+      thr->push_object(sig->bound_ref());
+
+      return true;
+}
+
+/*
+ * %ref/net <var-label>
+ *
+ * Push a reference to the variable <var-label>. An automatic variable
+ * is in the read context of the thread.
+ */
+bool of_REF_NET(vthread_t thr, vvp_code_t cp)
+{
+      thr->push_object(vvp_object_t(new vvp_var_ref(cp->net, thr->rd_context)));
+
+      return true;
+}
+
+/*
+ * %ref/prop <pid>
+ *
+ * Pop a class object from the object stack and push a reference to its
+ * property <pid>.
+ */
+bool of_REF_PROP(vthread_t thr, vvp_code_t cp)
+{
+      vvp_object_t obj;
+      thr->pop_object(obj);
+
+      if (obj.peek<vvp_cobject>() == 0) {
+	    cerr << thr->get_fileline()
+	         << "Error: null object passed as a ref argument." << endl;
+	    schedule_stop(0);
+	    thr->push_object(vvp_object_t());
+	    return true;
+      }
+
+      thr->push_object(vvp_object_t(new vvp_var_ref(obj, cp->number)));
+
+      return true;
 }
 
 /* The type is 1 for registers and 0 for everything else. */
@@ -8325,7 +8404,8 @@ bool of_SUBSTR_VEC4(vthread_t thr, vvp_code_t cp)
 
       assert(wid%8 == 0);
 
-      if (sel < 0 || sel >= (int32_t)val.size()) {
+      if ((sel < 0) || (sel >= (int32_t)val.size()) ||
+          (thr->flags[4] == BIT4_1)) {
 	    vvp_vector4_t res (wid, BIT4_0);
 	    thr->push_vec4(res);
 	    return true;
@@ -8336,8 +8416,7 @@ bool of_SUBSTR_VEC4(vthread_t thr, vvp_code_t cp)
       assert(wid==8);
       unsigned char tmp = val[sel];
       for (int idx = 0 ; idx < 8 ; idx += 1) {
-	    if (tmp & (1<<idx))
-		  res.set_bit(idx, BIT4_1);
+	    if (tmp & (1<<idx)) res.set_bit(idx, BIT4_1);
       }
 
       thr->push_vec4(res);

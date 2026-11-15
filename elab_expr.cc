@@ -31,6 +31,7 @@
 # include  "pform.h"
 # include  "netlist.h"
 # include  "netclass.h"
+# include  "PClass.h"
 # include  "netenum.h"
 # include  "netparray.h"
 # include  "netvector.h"
@@ -587,6 +588,96 @@ NetExpr* elaborate_rval_expr(Design*des, NetScope*scope, ivl_type_t lv_net_type,
       }
 
       return rval;
+}
+
+/*
+ * The actual argument for a ref formal is not copied into the formal,
+ * so it must be a variable that the task or function can read and
+ * write: a plain variable, or a property of a class object. The call
+ * binds the formal to that variable (see tgt-vvp for how).
+ */
+NetExpr* elaborate_ref_argument(Design*des, NetScope*scope,
+				const NetNet*formal, PExpr*expr)
+{
+      NetExpr*res = elab_sys_task_arg(des, scope, formal->name(), 0, expr);
+      if (res == 0)
+	    return 0;
+
+	/* An element of an unpacked array and a bit or part select of a
+	 * variable are legal actuals, but the formal can not be bound to
+	 * them yet. A select of a net is still reported as a net below. */
+      const NetESignal*sel_sig = dynamic_cast<const NetESignal*>(res);
+      if (const NetESelect*esel = dynamic_cast<NetESelect*>(res))
+	    sel_sig = dynamic_cast<const NetESignal*>(esel->sub_expr());
+      if (sel_sig && sel_sig->sig()->type() == NetNet::REG &&
+          (sel_sig != res || sel_sig->word_index() ||
+	   sel_sig->sig()->unpacked_dimensions() > 0)) {
+	    cerr << expr->get_fileline() << ": sorry: The actual argument "
+		 << *expr << " for the ref argument `" << formal->name()
+		 << "` is an unpacked array or an element, bit select "
+		    "or part select of a variable, which is not supported yet." << endl;
+	    des->errors += 1;
+	    delete res;
+	    return 0;
+      }
+
+      const NetNet*sig = 0;
+      if (const NetESignal*esig = dynamic_cast<NetESignal*>(res)) {
+	    if (!esig->word_index())
+		  sig = esig->sig();
+      } else if (const NetEProperty*eprop = dynamic_cast<NetEProperty*>(res)) {
+	    if (!eprop->get_index())
+		  sig = eprop->get_sig();
+      }
+
+      if (sig == 0 || sig->unpacked_dimensions() > 0) {
+	    cerr << expr->get_fileline() << ": error: The actual argument for "
+		    "the ref argument `" << formal->name()
+		 << "` must be a variable, not " << *expr << "." << endl;
+	    des->errors += 1;
+	    delete res;
+	    return 0;
+      }
+
+      if (dynamic_cast<NetESignal*>(res) && sig->type() != NetNet::REG) {
+	    cerr << expr->get_fileline() << ": error: The actual argument for "
+		    "the ref argument `" << formal->name()
+		 << "` must be a variable, but `" << sig->name()
+		 << "` is a net." << endl;
+	    des->errors += 1;
+	    delete res;
+	    return 0;
+      }
+
+      if (!formal->net_type()->type_equivalent(res->net_type())) {
+	    cerr << expr->get_fileline() << ": error: The actual argument "
+		 << *expr << " does not have the same type as the ref argument `"
+		 << formal->name() << "`." << endl;
+	    des->errors += 1;
+	    delete res;
+	    return 0;
+      }
+
+      if (sig->get_const() && !formal->get_const()) {
+	    cerr << expr->get_fileline() << ": error: The const variable `"
+		 << sig->name() << "` can only be passed to a const ref argument."
+		 << endl;
+	    des->errors += 1;
+	    delete res;
+	    return 0;
+      }
+
+      if (dynamic_cast<NetESignal*>(res) && !formal->get_const() &&
+	  sig->name() == perm_string::literal(THIS_TOKEN)) {
+	    cerr << expr->get_fileline() << ": error: \"this\" can only be "
+		 << "passed to a const ref argument, it is not assignable."
+		 << endl;
+	    des->errors += 1;
+	    delete res;
+	    return 0;
+      }
+
+      return res;
 }
 
 /*
@@ -5254,8 +5345,12 @@ unsigned PECallFunction::elaborate_arguments_(Design*des, NetScope*scope,
 			if (const netarray_t*at = formal->array_type())
 			      ctype = at;
 		  }
-		  parms[pidx] = elaborate_rval_expr(des, scope, ctype,
-						    tmp, need_const);
+		  if (formal->port_type() == NetNet::PREF)
+			parms[pidx] = elaborate_ref_argument(des, scope,
+							     formal, tmp);
+		  else
+			parms[pidx] = elaborate_rval_expr(des, scope, ctype,
+							  tmp, need_const);
 		  if (parms[pidx] == 0) {
 			parm_errors += 1;
 			continue;
@@ -7440,7 +7535,21 @@ ivl_type_t PEIdent::elaborate_type(
 	    return nullptr;
       }
 
-      ivl_type_t base_type = type_def->elaborate_type(des, declaration_scope);
+	// Within a class, the name of the class refers to the class
+	// itself. For a specialization of a parameterized class, that
+	// is the specialization and not the class as declared.
+      ivl_type_t base_type = nullptr;
+      auto class_type = dynamic_cast<const class_type_t*>(type_def->get_data_type());
+      if (class_type) {
+	    for (NetScope*cur = scope ; cur && !base_type ; cur = cur->parent()) {
+		  const netclass_t*cur_class = cur->class_def();
+		  if (cur_class && cur_class->pclass()
+		      && cur_class->pclass()->type == class_type)
+			base_type = cur_class;
+	    }
+      }
+      if (!base_type)
+	    base_type = type_def->elaborate_type(des, declaration_scope);
       if (!base_type)
 	    return nullptr;
 
@@ -8819,10 +8928,14 @@ NetExpr* PEIdent::elaborate_expr_param_bit_(Design*des, NetScope*scope,
       if(! calculate_param_range(*this, par_type, par_msv, par_lsv,
 				 par_ex->value().len())) return 0;
 
-      if (sel->expr_type() == IVL_VT_REAL) {
+      if ((sel->expr_type() == IVL_VT_REAL) ||
+          (sel->expr_type() == IVL_VT_STRING)) {
 	    cerr << get_fileline() << ": error: Index expression for "
 	         << name << "[" << *sel
-	         << "] cannot be a real value." << endl;
+	         << "] cannot be a ";
+	    if (sel->expr_type() == IVL_VT_REAL) cerr << "real";
+	    else cerr << "string";
+	    cerr << " value." << endl;
 	    des->errors += 1;
 	    return 0;
       }
@@ -9061,11 +9174,15 @@ NetExpr* PEIdent::elaborate_expr_param_idx_up_do_(Design*des, NetScope*scope,
 		 << "] from range "
 		 << "[" << par_msv << ":" << par_lsv << "]." << endl;
 
-      if (base->expr_type() == IVL_VT_REAL) {
+      if ((base->expr_type() == IVL_VT_REAL) ||
+          (base->expr_type() == IVL_VT_STRING)) {
 	    cerr << get_fileline() << ": error: Indexed part select base "
 	            "expression for " << name << "[" << *base
 	         << (up ? "+:" : "-:") << wid
-	         << "] cannot be a real value." << endl;
+	         << "] cannot be a ";
+	    if (base->expr_type() == IVL_VT_REAL) cerr << "real";
+	    else cerr << "string";
+	    cerr << " value." << endl;
 	    des->errors += 1;
 	    return 0;
       }
@@ -9581,10 +9698,14 @@ NetExpr* PEIdent::elaborate_expr_net_idx_up_do_(Design*des, NetScope*scope,
       unsigned long wid = min_width_;
       const char *op = up ? "+" : "-";
 
-      if (base->expr_type() == IVL_VT_REAL) {
+      if ((base->expr_type() == IVL_VT_REAL) ||
+          (base->expr_type() == IVL_VT_STRING)) {
 	    cerr << get_fileline() << ": error: Indexed part select base "
 	            "expression for " << net->sig()->name() << "[" << *base
-	         << op << ":" << wid << "] cannot be a real value." << endl;
+	         << op << ":" << wid << "] cannot be a ";
+	    if (base->expr_type() == IVL_VT_REAL) cerr << "real";
+	    else cerr << "string";
+	    cerr << " value." << endl;
 	    des->errors += 1;
 	    return 0;
       }
@@ -9759,10 +9880,14 @@ NetExpr* PEIdent::elaborate_expr_net_bit_(Design*des, NetScope*scope,
       if (!mux)
 	    return 0;
 
-      if (mux->expr_type() == IVL_VT_REAL) {
+      if ((mux->expr_type() == IVL_VT_REAL) ||
+          (mux->expr_type() == IVL_VT_STRING)) {
 	    cerr << get_fileline() << ": error: Index expression for "
 	         << net->sig()->name() << "[" << *mux
-	         << "] cannot be a real value." << endl;
+	         << "] cannot be a ";
+	    if (mux->expr_type() == IVL_VT_REAL) cerr << "real";
+	    else cerr << "string";
+	    cerr << " value." << endl;
 	    des->errors += 1;
 	    return 0;
       }
@@ -10388,6 +10513,12 @@ NetExpr* PENewClass::elaborate_expr_constructor_(Design*des, NetScope*scope,
       for (size_t idx = 1 ; idx < parms.size() ; idx += 1) {
 	      // While there are default arguments, check them.
 	    if (args[idx - 1]) {
+		  if (def->port(idx)->port_type() == NetNet::PREF) {
+			parms[idx] = elaborate_ref_argument(des, scope,
+							    def->port(idx),
+							    args[idx - 1]);
+			continue;
+		  }
 		  parms[idx] = elaborate_rval_expr(des, scope,
 						   def->port(idx)->net_type(),
 						   args[idx - 1], false);
