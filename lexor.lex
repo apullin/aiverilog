@@ -37,6 +37,7 @@
 # include  <cstring>
 # include  "lexor_keyword.h"
 # include  "discipline.h"
+# include  <climits>
 # include  <list>
 
 using namespace std;
@@ -54,6 +55,12 @@ using namespace std;
  * If the name is new, it will be added to the list.
  */
 extern YYLTYPE yylloc;
+
+static inline void incr_line(void)
+{
+      if (yylloc.first_line < INT_MAX)
+	    yylloc.first_line += 1;
+}
 
 char* yytext_string_filter(const char*str, size_t str_len)
 {
@@ -173,7 +180,7 @@ TU [munpf]
 ^[ \t]*"`line"[ \t]+.+ { line_directive2(); }
 
 [ \t\b\f\r] { ; }
-\n { yylloc.first_line += 1; }
+\n { incr_line(); }
 
   /* C++ style comments start with / / and run to the end of the
      current line. These are very easy to handle. The meta-comments
@@ -185,11 +192,11 @@ TU [munpf]
      "always" statements. */
 
 "// Icarus preprocessor had ("[0-9]+") errors."\n { pre_process_failed(yytext); }
-"//"{W}*"synthesis"{W}+"translate_on"{W}*\n { pform_mc_translate_on(true); yylloc.first_line += 1; }
-"//"{W}*"synthesis"{W}+"translate_off"{W}*\n { pform_mc_translate_on(false); yylloc.first_line += 1; }
+"//"{W}*"synthesis"{W}+"translate_on"{W}*\n { pform_mc_translate_on(true); incr_line(); }
+"//"{W}*"synthesis"{W}+"translate_off"{W}*\n { pform_mc_translate_on(false); incr_line(); }
 "//" { comment_enter = YY_START; BEGIN(LCOMMENT); }
 <LCOMMENT>.    { yymore(); }
-<LCOMMENT>\n   { yylloc.first_line += 1; BEGIN(comment_enter); }
+<LCOMMENT>\n   { incr_line(); BEGIN(comment_enter); }
 
 
   /* The contents of C-style comments are ignored, like white space. */
@@ -198,7 +205,7 @@ TU [munpf]
 <CCOMMENT>.    { ; }
   /* Check for a possible nested comment. */
 <CCOMMENT>"/*" { VLerror(yylloc, "error: Possible nested comment."); }
-<CCOMMENT>\n   { yylloc.first_line += 1; }
+<CCOMMENT>\n   { incr_line(); }
 <CCOMMENT>"*/" { BEGIN(comment_enter); }
 
 
@@ -285,11 +292,11 @@ TU [munpf]
 <CSTRING>\\\\ { yymore(); /* Catch \\, which is a \ escaping itself */ }
 <CSTRING>\\\" { yymore(); /* Catch \", which is an escaped quote */ }
 <CSTRING>\\\n { yymore(); /* Catch \\n, which will be filtered out */
-		yylloc.first_line += 1; }
+		incr_line(); }
 <CSTRING>\n   { BEGIN(0);
 		yylval.text = yytext_string_filter(yytext, yyleng);
 		VLerror(yylloc, "error: Missing closing quote for string.");
-		yylloc.first_line += 1;
+		incr_line();
 		return STRING; }
 <CSTRING>\"   { BEGIN(0);
 		yylval.text = yytext_string_filter(yytext, yyleng);
@@ -576,7 +583,7 @@ TU [munpf]
 
 <PPTIMESCALE_SCALE>"//" { comment_enter = PPTIMESCALE_SCALE; BEGIN(LCOMMENT); }
 <PPTIMESCALE_SCALE>"/*" { comment_enter = PPTIMESCALE_SCALE; BEGIN(CCOMMENT); }
-<PPTIMESCALE_SCALE>"\n" { yylloc.first_line += 1; }
+<PPTIMESCALE_SCALE>"\n" { incr_line(); }
 <PPTIMESCALE_SCALE>{W}  { ; }
 <PPTIMESCALE_SCALE>.    { BEGIN(PPTIMESCALE_ERROR); }
 
@@ -601,7 +608,7 @@ TU [munpf]
 
 <PPTIMESCALE_UNITS>"//" { comment_enter = PPTIMESCALE_UNITS; BEGIN(LCOMMENT); }
 <PPTIMESCALE_UNITS>"/*" { comment_enter = PPTIMESCALE_UNITS; BEGIN(CCOMMENT); }
-<PPTIMESCALE_UNITS>"\n" { yylloc.first_line += 1; }
+<PPTIMESCALE_UNITS>"\n" { incr_line(); }
 <PPTIMESCALE_UNITS>{W}  { ; }
 <PPTIMESCALE_UNITS>.    { BEGIN(PPTIMESCALE_ERROR); }
 
@@ -609,7 +616,7 @@ TU [munpf]
 
 <PPTIMESCALE_SLASH>"//" { comment_enter = PPTIMESCALE_SLASH; BEGIN(LCOMMENT); }
 <PPTIMESCALE_SLASH>"/*" { comment_enter = PPTIMESCALE_SLASH; BEGIN(CCOMMENT); }
-<PPTIMESCALE_SLASH>"\n" { yylloc.first_line += 1; }
+<PPTIMESCALE_SLASH>"\n" { incr_line(); }
 <PPTIMESCALE_SLASH>{W}  { ; }
 <PPTIMESCALE_SLASH>.    { BEGIN(PPTIMESCALE_ERROR); }
 
@@ -650,7 +657,7 @@ TU [munpf]
 
 <PPUCDRIVE>"//" { comment_enter = PPUCDRIVE; BEGIN(LCOMMENT); }
 <PPUCDRIVE>"/*" { comment_enter = PPUCDRIVE; BEGIN(CCOMMENT); }
-<PPUCDRIVE>"\n" { yylloc.first_line += 1; }
+<PPUCDRIVE>"\n" { incr_line(); }
 <PPUCDRIVE>{W}  { ; }
 <PPUCDRIVE>.    { BEGIN(PPUCDRIVE_ERROR); }
 
@@ -752,7 +759,7 @@ TU [munpf]
 
 <PPBEGIN_KEYWORDS>"//" { comment_enter = PPBEGIN_KEYWORDS; BEGIN(LCOMMENT); }
 <PPBEGIN_KEYWORDS>"/*" { comment_enter = PPBEGIN_KEYWORDS; BEGIN(CCOMMENT); }
-<PPBEGIN_KEYWORDS>"\n" { yylloc.first_line += 1; }
+<PPBEGIN_KEYWORDS>"\n" { incr_line(); }
 <PPBEGIN_KEYWORDS>{W}  { ; }
 <PPBEGIN_KEYWORDS>.    { BEGIN(PPBEGIN_KEYWORDS_ERROR); }
 
@@ -818,7 +825,7 @@ TU [munpf]
 
 <PPDEFAULT_NETTYPE>"//" { comment_enter = PPDEFAULT_NETTYPE; BEGIN(LCOMMENT); }
 <PPDEFAULT_NETTYPE>"/*" { comment_enter = PPDEFAULT_NETTYPE; BEGIN(CCOMMENT); }
-<PPDEFAULT_NETTYPE>"\n" { yylloc.first_line += 1; }
+<PPDEFAULT_NETTYPE>"\n" { incr_line(); }
 <PPDEFAULT_NETTYPE>{W}  { ; }
 <PPDEFAULT_NETTYPE>.    { BEGIN(PPDEFAULT_NETTYPE_ERROR); }
 
@@ -1496,7 +1503,7 @@ static void line_directive()
 
 	/* Now we can assign the new values to yyloc. */
       yylloc.text = set_file_name(buf);
-      yylloc.first_line = lineno;
+      yylloc.first_line = (lineno > INT_MAX) ? INT_MAX : (int)lineno;
 }
 
 /*
@@ -1582,7 +1589,10 @@ static void line_directive2()
       buf[fn_end-fn_start] = 0;
 
       yylloc.text = set_file_name(buf);
-      yylloc.first_line = lineno-1;
+      if (lineno > INT_MAX)
+	    yylloc.first_line = INT_MAX;
+      else
+	    yylloc.first_line = (int)(lineno - 1);
 }
 
 /*

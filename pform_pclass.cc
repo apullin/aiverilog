@@ -36,9 +36,12 @@ void pform_start_class_declaration(const struct vlltype&loc,
 				   class_type_t*type,
 				   bool virtual_class)
 {
+      if (pform_cur_class) {
+	    VLerror(loc, "sorry: Nested class declarations are not yet supported.");
+	    pform_end_class_declaration(loc);
+      }
       PClass*class_scope = pform_push_class_scope(loc, type->name);
       class_scope->type = type;
-      ivl_assert(loc, pform_cur_class == 0);
       pform_cur_class = class_scope;
 
       type->virtual_class = virtual_class;
@@ -85,6 +88,10 @@ void pform_class_property(const struct vlltype&loc,
       if (!pform_cur_class) {
             if (decls) { for (auto*d : *decls) delete d; delete decls; }
             return;
+      }
+      if (!shared_type) {
+	    VLerror(loc, "error: Class property declaration requires an explicit data type.");
+	    shared_type.reset(new vector_type_t(IVL_VT_LOGIC, false, 0));
       }
 
 	// Add the non-static properties to the class type
