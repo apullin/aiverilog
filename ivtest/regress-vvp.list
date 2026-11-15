@@ -271,6 +271,7 @@ dumpfile			vvp_tests/dumpfile.json
 early_sig_elab1			vvp_tests/early_sig_elab1.json
 early_sig_elab2			vvp_tests/early_sig_elab2.json
 early_sig_elab3			vvp_tests/early_sig_elab3.json
+elab_256_errors_exit_fail	vvp_tests/elab_256_errors_exit_fail.json
 enum_compatibility9		vvp_tests/enum_compatibility9.json
 enum_compatibility10		vvp_tests/enum_compatibility10.json
 enum_compatibility11		vvp_tests/enum_compatibility11.json

@@ -488,5 +488,5 @@ int main(int argc, char*argv[])
 
       free_macros();
 
-      return error_count;
+      return error_count > 125 ? 125 : (int)error_count;
 }
