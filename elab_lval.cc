@@ -1187,7 +1187,9 @@ static bool resolve_packed_struct_member_path(Design*des, NetScope*scope,
 
 	    if (use_sel != index_component_t::SEL_NONE
 		&& use_sel != index_component_t::SEL_BIT
-		&& use_sel != index_component_t::SEL_PART) {
+		&& use_sel != index_component_t::SEL_PART
+		&& use_sel != index_component_t::SEL_IDX_UP
+		&& use_sel != index_component_t::SEL_IDX_DO) {
 		  cerr << li->get_fileline() << ": sorry: Assignments to part selects of "
 			"a struct member are not yet supported." << endl;
 		  des->errors += 1;
@@ -1211,6 +1213,11 @@ static bool resolve_packed_struct_member_path(Design*des, NetScope*scope,
 			if (!calculate_part(li, des, scope, member_comp.index.back(),
 					    tail_off, tail_wid))
 			      return false;
+			if ((use_sel == index_component_t::SEL_IDX_UP ||
+			     use_sel == index_component_t::SEL_IDX_DO) &&
+			    mem_packed_dims.back().get_msb() < mem_packed_dims.back().get_lsb()) {
+			      tail_off += (long)tail_wid - 1;
+			}
 			long loff;
 			unsigned long lwid;
 			if (!prefix_to_slice(mem_packed_dims, prefix_indices, tail_off, loff, lwid)) {
@@ -1801,7 +1808,9 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 
 	    if (use_sel != index_component_t::SEL_NONE
 		&& use_sel != index_component_t::SEL_BIT
-		&& use_sel != index_component_t::SEL_PART) {
+		&& use_sel != index_component_t::SEL_PART
+		&& use_sel != index_component_t::SEL_IDX_UP
+		&& use_sel != index_component_t::SEL_IDX_DO) {
 		  cerr << get_fileline() << ": sorry: Assignments to part selects of "
 			"a struct member are not yet supported." << endl;
 		  des->errors += 1;
@@ -1855,6 +1864,11 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 			unsigned long tail_wid = 0;
 			rc = calculate_part(this, des, scope, member_comp.index.back(), tail_off, tail_wid);
 			if (!rc) return false;
+			if ((use_sel == index_component_t::SEL_IDX_UP ||
+			     use_sel == index_component_t::SEL_IDX_DO) &&
+			    mem_packed_dims.back().get_msb() < mem_packed_dims.back().get_lsb()) {
+			      tail_off += (long)tail_wid - 1;
+			}
 
 			if (debug_elaborate) {
 			      cerr << get_fileline() << ": PEIdent::elaborate_lval_net_packed_member_: "
