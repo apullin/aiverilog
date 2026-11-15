@@ -448,10 +448,12 @@ vpiHandle vpip_make_binary_const(unsigned wid, const char*bits)
 vvp_vector4_t vector4_from_text(const char*bits, unsigned wid)
 {
       vvp_vector4_t res (wid);
+      size_t blen = strlen(bits);
 
       for (unsigned idx = 0 ;  idx < wid ;  idx += 1) {
 	    vvp_bit4_t val = BIT4_0;
-	    switch (bits[wid-idx-1]) {
+	    char ch = (idx < blen) ? bits[blen - idx - 1] : '0';
+	    switch (ch) {
 		case '0':
 		  val = BIT4_0;
 		  break;
