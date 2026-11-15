@@ -7348,6 +7348,7 @@ specify_simple_path
   | '(' error ')'
       { yyerror(@1, "Invalid simple path");
 	yyerrok;
+	$$ = 0;
       }
   ;
 
