@@ -1880,8 +1880,10 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 			ivl_assert(*this, pport);
 			NetNet *netnet = pport->elaborate_subport(des, inst_scope);
 			prts[lbase + ldx] = netnet;
-			if (netnet == 0)
+			if (netnet == 0) {
+			      unconnected_port = true;
 			      continue;
+			}
 
 			ivl_assert(*this, netnet);
 			unsigned port_width = netnet->vector_width() * netnet->pin_count();
