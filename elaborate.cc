@@ -3282,13 +3282,23 @@ NetProc* PAssignNB::elaborate(Design*des, NetScope*scope) const
 	// IEEE 1800-2023 6.21 and 10.4.2: it is illegal to make
 	// nonblocking assignments to elements of dynamically sized
 	// array variables. Assigning the whole array is fine.
-      if (is_darray_element_(lv)) {
-	    cerr << get_fileline() << ": error: elements of dynamically sized arrays "
-		    "may not be assigned values using non-blocking "
-		    "assignments." << endl;
-	    des->errors += 1;
-	    delete lv;
-	    return 0;
+      for (const NetAssign_*cur = lv ; cur ; cur = cur->more) {
+	    if (is_darray_element_(cur)) {
+		  cerr << get_fileline() << ": error: elements of dynamically sized arrays "
+			  "may not be assigned values using non-blocking "
+			  "assignments." << endl;
+		  des->errors += 1;
+		  delete lv;
+		  return 0;
+	    }
+	    if (cur->nest() || cur->get_property_idx() >= 0
+		|| (cur->sig() && cur->sig()->class_type())) {
+		  cerr << get_fileline() << ": sorry: Non-blocking assignments "
+			  "to class handles or properties are not yet supported." << endl;
+		  des->errors += 1;
+		  delete lv;
+		  return 0;
+	    }
       }
 
       if (scope->program_block() && lval_not_program_variable(lv)) {

@@ -27,11 +27,12 @@ module test;
     d = new;
     d.child = c;
 
-    // Storing the other concatenation components is not yet supported.
     {other, c.value} = 9'h134;
+    `check(other, 1'b1);
     `check(c.value, 8'h34);
 
-    {other, d.child.value} = 9'h156;
+    {other, d.child.value} = 9'h056;
+    `check(other, 1'b0);
     `check(c.value, 8'h56);
 
     if (!failed) begin

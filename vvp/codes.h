@@ -325,6 +325,7 @@ extern bool of_SUBI(vthread_t thr, vvp_code_t code);
 extern bool of_SUB_WR(vthread_t thr, vvp_code_t code);
 extern bool of_SUBSTR(vthread_t thr, vvp_code_t code);
 extern bool of_SUBSTR_VEC4(vthread_t thr, vvp_code_t code);
+extern bool of_SWAP_VEC4(vthread_t thr, vvp_code_t code);
 extern bool of_TEST_NUL(vthread_t thr, vvp_code_t code);
 extern bool of_TEST_NUL_A(vthread_t thr, vvp_code_t code);
 extern bool of_TEST_NUL_OBJ(vthread_t thr, vvp_code_t code);

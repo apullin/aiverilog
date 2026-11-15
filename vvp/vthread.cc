@@ -6137,6 +6137,16 @@ bool of_SET_VEC4(vthread_t thr, vvp_code_t cp)
 
       return true;
 }
+
+bool of_SWAP_VEC4(vthread_t thr, vvp_code_t)
+{
+      vvp_vector4_t top = thr->pop_vec4();
+      vvp_vector4_t sec = thr->pop_vec4();
+      thr->push_vec4(top);
+      thr->push_vec4(sec);
+      return true;
+}
+
 /*
  * %shiftl <idx>
  *
