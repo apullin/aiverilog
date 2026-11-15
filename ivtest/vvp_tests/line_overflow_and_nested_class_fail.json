@@ -1,0 +1,5 @@
+{
+    "type" : "CE",
+    "source" : "line_overflow_and_nested_class_fail.v",
+    "iverilog-args" : [ "-g2012" ]
+}
