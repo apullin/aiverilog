@@ -45,6 +45,7 @@ binary_nand_nor1		vvp_tests/binary_nand_nor1.json
 binary_nand_nor2		vvp_tests/binary_nand_nor2.json
 binary_nand_nor3		vvp_tests/binary_nand_nor3.json
 binary_xor_stack		vvp_tests/binary_xor_stack.json
+bit_packed_oob_select		vvp_tests/bit_packed_oob_select.json
 bits4				vvp_tests/bits4.json
 bitsel11			vvp_tests/bitsel11.json
 br_gh13a			vvp_tests/br_gh13a.json

@@ -1195,10 +1195,12 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
       if (const NetEConst*base_const = dynamic_cast<NetEConst*>(base_.get())) {
 	    verinum base_tmp = base_const->value();
 	    unsigned select_width = expr_width();
+	    bool is_bool = (expr_type() == IVL_VT_BOOL) && (dynamic_cast<const NetEConst*>(expr_.get()) == 0);
 
-	      // Return 'bx for a constant undefined selections.
+	      // Return 'b0 for 2-state or 'bx for 4-state undefined selections.
 	    if (!base_tmp.is_defined()) {
-		  NetNet*result = make_const_x(des, scope, select_width);
+		  NetNet*result = is_bool ? make_const_0(des, scope, select_width)
+		                          : make_const_x(des, scope, select_width);
 		  result->set_line(*this);
 		  return result;
 	    }
@@ -1206,7 +1208,7 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 	    long base_val = base_tmp.as_long();
 	    unsigned below_width = 0;
 
-	      // Any below X bits?
+	      // Any below OOB bits?
 	    NetNet*below = 0;
 	    if (base_val < 0) {
 		  below_width = abs(base_val);
@@ -1218,7 +1220,8 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 			select_width -= below_width;
 		  }
 
-		  below = make_const_x(des, scope, below_width);
+		  below = is_bool ? make_const_0(des, scope, below_width)
+		                  : make_const_x(des, scope, below_width);
 		  below->set_line(*this);
 		    // All the selected bits are below the signal.
 		  if (select_width == 0) return below;
@@ -1235,7 +1238,8 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 		  ivl_assert(*this, expr_width() > (select_width+below_width));
 		  unsigned above_width = expr_width() - select_width - below_width;
 
-		  above = make_const_x(des, scope, above_width);
+		  above = is_bool ? make_const_0(des, scope, above_width)
+		                  : make_const_x(des, scope, above_width);
 		  above->set_line(*this);
 		    // All the selected bits are above the signal.
 		  if (select_width == 0) return above;
@@ -1290,20 +1294,24 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 	// do the work, and replace "sub" with the selected output.
       if (base_ != 0) {
 	    NetNet*off = base_->synthesize(des, scope, root);
+	    bool is_bool = (expr_type() == IVL_VT_BOOL) && (dynamic_cast<const NetEConst*>(expr_.get()) == 0);
 
 	    NetPartSelect*sel = new NetPartSelect(sub, off, expr_width(),
 	                                          base_->has_sign());
 	    sel->set_line(*this);
 	    des->add_node(sel);
 
-	    const netvector_t*tmp_vec = new netvector_t(sub->data_type(),
+	    const netvector_t*tmp_vec = new netvector_t(is_bool ? IVL_VT_LOGIC : sub->data_type(),
 	                                                expr_width()-1, 0);
 	    NetNet*tmp = new NetNet(scope, scope->local_symbol(),
 				    NetNet::IMPLICIT, tmp_vec);
 	    tmp->local_flag(true);
 	    tmp->set_line(*this);
-	    sub = tmp;
-	    connect(sub->pin(0), sel->pin(0));
+	    connect(tmp->pin(0), sel->pin(0));
+	    if (is_bool)
+		  sub = cast_to_int2(des, scope, tmp, expr_width());
+	    else
+		  sub = tmp;
       }
 
 
