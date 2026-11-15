@@ -328,6 +328,7 @@ initial_null			vvp_tests/initial_null.json
 initial_null_verilog_fail	vvp_tests/initial_null_verilog_fail.json
 line_directive			vvp_tests/line_directive.json
 line_directive_long		vvp_tests/line_directive_long.json
+line_overflow_and_nested_class_fail	vvp_tests/line_overflow_and_nested_class_fail.json
 localparam_type			vvp_tests/localparam_type.json
 loop_condition_real		vvp_tests/loop_condition_real.json
 lval_concat_expr_fail		vvp_tests/lval_concat_expr_fail.json
