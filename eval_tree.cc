@@ -1615,6 +1615,8 @@ NetExpr* NetECast::eval_arguments_(const NetExpr*ex) const
 	  case 'v':
 	    if (const NetECReal*val = dynamic_cast<const NetECReal*>(ex)) {
 		  verinum res_val(val->value().as_double(), false);
+		  if (op_ == '2')
+			res_val.cast_to_int2();
 		  if (expr_width() > 0)
 			res_val = cast_to_width(res_val, expr_width());
 		  res = new NetEConst(res_val);

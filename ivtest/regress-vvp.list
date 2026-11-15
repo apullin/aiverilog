@@ -183,6 +183,7 @@ constfunc_2state_oob		vvp_tests/constfunc_2state_oob.json
 constfunc_assign_shift1		vvp_tests/constfunc_assign_shift1.json
 constfunc_call_signedness	vvp_tests/constfunc_call_signedness.json
 constfunc_case_null		vvp_tests/constfunc_case_null.json
+constfunc_uninit_nan2		vvp_tests/constfunc_uninit_nan2.json
 constfunc_case_null_real	vvp_tests/constfunc_case_null_real.json
 constfunc_compound_divmod	vvp_tests/constfunc_compound_divmod.json
 constfunc_do_while_disable	vvp_tests/constfunc_do_while_disable.json
