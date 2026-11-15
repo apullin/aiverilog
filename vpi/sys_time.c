@@ -55,18 +55,17 @@ static PLI_INT32 sys_time_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       }
 
       assert(8*sizeof(long long) >= 64);
-      { long frac;
-        long long tmp_now = ((long long)now.high) << 32;
-        tmp_now += (long long)now.low;
-	frac = tmp_now % (long long)scale;
-	tmp_now /= (long long)scale;
+      { uint64_t frac;
+        uint64_t tmp_now = ((uint64_t)(uint32_t)now.high << 32) | (uint32_t)now.low;
+	frac = tmp_now % (uint64_t)scale;
+	tmp_now /= (uint64_t)scale;
 
 	  /* Round to the nearest integer, which may be up. */
-	if ((scale > 1) && (frac >= scale/2))
+	if ((scale > 1) && (frac >= (uint64_t)(scale/2)))
 	      tmp_now += 1;
 
-	now.low = tmp_now & 0xffffffff;
-	now.high = tmp_now >> 32LL;
+	now.low = tmp_now & 0xffffffffU;
+	now.high = (PLI_INT32)(tmp_now >> 32);
       }
 
       val.format = vpiTimeVal;

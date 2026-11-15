@@ -1149,6 +1149,7 @@ vlog95_hier_events		vvp_tests/vlog95_hier_events.json
 vlog95_hier_inputs		vvp_tests/vlog95_hier_inputs.json
 vlog95_port_alias_instance_nested	vvp_tests/vlog95_port_alias_instance_nested.json
 vlog95_port_alias_instance	vvp_tests/vlog95_port_alias_instance.json
+vlog95_time_sfunc_ub		vvp_tests/vlog95_time_sfunc_ub.json
 vpi_array_pattern_prefix	vvp_tests/vpi_array_pattern_prefix.json
 vpi_array_word_int		vvp_tests/vpi_array_word_int.json
 vpi_array_word_scalar		vvp_tests/vpi_array_word_scalar.json

@@ -1,0 +1,5 @@
+{
+    "type"   : "EF",
+    "source" : "vlog95_time_sfunc_ub.v",
+    "iverilog-args" : [ "-g2012" ]
+}
