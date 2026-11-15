@@ -1711,12 +1711,16 @@ class_item /* IEEE1800-2005: A.1.8 */
     block_item_or_statement_list_opt
     K_endfunction endnew_opt
       { std::unique_ptr<procedural_item_list_t> items($7);
-	current_function->set_ports($5);
-	pform_set_constructor_return(current_function);
-	pform_set_this_class(@3, current_function);
-	current_function_set_statement(@3, items->statements.get());
-	pform_pop_scope();
-	current_function = 0;
+	if (current_function) {
+	      current_function->set_ports($5);
+	      pform_set_constructor_return(current_function);
+	      pform_set_this_class(@3, current_function);
+	      current_function_set_statement(@3, items->statements.get());
+	      pform_pop_scope();
+	      current_function = 0;
+	} else {
+	      delete $5;
+	}
       }
 
     /* IEEE1800-2017: A.1.9 Class items: Class properties... */
@@ -1781,6 +1785,10 @@ class_item /* IEEE1800-2005: A.1.8 */
 
   | method_qualifier_opt K_function K_new error K_endfunction endnew_opt
       { yyerror(@1, "error: I give up on this class constructor declaration.");
+	if (current_function) {
+	      pform_pop_scope();
+	      current_function = 0;
+	}
 	yyerrok;
       }
 
@@ -2365,13 +2373,17 @@ function_declaration /* IEEE1800-2005: A.2.6 */
     K_endfunction
       { std::unique_ptr<procedural_item_list_t> items($6);
 	pform_check_extern_ports(@3, items->ports.get());
-	current_function->set_ports(items->ports.release());
-	current_function->set_return($3.type);
-	current_function_set_statement(items->statements ? items->statements_loc : @3,
-				       items->statements.get());
-	pform_set_this_class(@3, current_function);
-	pform_pop_scope();
-	current_function = 0;
+	if (current_function) {
+	      current_function->set_ports(items->ports.release());
+	      current_function->set_return($3.type);
+	      current_function_set_statement(items->statements ? items->statements_loc : @3,
+					     items->statements.get());
+	      pform_set_this_class(@3, current_function);
+	      pform_pop_scope();
+	      current_function = 0;
+	} else {
+	      delete $3.type;
+	}
       }
     label_opt
       { // Last step: check any closing name.
@@ -2389,13 +2401,18 @@ function_declaration /* IEEE1800-2005: A.2.6 */
     K_endfunction
       { std::unique_ptr<procedural_item_list_t> items($9);
 	pform_check_extern_ports(@3, $6);
-	current_function->set_ports($6);
-	current_function->set_return($3.type);
-	current_function_set_statement(items->statements ? items->statements_loc : @3,
-				       items->statements.get());
-	pform_set_this_class(@3, current_function);
-	pform_pop_scope();
-	current_function = 0;
+	if (current_function) {
+	      current_function->set_ports($6);
+	      current_function->set_return($3.type);
+	      current_function_set_statement(items->statements ? items->statements_loc : @3,
+					     items->statements.get());
+	      pform_set_this_class(@3, current_function);
+	      pform_pop_scope();
+	      current_function = 0;
+	} else {
+	      delete $6;
+	      delete $3.type;
+	}
 	if ($6 == 0) {
 	      pform_requires_sv(@3, "Functions with no ports");
 	}
@@ -2660,7 +2677,11 @@ for_statement /* IEEE1800-2005: A.6.8 */
       }
 
   | for_statement_start '(' error ')' statement_or_null
-      { $$ = pform_finish_labeled_statement(nullptr, $1.label, $1.attributes);
+      { bool has_imp = !$1.label && !current_block_stack.empty() &&
+		       pform_peek_scope() == current_block_stack.top() &&
+		       strncmp(current_block_stack.top()->pscope_name(),
+			       "$ivl_for_loop", 13) == 0;
+	$$ = pform_finish_labeled_statement(nullptr, $1.label, $1.attributes, has_imp);
 	yyerror(@1, "error: Incomprehensible for loop.");
       }
   ;
@@ -3261,11 +3282,13 @@ task_declaration /* IEEE1800-2005: A.2.7 */
     K_endtask
       { std::unique_ptr<procedural_item_list_t> items($6);
 	pform_check_extern_ports(@3, items->ports.get());
-	current_task->set_ports(items->ports.release());
-	current_task_set_statement(@3, items->statements.get());
-	pform_set_this_class(@3, current_task);
-	pform_pop_scope();
-	current_task = 0;
+	if (current_task) {
+	      current_task->set_ports(items->ports.release());
+	      current_task_set_statement(@3, items->statements.get());
+	      pform_set_this_class(@3, current_task);
+	      pform_pop_scope();
+	      current_task = 0;
+	}
 	if (items->statements && items->statements->size() > 1) {
 	      pform_requires_sv(items->statements_loc,
 				"Task body with multiple statements");
@@ -3291,10 +3314,14 @@ task_declaration /* IEEE1800-2005: A.2.7 */
     K_endtask
       { std::unique_ptr<procedural_item_list_t> items($9);
 	pform_check_extern_ports(@3, $6);
-	current_task->set_ports($6);
-	current_task_set_statement(@3, items->statements.get());
-	pform_set_this_class(@3, current_task);
-	pform_pop_scope();
+	if (current_task) {
+	      current_task->set_ports($6);
+	      current_task_set_statement(@3, items->statements.get());
+	      pform_set_this_class(@3, current_task);
+	      pform_pop_scope();
+	} else {
+	      delete $6;
+	}
 	if (generation_flag < GN_VER2005 && $6 == 0) {
 	      cerr << @3 << ": warning: task definition for \"" << $3.id
 		   << "\" has an empty port declaration list!" << endl;

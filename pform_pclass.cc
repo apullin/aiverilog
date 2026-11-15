@@ -58,7 +58,11 @@ void pform_set_class_extends(const struct vlltype&loc,
 			     data_type_t*base_type,
 			     list<named_pexpr_t> *base_args)
 {
-      ivl_assert(loc, pform_cur_class);
+      if (!pform_cur_class) {
+	    delete base_type;
+	    delete base_args;
+	    return;
+      }
       class_type_t*type = pform_cur_class->type;
 
       ivl_assert(loc, type->base_type == 0);
@@ -77,9 +81,11 @@ void pform_class_property(const struct vlltype&loc,
 			  data_type_t*data_type,
 			  list<decl_assignment_t*>*decls)
 {
-      ivl_assert(loc, pform_cur_class);
-
       std::shared_ptr<data_type_t> shared_type(data_type);
+      if (!pform_cur_class) {
+            if (decls) { for (auto*d : *decls) delete d; delete decls; }
+            return;
+      }
 
 	// Add the non-static properties to the class type
 	// object. Unwind the list of names to make a map of name to
@@ -386,14 +392,18 @@ void pform_set_constructor_return(PFunction*net)
  */
 PFunction*pform_push_constructor_scope(const struct vlltype&loc)
 {
-      ivl_assert(loc, pform_cur_class);
+      if (!pform_cur_class) {
+	    VLerror(loc, "error: Constructor declaration must be inside a class.");
+	    return 0;
+      }
       PFunction*func = pform_push_function_scope(loc, "new", LexicalScope::AUTOMATIC);
       return func;
 }
 
 void pform_end_class_declaration(const struct vlltype&loc)
 {
-      ivl_assert(loc, pform_cur_class);
+      if (!pform_cur_class)
+            return;
 
 	// If there were initializer statements, then collect them
 	// into an implicit constructor function. Also make sure that an
