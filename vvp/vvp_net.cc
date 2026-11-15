@@ -2930,12 +2930,15 @@ static void div_mod (vvp_vector2_t dividend, vvp_vector2_t divisor,
 	    return;
       }
 
-      vvp_vector2_t mask (1, dividend.size());
+      const unsigned orig_size = dividend.size();
+      vvp_vector2_t qtmp (0, orig_size + 1);
+      vvp_vector2_t mask (1, orig_size + 1);
 
 	// Make the dividend 1 bit larger to prevent overflow of
-	// divtmp in startup.
-      dividend = vvp_vector2_t(dividend, dividend.size()+1);
-      vvp_vector2_t divtmp (divisor, dividend.size());
+	// divtmp in startup, and keep mask/qtmp at the same width so
+	// shifting up to bit orig_size never drops the MSB of mask.
+      dividend = vvp_vector2_t(dividend, orig_size + 1);
+      vvp_vector2_t divtmp (divisor, orig_size + 1);
 
       while (divtmp < dividend) {
 	    divtmp <<= 1;
@@ -2945,14 +2948,15 @@ static void div_mod (vvp_vector2_t dividend, vvp_vector2_t divisor,
       while (dividend >= divisor) {
 	    if (divtmp <= dividend) {
 		  dividend -= divtmp;
-		  quotient += mask;
+		  qtmp += mask;
 	    }
 
 	    divtmp >>= 1;
 	    mask >>= 1;
       }
 
-      remainder = vvp_vector2_t(dividend, mask.size());
+      quotient = vvp_vector2_t(qtmp, orig_size);
+      remainder = vvp_vector2_t(dividend, orig_size);
 }
 
 vvp_vector2_t operator - (const vvp_vector2_t&that)

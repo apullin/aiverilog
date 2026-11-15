@@ -320,7 +320,7 @@ void vvp_arith_mod::wide_(vvp_net_ptr_t ptr)
       }
       vvp_vector2_t res = a2 % b2;
       if (negate) res = -res;
-      ptr.ptr()->send_vec4(vector2_to_vector4(res, res.size()), 0);
+      ptr.ptr()->send_vec4(vector2_to_vector4(res, wid_), 0);
 }
 
 void vvp_arith_mod::recv_vec4(vvp_net_ptr_t ptr, const vvp_vector4_t&bit,
