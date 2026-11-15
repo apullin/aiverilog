@@ -156,8 +156,17 @@ static vpiHandle fill_in_var4(struct __vpiSignal*obj,
  * They work with full or partial signals.
  */
 
+static bool is_two_state_vpi_signal(vpiHandle ref)
+{
+      if (!ref) return false;
+      int code = ref->get_type_code();
+      return code == vpiByteVar || code == vpiBitVar ||
+             code == vpiShortIntVar || code == vpiIntVar ||
+             code == vpiLongIntVar;
+}
+
 static void format_vpiBinStrVal(const vvp_signal_value*sig, int base, unsigned wid,
-                                s_vpi_value*vp)
+                                s_vpi_value*vp, bool two_state = false)
 {
       char *rbuf = static_cast<char *>(need_result_buf(wid+1, RBUF_VAL));
       long end = base + (signed)wid;
@@ -166,7 +175,7 @@ static void format_vpiBinStrVal(const vvp_signal_value*sig, int base, unsigned w
 
       for (long idx = base ;  idx < end ;  idx += 1) {
 	    if (idx < 0 || idx >= ssize) {
-                  rbuf[offset-idx] = 'x';
+                  rbuf[offset-idx] = two_state ? '0' : 'x';
 	    } else {
                   rbuf[offset-idx] = vvp_bit4_to_ascii(sig->value(idx));
 	    }
@@ -177,7 +186,7 @@ static void format_vpiBinStrVal(const vvp_signal_value*sig, int base, unsigned w
 }
 
 static void format_vpiOctStrVal(const vvp_signal_value*sig, int base, unsigned wid,
-                                s_vpi_value*vp)
+                                s_vpi_value*vp, bool two_state = false)
 {
       unsigned dwid = (wid + 2) / 3;
       char *rbuf = static_cast<char *>(need_result_buf(dwid+1, RBUF_VAL));
@@ -189,7 +198,7 @@ static void format_vpiOctStrVal(const vvp_signal_value*sig, int base, unsigned w
       for (long idx = base ;  idx < end ;  idx += 1) {
 	    unsigned bit = 0;
 	    if (idx < 0 || idx >= ssize) {
-                  bit = 2; // BIT4_X
+                  bit = two_state ? 0 : 2; // BIT4_0 or BIT4_X
 	    } else {
                   switch (sig->value(idx)) {
 		      case BIT4_0:
@@ -233,7 +242,7 @@ static void format_vpiOctStrVal(const vvp_signal_value*sig, int base, unsigned w
 }
 
 static void format_vpiHexStrVal(const vvp_signal_value*sig, int base, unsigned wid,
-                                s_vpi_value*vp)
+                                s_vpi_value*vp, bool two_state = false)
 {
       unsigned dwid = (wid + 3) / 4;
       char *rbuf = static_cast<char *>(need_result_buf(dwid+1, RBUF_VAL));
@@ -245,7 +254,7 @@ static void format_vpiHexStrVal(const vvp_signal_value*sig, int base, unsigned w
       for (long idx = base ;  idx < end ;  idx += 1) {
 	    unsigned bit = 0;
 	    if (idx < 0 || idx >= ssize) {
-                  bit = 2; // BIT4_X
+                  bit = two_state ? 0 : 2; // BIT4_0 or BIT4_X
 	    } else {
                   switch (sig->value(idx)) {
 		      case BIT4_0:
@@ -293,15 +302,15 @@ static void format_vpiHexStrVal(const vvp_signal_value*sig, int base, unsigned w
 }
 
 static void format_vpiDecStrVal(const vvp_signal_value*sig, int base, unsigned wid,
-                                int signed_flag, s_vpi_value*vp)
+                                int signed_flag, s_vpi_value*vp, bool two_state = false)
 {
-      unsigned hwid = (sig->value_size()+2) / 3 + 1;
+      unsigned hwid = ((wid > sig->value_size() ? wid : sig->value_size())+2) / 3 + 1;
       char *rbuf = static_cast<char *>(need_result_buf(hwid, RBUF_VAL));
       long ssize = (signed)sig->value_size();
       long end = base + (signed)wid;
 
 	/* Do we have an end outside of the real signal vector. */
-      if (base < 0 || end > ssize) {
+      if (!two_state && (base < 0 || end > ssize)) {
 	    bool all_x = true;
 	    if (end > ssize) end = ssize;
 	    if (base < 0) base = 0;
@@ -326,10 +335,17 @@ static void format_vpiDecStrVal(const vvp_signal_value*sig, int base, unsigned w
       vvp_vector4_t vec4;
       if (base == 0 && end == ssize) {
 	    sig->vec4_value(vec4);
-      } else {
+      } else if (base >= 0 && end <= ssize) {
 	    vvp_vector4_t tmp;
 	    sig->vec4_value(tmp);
 	    vec4 = tmp.subvalue(base, wid);
+      } else {
+	    vec4 = vvp_vector4_t(wid, BIT4_0);
+	    for (unsigned idx = 0; idx < wid; idx += 1) {
+		  long sidx = (long)base + (long)idx;
+		  if (sidx >= 0 && sidx < ssize)
+			vec4.set_bit(idx, sig->value(sidx));
+	    }
       }
 
       vpip_vec4_to_dec_str(vec4, rbuf, hwid, signed_flag);
@@ -338,11 +354,22 @@ static void format_vpiDecStrVal(const vvp_signal_value*sig, int base, unsigned w
 }
 
 static void format_vpiIntVal(const vvp_signal_value*sig, int base, unsigned wid,
-                             int signed_flag, s_vpi_value*vp)
+                             int signed_flag, s_vpi_value*vp, bool two_state = false)
 {
-      vvp_vector4_t tmp;
-      sig->vec4_value(tmp);
-      vvp_vector4_t sub = tmp.subvalue(base, wid);
+      vvp_vector4_t sub;
+      long ssize = (signed)sig->value_size();
+      if (base >= 0 && (long)base + (long)wid <= ssize) {
+	    vvp_vector4_t tmp;
+	    sig->vec4_value(tmp);
+	    sub = tmp.subvalue(base, wid);
+      } else {
+	    sub = vvp_vector4_t(wid, two_state ? BIT4_0 : BIT4_X);
+	    for (unsigned idx = 0; idx < wid; idx += 1) {
+		  long sidx = (long)base + (long)idx;
+		  if (sidx >= 0 && sidx < ssize)
+			sub.set_bit(idx, sig->value(sidx));
+	    }
+      }
 
 	// Normally, we'd be OK with just using long in the call to
 	// vector4_to_value, but some compilers seem to take long as
@@ -410,7 +437,7 @@ static void format_vpiStringVal(const vvp_signal_value*sig, int base, unsigned w
 }
 
 static void format_vpiScalarVal(const vvp_signal_value*sig, int base,
-                                s_vpi_value*vp)
+                                s_vpi_value*vp, bool two_state = false)
 {
       if (base >= 0 && base < (signed)sig->value_size()) {
 	    switch (sig->value(base)) {
@@ -432,12 +459,12 @@ static void format_vpiScalarVal(const vvp_signal_value*sig, int base,
 		  break;
 	    }
       } else {
-	    vp->value.scalar = vpiX;
+	    vp->value.scalar = two_state ? vpi0 : vpiX;
       }
 }
 
 static void format_vpiStrengthVal(const vvp_signal_value*sig, int base,
-                                  unsigned wid, s_vpi_value*vp)
+                                  unsigned wid, s_vpi_value*vp, bool two_state = false)
 {
       long end = base + (signed)wid;
       s_vpi_strengthval*op;
@@ -480,6 +507,10 @@ static void format_vpiStrengthVal(const vvp_signal_value*sig, int base,
 			op[idx-base].s1 = vpiHiZ;
 			break;
 		  }
+	    } else if (two_state) {
+		  op[idx-base].logic = vpi0;
+		  op[idx-base].s0 = vpiStrongDrive;
+		  op[idx-base].s1 = 0;
 	    } else {
 		  op[idx-base].logic = vpiX;
 		  op[idx-base].s0 = vpiStrongDrive;
@@ -491,7 +522,7 @@ static void format_vpiStrengthVal(const vvp_signal_value*sig, int base,
 }
 
 static void format_vpiVectorVal(const vvp_signal_value*sig, int base, unsigned wid,
-                                s_vpi_value*vp)
+                                s_vpi_value*vp, bool two_state = false)
 {
       long end = base + (signed)wid;
       unsigned int obit = 0;
@@ -503,28 +534,32 @@ static void format_vpiVectorVal(const vvp_signal_value*sig, int base, unsigned w
 
       op->aval = op->bval = 0;
       for (long idx = base ;  idx < end ;  idx += 1) {
-	    if (base >= 0 && base < (signed)sig->value_size()) {
+	    uint32_t bit_mask = (uint32_t)1 << obit;
+	    if (idx >= 0 && idx < (signed)sig->value_size()) {
 		switch (sig->value(idx)) {
 		case BIT4_0:
-		  op->aval &= ~(1 << obit);
-		  op->bval &= ~(1 << obit);
+		  op->aval &= ~bit_mask;
+		  op->bval &= ~bit_mask;
 		  break;
 		case BIT4_1:
-		  op->aval |= (1 << obit);
-		  op->bval &= ~(1 << obit);
+		  op->aval |= bit_mask;
+		  op->bval &= ~bit_mask;
 		  break;
 		case BIT4_X:
-		  op->aval |= (1 << obit);
-		  op->bval |= (1 << obit);
+		  op->aval |= bit_mask;
+		  op->bval |= bit_mask;
 		  break;
 		case BIT4_Z:
-		  op->aval &= ~(1 << obit);
-		  op->bval |= (1 << obit);
+		  op->aval &= ~bit_mask;
+		  op->bval |= bit_mask;
 		  break;
 		}
+	    } else if (two_state) { /* BIT4_0 */
+		  op->aval &= ~bit_mask;
+		  op->bval &= ~bit_mask;
 	    } else {  /* BIT4_X */
-		  op->aval |= (1 << obit);
-		  op->bval |= (1 << obit);
+		  op->aval |= bit_mask;
+		  op->bval |= bit_mask;
 	    }
 
 	    obit++;
@@ -1424,27 +1459,28 @@ static void PV_get_value(vpiHandle ref, p_vpi_value vp)
 
       vvp_signal_value*sig = dynamic_cast<vvp_signal_value*>(rfp->net->fil);
       assert(sig);
+      bool two_state = is_two_state_vpi_signal(rfp->parent);
 
       switch (vp->format) {
 
 	  case vpiIntVal:
-	    format_vpiIntVal(sig, PV_get_base(rfp), rfp->width, 0, vp);
+	    format_vpiIntVal(sig, PV_get_base(rfp), rfp->width, 0, vp, two_state);
 	    break;
 
 	  case vpiBinStrVal:
-	    format_vpiBinStrVal(sig, PV_get_base(rfp), rfp->width, vp);
+	    format_vpiBinStrVal(sig, PV_get_base(rfp), rfp->width, vp, two_state);
 	    break;
 
 	  case vpiOctStrVal:
-	    format_vpiOctStrVal(sig, PV_get_base(rfp), rfp->width, vp);
+	    format_vpiOctStrVal(sig, PV_get_base(rfp), rfp->width, vp, two_state);
 	    break;
 
 	  case vpiHexStrVal:
-	    format_vpiHexStrVal(sig, PV_get_base(rfp), rfp->width, vp);
+	    format_vpiHexStrVal(sig, PV_get_base(rfp), rfp->width, vp, two_state);
 	    break;
 
 	  case vpiDecStrVal:
-	    format_vpiDecStrVal(sig, PV_get_base(rfp), rfp->width, 0, vp);
+	    format_vpiDecStrVal(sig, PV_get_base(rfp), rfp->width, 0, vp, two_state);
 	    break;
 
 	  case vpiStringVal:
@@ -1452,19 +1488,29 @@ static void PV_get_value(vpiHandle ref, p_vpi_value vp)
 	    break;
 
 	  case vpiScalarVal:
-	    format_vpiScalarVal(sig, PV_get_base(rfp), vp);
+	    format_vpiScalarVal(sig, PV_get_base(rfp), vp, two_state);
 	    break;
 
 	  case vpiStrengthVal:
-	    format_vpiStrengthVal(sig, PV_get_base(rfp), rfp->width, vp);
+	    format_vpiStrengthVal(sig, PV_get_base(rfp), rfp->width, vp, two_state);
 	    break;
 
 	  case vpiVectorVal:
-	    format_vpiVectorVal(sig, PV_get_base(rfp), rfp->width, vp);
+	    format_vpiVectorVal(sig, PV_get_base(rfp), rfp->width, vp, two_state);
 	    break;
 
 	  case vpiRealVal:
 	    format_vpiRealVal(sig, PV_get_base(rfp), rfp->width, 0, vp);
+	    break;
+
+	  case vpiObjTypeVal:
+	    if (rfp->width == 1) {
+		  vp->format = vpiScalarVal;
+		  format_vpiScalarVal(sig, PV_get_base(rfp), vp, two_state);
+	    } else {
+		  vp->format = vpiVectorVal;
+		  format_vpiVectorVal(sig, PV_get_base(rfp), rfp->width, vp, two_state);
+	    }
 	    break;
 
 	  default:

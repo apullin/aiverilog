@@ -224,9 +224,12 @@ static int get_vpi_taskfunc_signal_arg(struct args_info *result,
 		 word. This would come up in expressions like
 		 "array[<word>][<part>]" where wexpr is <word> */
 	    if (wexpr && number_is_immediate(wexpr, 64, 1)
-		&& number_is_immediate(bexpr, 64, 1)) {
-		  assert(! number_is_unknown(bexpr));
-		  assert(! number_is_unknown(wexpr));
+		&& number_is_immediate(bexpr, 64, 1)
+		&& !number_is_unknown(wexpr) && !number_is_unknown(bexpr)
+		&& get_number_immediate(wexpr) >= 0
+		&& get_number_immediate(bexpr) >= 0
+		&& (unsigned long)get_number_immediate(bexpr) + ivl_expr_width(expr)
+		   <= ivl_signal_width(ivl_expr_signal(vexpr))) {
 		  snprintf(buffer, sizeof buffer, "&APV<v%p, %ld, %ld, %u>",
 			   ivl_expr_signal(vexpr),
 			   get_number_immediate(wexpr),
