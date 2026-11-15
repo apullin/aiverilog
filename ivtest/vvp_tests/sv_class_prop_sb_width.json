@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "sv_class_prop_sb_width.v",
+    "iverilog-args" : [ "-g2012" ]
+}
