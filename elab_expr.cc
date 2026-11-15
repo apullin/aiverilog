@@ -543,6 +543,19 @@ NetExpr* elaborate_rval_expr(Design*des, NetScope*scope, ivl_type_t lv_net_type,
 
       if (rval == nullptr) return nullptr;
 
+      if (const netdarray_t*lval_da = dynamic_cast<const netdarray_t*>(lv_net_type)) {
+	    if (const netdarray_t*rval_da = dynamic_cast<const netdarray_t*>(rval->net_type())) {
+		  if (!lval_da->element_type()->type_equivalent(rval_da->element_type())) {
+			cerr << expr->get_fileline() << ": error: Cannot assign "
+			     << *rval_da << " to " << *lval_da
+			     << " (incompatible element types)." << endl;
+			des->errors += 1;
+			delete rval;
+			return nullptr;
+		  }
+	    }
+      }
+
       const netenum_t *lval_enum = dynamic_cast<const netenum_t*>(lv_net_type);
       if (lval_enum) {
 	    const netenum_t *rval_enum = rval->enumeration();
