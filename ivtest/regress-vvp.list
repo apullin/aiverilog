@@ -552,6 +552,7 @@ shiftr_wide			vvp_tests/shiftr_wide.json
 single_element_array		vvp_tests/single_element_array.json
 specify6			vvp_tests/specify6.json
 specify_invalid_path_fail	vvp_tests/specify_invalid_path_fail.json
+sscanf_string_var_formats	vvp_tests/sscanf_string_var_formats.json
 specparam_range_list		vvp_tests/specparam_range_list.json
 specparam_range_list_generate_fail	vvp_tests/specparam_range_list_generate_fail.json
 specparam_reference_order_fail	vvp_tests/specparam_reference_order_fail.json
