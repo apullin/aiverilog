@@ -341,6 +341,11 @@ int draw_lpm(vhdl_arch *arch, ivl_lpm_t lpm)
    // replaced by an idiomatic VHDL construct rather than a call to a
    // conversion function
 
+   if (out == NULL || f == NULL || out->get_type() == NULL || f->get_type() == NULL) {
+      error("Failed to translate LPM %s", ivl_lpm_name(lpm));
+      return 1;
+   }
+
    bool bool_to_logic =
       out->get_type()->get_name() == VHDL_TYPE_STD_LOGIC
       && f->get_type()->get_name() == VHDL_TYPE_BOOLEAN;

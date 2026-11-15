@@ -774,7 +774,10 @@ static int draw_function(ivl_scope_t scope, ivl_scope_t parent)
 
    // Find the containing entity
    vhdl_entity *ent = find_entity(parent);
-   assert(ent);
+   if (!ent) {
+      error("Functions outside module scopes are not supported in VHDL target");
+      return 0;
+   }
 
    const char *funcname = ivl_scope_tname(scope);
 
@@ -795,6 +798,11 @@ static int draw_function(ivl_scope_t scope, ivl_scope_t parent)
    int nports = ivl_scope_ports(scope);
    for (int i = 0; i < nports; i++) {
       ivl_signal_t sig = ivl_scope_port(scope, i);
+      if (sig == NULL) {
+         error("Void function %s is not supported in VHDL target", funcname);
+         delete func;
+         return 0;
+      }
 
       const vhdl_type *sigtype =
          vhdl_type::type_for(ivl_signal_width(sig),
@@ -815,8 +823,9 @@ static int draw_function(ivl_scope_t scope, ivl_scope_t parent)
             (new vhdl_var_decl(signame, sigtype));
          break;
       default:
-         // Only expecting inputs and outputs
-         assert(false);
+         error("Function inout/ref port %s is not supported in VHDL target",
+               signame.c_str());
+         return 0;
       }
 
       remember_signal(sig, func->get_scope());
@@ -875,7 +884,10 @@ static int draw_task(ivl_scope_t scope, ivl_scope_t parent)
 
    // Find the containing entity
    vhdl_entity *ent = find_entity(parent);
-   assert(ent);
+   if (!ent) {
+      error("Tasks outside module scopes are not supported in VHDL target");
+      return 0;
+   }
 
    const char *taskname = ivl_scope_tname(scope);
 
@@ -1022,11 +1034,12 @@ extern "C" int draw_all_signals(ivl_scope_t scope, void *)
       // containing entity (after being uniqued)
 
       ivl_scope_t parent = ivl_scope_parent(scope);
-      while (ivl_scope_type(parent) == IVL_SCT_GENERATE)
-         parent = ivl_scope_parent(scope);
+      while (parent && ivl_scope_type(parent) == IVL_SCT_GENERATE)
+         parent = ivl_scope_parent(parent);
 
       vhdl_entity* ent = find_entity(parent);
-      assert(ent);
+      if (!ent)
+         return 0;
 
       declare_signals(ent, scope);
    }
@@ -1092,7 +1105,10 @@ extern "C" int draw_constant_drivers(ivl_scope_t scope, void *)
 
             if (priv->const_driver
                 && ivl_signal_port(sig) != IVL_SIP_INPUT) { // Don't drive inputs
-               assert(j == 0);   // TODO: Make work for more words
+               if (j != 0) {
+                  error("Constant drivers on unpacked array words are not supported in VHDL target");
+                  continue;
+               }
 
                vhdl_var_ref *ref = nexus_to_var_ref(arch_scope, nex);
 

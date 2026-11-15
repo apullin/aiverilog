@@ -263,7 +263,10 @@ static vhdl_var_ref *make_assign_lhs(ivl_lval_t lval, vhdl_scope *scope)
 
    string signame(get_renamed_signal(sig));
    vhdl_decl *decl = scope->get_decl(signame);
-   assert(decl);
+   if (!decl) {
+      error("Signal %s is not declared in VHDL scope", signame.c_str());
+      return NULL;
+   }
 
    // Verilog allows assignments to elements that are constant in VHDL:
    // function parameters, for example

@@ -208,8 +208,9 @@ vhdl_expr *vhdl_expr::to_std_logic()
 
       return ah;
    }
-   assert(false);
-   return NULL;
+   error("Unable to convert expression of type %s to std_logic",
+         type_->get_string().c_str());
+   return new vhdl_const_bit('X');
 }
 
 vhdl_expr *vhdl_expr::to_std_ulogic()
@@ -236,14 +237,7 @@ vhdl_expr *vhdl_expr::resize(int newwidth)
    else if (type_->get_name() == VHDL_TYPE_UNSIGNED)
       rtype = vhdl_type::nunsigned(newwidth);
    else if (type_->get_name() == VHDL_TYPE_STD_LOGIC) {
-      // Pad it with zeros
-      vhdl_expr* zeros = new vhdl_const_bits(string(newwidth - 1, '0').c_str(),
-                                             newwidth - 1, false, true);
-
-      vhdl_binop_expr* concat =
-         new vhdl_binop_expr(zeros, VHDL_BINOP_CONCAT, this,
-                             vhdl_type::nunsigned(newwidth));
-      return concat;
+      return to_vector(VHDL_TYPE_UNSIGNED, newwidth);
    }
    else
       return this;   // Doesn't make sense to resize non-vector type
@@ -273,9 +267,11 @@ vhdl_expr *vhdl_const_int::to_vector(vhdl_type_name_t name, int w)
 
 int64_t vhdl_const_bits::bits_to_int() const
 {
+   if (value_.empty())
+      return 0;
    char msb = value_[value_.size() - 1];
-   int64_t result = 0, bit;
-   for (int i = sizeof(int64_t)*8 - 1; i >= 0; i--) {
+   uint64_t result = 0, bit;
+   for (int i = sizeof(uint64_t)*8 - 1; i >= 0; i--) {
       if (i > (int)value_.size() - 1)
          bit = (msb == '1' && signed_) ? 1 : 0;
       else
@@ -283,7 +279,7 @@ int64_t vhdl_const_bits::bits_to_int() const
       result = (result << 1) | bit;
    }
 
-   return result;
+   return static_cast<int64_t>(result);
 }
 
 vhdl_expr *vhdl_const_bits::to_std_logic()
@@ -293,13 +289,15 @@ vhdl_expr *vhdl_const_bits::to_std_logic()
    // But we don't need to here as we have the bits available
 
    // Take the least significant bit
-   char lsb = value_[0];
+   char lsb = value_.empty() ? '0' : value_[0];
 
    return new vhdl_const_bit(lsb);
 }
 
 char vhdl_const_bits::sign_bit() const
 {
+   if (value_.empty())
+      return '0';
    return signed_ ? value_[value_.length()-1] : '0';
 }
 
