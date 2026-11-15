@@ -1164,6 +1164,7 @@ vpi_function_signedness		vvp_tests/vpi_function_signedness.json
 vpi_interconnect_scope		vvp_tests/vpi_interconnect_scope.json
 vpi_net_array_word_select_signedness	vvp_tests/vpi_net_array_word_select_signedness.json
 vpi_part_select_range		vvp_tests/vpi_part_select_range.json
+vpi_pv_oob_clog2		vvp_tests/vpi_pv_oob_clog2.json
 vpi_queue_pattern_prefix	vvp_tests/vpi_queue_pattern_prefix.json
 vpi_short_package_fullname	vvp_tests/vpi_short_package_fullname.json
 vpi_vector4_integer		vvp_tests/vpi_vector4_integer.json
