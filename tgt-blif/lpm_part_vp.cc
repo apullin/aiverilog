@@ -73,7 +73,11 @@ static int print_part_vp_mux(FILE*fd, ivl_lpm_t net)
 
 	// Only handle bit selects.
       size_t o_wid = ned_out->get_width();
-      assert(1 == o_wid);
+      if (1 != o_wid) {
+	    fprintf(stderr, "%s:%u: sorry: BLIF: Multi-bit variable part-selects are not supported yet.\n",
+		    ivl_lpm_file(net), ivl_lpm_lineno(net));
+	    return 1;
+      }
 
       ivl_nexus_t nex_in = ivl_lpm_data(net,0);
       blif_nex_data_t*ned_in = blif_nex_data_t::get_nex_data(nex_in);
@@ -84,7 +88,11 @@ static int print_part_vp_mux(FILE*fd, ivl_lpm_t net)
       unsigned sel_wid = ned_sel->get_width();
       unsigned in_wid = ned_in->get_width();
 
-      assert((1U<<sel_wid) <= in_wid);
+      if (sel_wid >= 8*sizeof(unsigned) || (1U<<sel_wid) > in_wid) {
+	    fprintf(stderr, "%s:%u: sorry: BLIF: Variable bit-select index wider than log2(vector width) is not supported yet.\n",
+		    ivl_lpm_file(net), ivl_lpm_lineno(net));
+	    return 1;
+      }
 
       fprintf(fd, ".names ");
       for (unsigned idx = 0 ; idx < sel_wid ; idx += 1) {

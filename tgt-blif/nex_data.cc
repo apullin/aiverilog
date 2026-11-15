@@ -64,18 +64,25 @@ void blif_nex_data_t::make_name_from_sig_(ivl_signal_t sig)
       if (ivl_signal_width(sig) > 1) {
 	    name_index_.resize(ivl_signal_width(sig));
 
-	    assert(ivl_signal_packed_dimensions(sig) == 1);
-	    int msb = ivl_signal_packed_msb(sig,0);
-	    int lsb = ivl_signal_packed_lsb(sig,0);
-	    int dir = (lsb <= msb)? 1 : -1;
+	    if (ivl_signal_packed_dimensions(sig) == 1) {
+		  int msb = ivl_signal_packed_msb(sig,0);
+		  int lsb = ivl_signal_packed_lsb(sig,0);
+		  int dir = (lsb <= msb)? 1 : -1;
 
-	    int val = lsb;
-	    for (unsigned idx = 0 ; idx < ivl_signal_width(sig) ; idx += 1) {
+		  int val = lsb;
+		  for (unsigned idx = 0 ; idx < ivl_signal_width(sig) ; idx += 1) {
 
-		  char buf[64];
-		  snprintf(buf, sizeof buf, "[%d]", val);
-		  name_index_[idx] = strdup(buf);
-		  val += dir;
+			char buf[64];
+			snprintf(buf, sizeof buf, "[%d]", val);
+			name_index_[idx] = strdup(buf);
+			val += dir;
+		  }
+	    } else {
+		  for (unsigned idx = 0 ; idx < ivl_signal_width(sig) ; idx += 1) {
+			char buf[64];
+			snprintf(buf, sizeof buf, "[%u]", idx);
+			name_index_[idx] = strdup(buf);
+		  }
 	    }
       }
 }
