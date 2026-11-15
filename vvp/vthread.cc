@@ -6430,6 +6430,12 @@ bool of_SET_VEC4(vthread_t thr, vvp_code_t cp)
       return true;
 }
 
+bool of_SWAP_VEC4(vthread_t thr, vvp_code_t)
+{
+      std::swap(thr->peek_vec4_mutable(0), thr->peek_vec4_mutable(1));
+      return true;
+}
+
 static inline void shift_left(vvp_vector4_t&val, uint64_t shift)
 {
       unsigned wid = val.size();

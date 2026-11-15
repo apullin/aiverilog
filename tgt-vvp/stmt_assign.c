@@ -326,8 +326,8 @@ static void store_vec4_to_lval(ivl_statement_t net)
       for (unsigned lidx = 0 ; lidx < ivl_stmt_lvals(net) ; lidx += 1) {
 	    ivl_lval_t lval = ivl_stmt_lval(net,lidx);
 	    ivl_signal_t lsig = ivl_lval_sig(lval);
-	    const char*store_op = event_aware_store_op(lsig);
 	    unsigned lwid = ivl_lval_width(lval);
+	    int prop_idx = ivl_lval_property_idx(lval);
 
 
 	    ivl_expr_t part_off_ex = ivl_lval_part_off(lval);
@@ -338,6 +338,89 @@ static void store_vec4_to_lval(ivl_statement_t net)
 	    if (lidx+1 < ivl_stmt_lvals(net))
 		  fprintf(vvp_out, "    %%split/vec4 %u;\n", lwid);
 
+	    if (prop_idx >= 0) {
+		  ivl_type_t sig_type = draw_lval_expr(lval);
+		  ivl_type_t prop_type = ivl_type_prop_type(sig_type, prop_idx);
+		  assert(ivl_type_base(prop_type) == IVL_VT_BOOL ||
+			 ivl_type_base(prop_type) == IVL_VT_LOGIC);
+		  if (part_off_ex) {
+			unsigned prop_wid = ivl_type_packed_width(prop_type);
+			int part_idx = allocate_word();
+			int undef_flag = allocate_flag();
+			draw_eval_expr_into_integer(part_off_ex, part_idx);
+			fprintf(vvp_out, "    %%flag_mov %d, 4;\n", undef_flag);
+			fprintf(vvp_out, "    %%prop/v %d;\n", prop_idx);
+			fprintf(vvp_out, "    %%swap/vec4;\n");
+			fprintf(vvp_out, "    %%flag_mov 4, %d;\n", undef_flag);
+			fprintf(vvp_out, "    %%set/vec4 %d, %u;\n", part_idx, lwid);
+			if (ivl_type_base(prop_type) == IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+			fprintf(vvp_out, "    %%store/prop/v %d, %u; Store slice in property %s\n",
+				prop_idx, prop_wid, ivl_type_prop_name(sig_type, prop_idx));
+			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+			clr_flag(undef_flag);
+			clr_word(part_idx);
+		  } else {
+			if (ivl_type_base(prop_type) == IVL_VT_BOOL &&
+			    ivl_expr_value(ivl_stmt_rval(net)) != IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+			fprintf(vvp_out, "    %%store/prop/v %d, %u; Store in logic property %s\n",
+				prop_idx, lwid, ivl_type_prop_name(sig_type, prop_idx));
+			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+		  }
+		  continue;
+	    }
+
+	    if (lsig && (ivl_signal_data_type(lsig) == IVL_VT_DARRAY ||
+			 ivl_signal_data_type(lsig) == IVL_VT_QUEUE)) {
+		  ivl_type_t var_type = ivl_signal_net_type(lsig);
+		  ivl_type_t element_type = ivl_type_element(var_type);
+		  assert(word_ex != 0);
+		  assert(ivl_type_base(element_type) == IVL_VT_BOOL ||
+			 ivl_type_base(element_type) == IVL_VT_LOGIC);
+		  if (part_off_ex) {
+			int mux_word = allocate_word();
+			int mux_flag = allocate_flag();
+			int part_idx = allocate_word();
+			int part_flag = allocate_flag();
+			draw_eval_expr_into_integer(word_ex, mux_word);
+			fprintf(vvp_out, "    %%flag_mov %d, 4;\n", mux_flag);
+			draw_eval_expr_into_integer(part_off_ex, part_idx);
+			fprintf(vvp_out, "    %%flag_mov %d, 4;\n", part_flag);
+			fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
+			fprintf(vvp_out, "    %%flag_mov 4, %d;\n", mux_flag);
+			fprintf(vvp_out, "    %%load/dar/vec4 v%p_0;\n", lsig);
+			fprintf(vvp_out, "    %%swap/vec4;\n");
+			fprintf(vvp_out, "    %%flag_mov 4, %d;\n", part_flag);
+			fprintf(vvp_out, "    %%set/vec4 %d, %u;\n", part_idx, lwid);
+			if (ivl_type_base(element_type) == IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+			fprintf(vvp_out, "    %%ix/mov 3, %d;\n", mux_word);
+			fprintf(vvp_out, "    %%flag_mov 4, %d;\n", mux_flag);
+			clr_flag(part_flag);
+			clr_word(part_idx);
+			clr_flag(mux_flag);
+			clr_word(mux_word);
+		  } else {
+			if (ivl_type_base(element_type) == IVL_VT_BOOL &&
+			    ivl_expr_value(ivl_stmt_rval(net)) != IVL_VT_BOOL)
+			      fprintf(vvp_out, "    %%cast2;\n");
+			draw_eval_expr_into_integer(word_ex, 3);
+		  }
+		  if (ivl_signal_data_type(lsig) == IVL_VT_QUEUE) {
+			int qmax = allocate_word();
+			fprintf(vvp_out, "    %%ix/load %d, %u, 0;\n",
+				qmax, ivl_signal_array_count(lsig));
+			fprintf(vvp_out, "    %%store/qdar/v v%p_0, %d, %u;\n",
+				lsig, qmax, ivl_type_packed_width(element_type));
+			clr_word(qmax);
+		  } else {
+			fprintf(vvp_out, "    %%store/dar/vec4 v%p_0;\n", lsig);
+		  }
+		  continue;
+	    }
+
+	    const char*store_op = event_aware_store_op(lsig);
 	    if (ivl_signal_data_type(lsig) == IVL_VT_BOOL &&
 		ivl_expr_value(ivl_stmt_rval(net)) != IVL_VT_BOOL) {
 		  fprintf(vvp_out, "    %%cast2;\n");
@@ -1625,6 +1708,10 @@ int show_stmt_assign(ivl_statement_t net)
       ivl_signal_t sig;
 
       show_stmt_file_line(net, "Blocking assignment.");
+
+      if (ivl_stmt_lvals(net) > 1) {
+	    return show_stmt_assign_vector(net);
+      }
 
       lval = ivl_stmt_lval(net, 0);
 
