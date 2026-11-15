@@ -429,6 +429,12 @@ void dll_target::expr_property(const NetEProperty*net)
 	    index = expr_;
 	    expr_ = 0;
       }
+      ivl_expr_t array_idx = 0;
+      if (const NetExpr*arr_expr = net->get_array_index()) {
+	    arr_expr->expr_scan(this);
+	    array_idx = expr_;
+	    expr_ = 0;
+      }
       assert(expr_ == 0);
       expr_ = static_cast<ivl_expr_t>(calloc(1, sizeof(struct ivl_expr_s)));
       expr_->width_  = net->expr_width();
@@ -441,6 +447,7 @@ void dll_target::expr_property(const NetEProperty*net)
       expr_->u_.property_.sig = find_signal(net->get_sig());
       expr_->u_.property_.prop_idx = net->property_idx();
       expr_->u_.property_.index = index;
+      expr_->u_.property_.array_idx = array_idx;
 }
 
 void dll_target::expr_event(const NetEEvent*net)

@@ -629,7 +629,7 @@ static void draw_property_vec4(ivl_expr_t expr)
 		  if (pbase == IVL_VT_QUEUE || pbase == IVL_VT_DARRAY) {
 			unsigned wid = ivl_expr_width(expr);
 			draw_eval_expr_into_integer(index_ex, 3);
-			fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
+			draw_load_property_object(expr);
 			fprintf(vvp_out, "    %%load/prop/dar/vec4 %u, %u;\n",
 			        pidx, wid);
 			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
@@ -641,7 +641,7 @@ static void draw_property_vec4(ivl_expr_t expr)
 	    }
       }
 
-      fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
+      draw_load_property_object(expr);
       fprintf(vvp_out, "    %%prop/v %u;\n", pidx);
       fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
 }

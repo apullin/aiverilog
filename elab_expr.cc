@@ -87,11 +87,36 @@ static NetExpr* elab_queue_locator_cmp_arg(Design* des, NetScope* scope,
 			   ivl_type_base(element_type));
 }
 
+static bool extract_locator_iter_name(Design* des, const LineInfo& loc,
+				      const vector<named_pexpr_t>& parms,
+				      perm_string& iter_name)
+{
+      if (parms.empty()) {
+	    iter_name = lex_strings.make("item");
+	    return true;
+      }
+      if (parms.size() == 1 && parms[0].name.nil()) {
+	    if (const PEIdent* id = dynamic_cast<const PEIdent*>(parms[0].parm)) {
+		  const pform_scoped_name_t& sp = id->path();
+		  if (!sp.package && sp.name.size() == 1 && sp.name.front().index.empty()) {
+			iter_name = sp.name.front().name;
+			return true;
+		  }
+	    }
+      }
+      cerr << loc.get_fileline() << ": error: array locator "
+	   << "`with` clause cannot be combined with a "
+	   << "method argument." << endl;
+      des->errors += 1;
+      return false;
+}
+
 /* Elaborate `with (expr)` for array locator methods: implicit item/index nets. */
 static NetExpr* elab_queue_locator_with_predicate(
     Design* des, NetScope* scope, const LineInfo& loc,
     PExpr* with_expr, NetExpr* queue_arg, ivl_type_t element_type,
-    ivl_type_t result_type, perm_string method_suffix)
+    ivl_type_t result_type, perm_string method_suffix,
+    perm_string iter_name)
 {
       static unsigned with_scope_counter = 0;
       char buf[64];
@@ -104,7 +129,7 @@ static NetExpr* elab_queue_locator_with_predicate(
       const netvector_t* item_vec = new netvector_t(ivl_type_base(element_type),
 						    (long)ew - 1, 0,
 						    ivl_type_signed(element_type));
-      NetNet* item_net = new NetNet(ws, lex_strings.make("item"), NetNet::REG,
+      NetNet* item_net = new NetNet(ws, iter_name, NetNet::REG,
 				    item_vec);
       item_net->set_line(loc);
       item_net->local_flag(true);
@@ -210,16 +235,13 @@ static NetExpr* elab_array_locator_method(Design* des, NetScope* scope,
 		    method_name == "min" || method_name == "max";
 
       if (with_expr) {
-	    if (!parms.empty()) {
-		  cerr << loc.get_fileline() << ": error: array locator "
-		       << "`with` clause cannot be combined with a "
-		       << "method argument." << endl;
-		  des->errors += 1;
+	    perm_string iter_name;
+	    if (!extract_locator_iter_name(des, loc, parms, iter_name))
 		  return 0;
-	    }
 	    return elab_queue_locator_with_predicate(des, scope, loc, with_expr,
 						     array_arg, element_type,
-						     result_type, method_name);
+						     result_type, method_name,
+						     iter_name);
       }
 
       if (no_arg) {
@@ -332,16 +354,13 @@ static NetExpr* elab_array_reduction_method(Design* des, NetScope* scope,
       snprintf(sfunc, sizeof sfunc, "$ivl_uparr_method$%s", method_name.str());
 
       if (with_expr) {
-	    if (!parms.empty()) {
-		  cerr << loc.get_fileline() << ": error: array locator "
-		       << "`with` clause cannot be combined with a "
-		       << "method argument." << endl;
-		  des->errors += 1;
+	    perm_string iter_name;
+	    if (!extract_locator_iter_name(des, loc, parms, iter_name))
 		  return 0;
-	    }
 	    return elab_queue_locator_with_predicate(des, scope, loc, with_expr,
 						     array_arg, element_type,
-						     element_type, method_name);
+						     element_type, method_name,
+						     iter_name);
       }
 
       if (parms.size() != 0) {
@@ -1123,13 +1142,22 @@ NetExpr* PEAssignPattern::elaborate_expr_struct_(Design *des, NetScope *scope,
 	    des->errors++;
       }
 
-      NetEConcat *neconcat = new NetEConcat(parms.size(), 1, struct_type->base_type());
-      for (size_t idx = 0; idx < std::min(parms.size(), members.size()); idx++) {
+      bool had_err = (members.size() != parms.size());
+      size_t n_elab = std::min(parms.size(), members.size());
+      NetEConcat *neconcat = new NetEConcat(n_elab, 1, struct_type->base_type());
+      for (size_t idx = 0; idx < n_elab; idx++) {
 	    auto expr = elaborate_rval_expr(des, scope,
 					    members[idx].net_type,
 					    parms[idx], need_const);
 	    if (expr)
 		  neconcat->set(idx, expr);
+	    else
+		  had_err = true;
+      }
+
+      if (had_err) {
+	    delete neconcat;
+	    return nullptr;
       }
 
       return neconcat;
@@ -2814,10 +2842,87 @@ unsigned PECallFunction::test_width_method_(Design*, NetScope*,
 		       << "search_results.par_val->expr_type: " << search_results.par_val->expr_type() << endl;
       }
 
-      // Chained class methods: obj.m1().m2() — width is that of the last call.
+      // Chained class methods or methods on class properties: obj.m1().m2() or obj.prop.m()
       if (search_results.path_tail.size() > 1) {
 	    if (search_results.net && search_results.net->data_type()==IVL_VT_CLASS) {
 		  const netclass_t* cur_class = dynamic_cast<const netclass_t*>(search_results.type);
+		  if (!cur_class && search_results.net->net_type())
+			cur_class = dynamic_cast<const netclass_t*>(search_results.net->net_type());
+		  if (cur_class && search_results.path_tail.size() == 2) {
+			perm_string prop_name = search_results.path_tail.front().name;
+			perm_string mname = search_results.path_tail.back().name;
+			int pidx = cur_class->property_idx_from_name(prop_name);
+			if (pidx >= 0) {
+			      ivl_type_t ptype = cur_class->get_prop_type(pidx);
+			      if (ptype && ptype->base_type() == IVL_VT_STRING) {
+				    if (mname == "len" || mname == "compare" || mname == "icompare" ||
+				        mname == "atoi" || mname == "atohex" || mname == "atooct" || mname == "atobin") {
+					  expr_type_ = IVL_VT_BOOL;
+					  min_width_ = expr_width_ = 32;
+					  signed_flag_ = true;
+					  return expr_width_;
+				    }
+				    if (mname == "getc") {
+					  expr_type_ = IVL_VT_BOOL;
+					  min_width_ = expr_width_ = 8;
+					  signed_flag_ = true;
+					  return expr_width_;
+				    }
+				    if (mname == "toupper" || mname == "tolower" || mname == "substr") {
+					  expr_type_ = IVL_VT_STRING;
+					  min_width_ = expr_width_ = 1;
+					  signed_flag_ = false;
+					  return expr_width_;
+				    }
+			      }
+			      if (const netenum_t*ne = dynamic_cast<const netenum_t*>(ptype)) {
+				    if (mname == "name") {
+					  expr_type_ = IVL_VT_STRING;
+					  min_width_ = expr_width_ = 1;
+					  signed_flag_ = false;
+					  return expr_width_;
+				    }
+				    if (mname == "num") {
+					  expr_type_ = IVL_VT_BOOL;
+					  min_width_ = expr_width_ = 32;
+					  signed_flag_ = true;
+					  return expr_width_;
+				    }
+				    if (mname == "first" || mname == "last" || mname == "next" || mname == "prev") {
+					  expr_type_ = ne->base_type();
+					  min_width_ = expr_width_ = ne->packed_width();
+					  signed_flag_ = ne->get_signed();
+					  return expr_width_;
+				    }
+			      }
+			      if (ptype && (ptype->base_type() == IVL_VT_DARRAY || ptype->base_type() == IVL_VT_QUEUE)) {
+				    if (mname == "size") {
+					  expr_type_ = IVL_VT_BOOL;
+					  min_width_ = expr_width_ = 32;
+					  signed_flag_ = true;
+					  return expr_width_;
+				    }
+				    if (mname == "sum" || mname == "product" || mname == "and" || mname == "or" || mname == "xor") {
+					  ivl_type_t et = ivl_type_element(ptype);
+					  expr_type_ = ivl_type_base(et);
+					  min_width_ = expr_width_ = ivl_type_packed_width(et);
+					  signed_flag_ = ivl_type_signed(et);
+					  return expr_width_;
+				    }
+			      }
+			      if (const netclass_t*prop_cls = dynamic_cast<const netclass_t*>(ptype)) {
+				    NetScope*meth = prop_cls->method_from_name(mname);
+				    if (meth) {
+					  if (const NetNet*res = meth->find_signal(meth->basename())) {
+						expr_type_ = res->data_type();
+						min_width_ = expr_width_ = res->vector_width();
+						signed_flag_ = res->get_signed();
+						return expr_width_;
+					  }
+				    }
+			      }
+			}
+		  }
 		  if (cur_class) {
 			size_t ntail = search_results.path_tail.size();
 			size_t idx = 0;
@@ -3273,6 +3378,9 @@ unsigned PECallFunction::test_width(Design*des, NetScope*scope,
 
 NetExpr*PECallFunction::cast_to_width_(NetExpr*expr, unsigned wid) const
 {
+      if (expr == 0)
+	    return 0;
+
       if (debug_elaborate) {
             cerr << get_fileline() << ": PECallFunction::cast_to_width_: "
 		 << "cast to " << wid
@@ -3933,7 +4041,14 @@ static NetExpr* check_for_struct_members(const LineInfo*li,
 	    }
 
 	    off += tmp_off;
-	    ivl_assert(*li, use_width >= (unsigned long)member_type->packed_width());
+	    if (use_width < (unsigned long)member_type->packed_width()) {
+		  if (des->errors == 0) {
+			cerr << li->get_fileline() << ": error: Invalid packed "
+			     << "member width for " << member_name << "." << endl;
+			des->errors += 1;
+		  }
+		  return nullptr;
+	    }
 	    use_width = member_type->packed_width();
 
 	      // At this point, off and use_width are the part select
@@ -4510,18 +4625,32 @@ NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 				      expr_wid, flags);
       }
 
+      NetExpr *obj_arr_idx = nullptr;
+      if (sr.net->unpacked_dimensions() > 0 && !sr.path_head.back().index.empty()) {
+	    PEIdent obj_id(sr.path_head, lexical_pos());
+	    obj_id.set_line(*this);
+	    NetExpr*obj_ex = obj_id.elaborate_expr(des, scope, -1, 0);
+	    if (!obj_ex) return nullptr;
+	    if (const NetESignal*sig_ex = dynamic_cast<const NetESignal*>(obj_ex)) {
+		  if (sig_ex->word_index())
+			obj_arr_idx = sig_ex->word_index()->dup_expr();
+	    }
+	    delete obj_ex;
+      }
+
       NetExpr *canon_index = nullptr;
       ivl_type_t tmp_type = class_type->get_prop_type(pidx);
       if (sr.path_tail.size() > 1) {
 	    const netstruct_t*st = dynamic_cast<const netstruct_t*>(tmp_type);
 	    if (st && st->packed() && comp.index.empty()) {
-		  NetEProperty*prop = new NetEProperty(sr.net, pidx, nullptr);
+		  NetEProperty*prop = new NetEProperty(sr.net, pidx, nullptr, obj_arr_idx);
 		  prop->set_line(*this);
 		  pform_name_t rem = sr.path_tail;
 		  rem.pop_front();
 		  return elaborate_packed_struct_expr_tail(
 			des, scope, this, prop, st, comp.name, rem);
 	    }
+	    delete obj_arr_idx;
 	    cerr << get_fileline() << ": sorry: "
 		 << "Nested member path not yet supported for class properties."
 		 << endl;
@@ -4623,24 +4752,114 @@ NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 		  }
 	    }
       } else if (!comp.index.empty()) {
-	    /* IEEE 1800-2023 §11.5.1: bit-select on a scalar packed property,
-	     * e.g. c.vect[i] where vect is logic [7:0].  The index was
-	     * silently dropped before this fix (canon_index stayed nullptr).
-	     * Wrap the full property in a NetESelect so draw_select_vec4 can
-	     * emit the correct %parti/u or %part/u opcode. */
-	    const index_component_t&idx = comp.index.front();
-	    ivl_assert(*this, idx.sel == index_component_t::SEL_BIT);
-	    ivl_assert(*this, idx.lsb == 0);
-
-	    NetEProperty *prop = new NetEProperty(sr.net, pidx, nullptr);
+	    const netvector_t*vtype = dynamic_cast<const netvector_t*>(tmp_type);
+	    NetEProperty *prop = new NetEProperty(sr.net, pidx, nullptr, obj_arr_idx);
 	    prop->set_line(*this);
 
-	    NetExpr *bit = elab_and_eval(des, scope, idx.msb, -1, false);
-	    if (!bit) return nullptr;
-
-	    NetESelect *sel = new NetESelect(prop, bit, 1);
-	    sel->set_line(*this);
-	    return sel;
+	    list<long> prefix_indices;
+	    if (!evaluate_index_prefix(des, scope, prefix_indices, comp.index)) {
+		  delete prop;
+		  return nullptr;
+	    }
+	    const index_component_t&idx = comp.index.back();
+	    if (idx.sel == index_component_t::SEL_BIT) {
+		  NetExpr *bit = elab_and_eval(des, scope, idx.msb, -1, false);
+		  if (!bit) { delete prop; return nullptr; }
+		  if (vtype && vtype->packed_dims().size() == 1) {
+			const netrange_t&rng = vtype->packed_dims().back();
+			if (rng.get_msb() >= rng.get_lsb()) {
+			      if (rng.get_lsb() != 0) {
+				    NetEConst*c = new NetEConst(verinum(-rng.get_lsb()));
+				    c->set_line(*this);
+				    unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+				    bit = new NetEBAdd('+', pad_to_width(bit, w, *this),
+						       pad_to_width(c, w, *this), w, true);
+				    bit->set_line(*this);
+				    eval_expr(bit);
+			      }
+			} else {
+			      NetEConst*c = new NetEConst(verinum(rng.get_lsb()));
+			      c->set_line(*this);
+			      unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+			      bit = new NetEBAdd('-', pad_to_width(c, w, *this),
+						 pad_to_width(bit, w, *this), w, true);
+			      bit->set_line(*this);
+			      eval_expr(bit);
+			}
+		  }
+		  NetESelect *sel = new NetESelect(prop, bit, 1);
+		  sel->set_line(*this);
+		  return sel;
+	    }
+	    if ((idx.sel == index_component_t::SEL_IDX_UP ||
+	         idx.sel == index_component_t::SEL_IDX_DO) &&
+	        vtype && vtype->packed_dims().size() == 1) {
+		  const netrange_t&rng = vtype->packed_dims().back();
+		  NetExpr*base = elab_and_eval(des, scope, idx.msb, -1, false);
+		  NetExpr*wid_ex = elab_and_eval(des, scope, idx.lsb, -1, true);
+		  long wid_val = 0;
+		  if (!base || !wid_ex || !eval_as_long(wid_val, wid_ex) || wid_val <= 0) {
+			delete prop;
+			delete base;
+			delete wid_ex;
+			return nullptr;
+		  }
+		  delete wid_ex;
+		  bool asc = rng.get_msb() < rng.get_lsb();
+		  if (!asc) {
+			long adj = -rng.get_lsb();
+			if (idx.sel == index_component_t::SEL_IDX_DO)
+			      adj -= (wid_val - 1);
+			if (adj != 0) {
+			      NetEConst*c = new NetEConst(verinum(adj));
+			      c->set_line(*this);
+			      unsigned w = max(base->expr_width(), c->expr_width()) + 1;
+			      base = new NetEBAdd('+', pad_to_width(base, w, *this),
+						  pad_to_width(c, w, *this), w, true);
+			      base->set_line(*this);
+			      eval_expr(base);
+			}
+		  } else {
+			long adj = rng.get_lsb();
+			if (idx.sel == index_component_t::SEL_IDX_UP)
+			      adj -= (wid_val - 1);
+			NetEConst*c = new NetEConst(verinum(adj));
+			c->set_line(*this);
+			unsigned w = max(base->expr_width(), c->expr_width()) + 1;
+			base = new NetEBAdd('-', pad_to_width(c, w, *this),
+					    pad_to_width(base, w, *this), w, true);
+			base->set_line(*this);
+			eval_expr(base);
+		  }
+		  NetESelect*sel = new NetESelect(prop, base, wid_val);
+		  sel->set_line(*this);
+		  return sel;
+	    }
+	    if (vtype) {
+		  long tail_off = 0;
+		  unsigned long tail_wid = 0;
+		  if (!calculate_part(this, des, scope, idx, tail_off, tail_wid)) {
+			delete prop;
+			return nullptr;
+		  }
+		  long loff = 0;
+		  unsigned long lwid = 0;
+		  if (!prefix_to_slice(vtype->packed_dims(), prefix_indices,
+				       tail_off, loff, lwid)) {
+			delete prop;
+			NetExpr*oob = (vtype->base_type() == IVL_VT_BOOL)
+			      ? make_const_0(lwid * tail_wid)
+			      : make_const_x(lwid * tail_wid);
+			oob->set_line(*this);
+			return oob;
+		  }
+		  NetESelect*sel = new NetESelect(prop, make_const_val(loff),
+						  lwid * tail_wid);
+		  sel->set_line(*this);
+		  return sel;
+	    }
+	    delete prop;
+	    return nullptr;
       }
 
       if (debug_elaborate && canon_index) {
@@ -4649,7 +4868,7 @@ NetExpr* PEIdent::elaborate_expr_class_field_(Design*des, NetScope*scope,
 		 << " canonical index: " << *canon_index << endl;
       }
 
-      NetEProperty *tmp = new NetEProperty(sr.net, pidx, canon_index);
+      NetEProperty *tmp = new NetEProperty(sr.net, pidx, canon_index, obj_arr_idx);
       tmp->set_line(*this);
       return tmp;
 }
@@ -5335,6 +5554,25 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 	    return 0;
       }
 
+      auto make_obj_arr_idx = [&]() -> NetExpr* {
+	    if (search_results.net &&
+	        search_results.net->unpacked_dimensions() > 0 &&
+	        !search_results.path_head.back().index.empty()) {
+		  PEIdent obj_id(search_results.path_head, lexical_pos());
+		  obj_id.set_line(*this);
+		  NetExpr*obj_ex = obj_id.elaborate_expr(des, scope, -1, 0);
+		  if (!obj_ex) return nullptr;
+		  NetExpr*widx = nullptr;
+		  if (const NetESignal*sig_ex = dynamic_cast<const NetESignal*>(obj_ex)) {
+			if (sig_ex->word_index())
+			      widx = sig_ex->word_index()->dup_expr();
+		  }
+		  delete obj_ex;
+		  return widx;
+	    }
+	    return nullptr;
+      };
+
 	// e.g. c.q.size() — path_tail is {q, size}; q is a queue-typed property
       if (search_results.path_tail.size() == 2) {
 	    const netclass_t*cls = dynamic_cast<const netclass_t*>(search_results.type);
@@ -5349,7 +5587,7 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 			if (ptype &&
 			    (ptype->base_type() == IVL_VT_DARRAY ||
 			     ptype->base_type() == IVL_VT_QUEUE)) {
-			      NetEProperty*prop = new NetEProperty(search_results.net, pidx, nullptr);
+			      NetEProperty*prop = new NetEProperty(search_results.net, pidx, nullptr, make_obj_arr_idx());
 			      prop->set_line(*this);
 			      perm_string method_name = search_results.path_tail.back().name;
 			      ivl_type_t element_type = ivl_type_element(ptype);
@@ -5405,11 +5643,40 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 			// c.p.m() where p is a class-typed property: call m in the
 			// property's class, using the property access as "this".
 			if (const netclass_t*prop_cls = dynamic_cast<const netclass_t*>(ptype)) {
-			      NetEProperty*prop = new NetEProperty(search_results.net, pidx, nullptr);
+			      NetEProperty*prop = new NetEProperty(search_results.net, pidx, nullptr, make_obj_arr_idx());
 			      prop->set_line(*this);
 			      perm_string method_name = search_results.path_tail.back().name;
 			      return elaborate_class_method_net_this_(des, scope, prop, prop_cls,
 							      method_name, nullptr);
+			}
+
+			// c.p.m() where p is a string or enum property (e.g. s.len() inside class method).
+			if (const netenum_t*prop_enum = dynamic_cast<const netenum_t*>(ptype)) {
+			      NetEProperty*prop = new NetEProperty(search_results.net, pidx, nullptr, make_obj_arr_idx());
+			      prop->set_line(*this);
+			      perm_string method_name = search_results.path_tail.back().name;
+			      return check_for_enum_methods(this, des, scope,
+							    prop_enum, path_,
+							    method_name, prop,
+							    parms_);
+			}
+		  }
+	    }
+      }
+
+      NetExpr* prop_sub_expr = 0;
+      if (search_results.path_tail.size() == 2) {
+	    const netclass_t*cls = dynamic_cast<const netclass_t*>(search_results.type);
+	    if (!cls && search_results.net && search_results.net->net_type())
+		  cls = dynamic_cast<const netclass_t*>(search_results.net->net_type());
+	    if (cls && search_results.net) {
+		  int pidx = cls->property_idx_from_name(search_results.path_tail.front().name);
+		  if (pidx >= 0) {
+			ivl_type_t ptype = cls->get_prop_type(pidx);
+			if (ptype && ptype->base_type() == IVL_VT_STRING) {
+			      prop_sub_expr = new NetEProperty(search_results.net, pidx, nullptr, make_obj_arr_idx());
+			      prop_sub_expr->set_line(*this);
+			      search_results.path_tail.pop_front();
 			}
 		  }
 	    }
@@ -5444,11 +5711,19 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 	    return elaborate_expr_method_par_(des, scope, search_results);
       }
 
-      NetExpr* sub_expr = 0;
-      if (search_results.net) {
-	    NetESignal*tmp = new NetESignal(search_results.net);
-	    tmp->set_line(*this);
-	    sub_expr = tmp;
+      NetExpr* sub_expr = prop_sub_expr;
+      if (!sub_expr && search_results.net) {
+	    if (search_results.net->unpacked_dimensions() > 0 &&
+	        !search_results.path_head.back().index.empty()) {
+		  PEIdent obj_id(search_results.path_head, lexical_pos());
+		  obj_id.set_line(*this);
+		  sub_expr = obj_id.elaborate_expr(des, scope, -1, 0);
+		  if (!sub_expr) return 0;
+	    } else {
+		  NetESignal*tmp = new NetESignal(search_results.net);
+		  tmp->set_line(*this);
+		  sub_expr = tmp;
+	    }
       }
 
       // Queue variable with a select expression. The type of this expression
@@ -5576,14 +5851,15 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 
 	    perm_string method_name = search_results.path_tail.back().name;
 
-	    NetNet*net = search_results.net;
 	    const netclass_t*class_type = dynamic_cast<const netclass_t*>(search_results.type);
+	    if (!class_type && sub_expr->net_type())
+		  class_type = dynamic_cast<const netclass_t*>(sub_expr->net_type());
 	    ivl_assert(*this, class_type);
 	    // A call through super is not virtual.
 	    bool nonvirtual = !search_results.path_head.empty()
 		  && search_results.path_head.back().name == "#";
-	    return elaborate_class_method_net_(des, scope, net, class_type,
-					       method_name, nullptr, nonvirtual);
+	    return elaborate_class_method_net_this_(des, scope, sub_expr, class_type,
+						    method_name, nullptr, nonvirtual);
       }
 
       // String methods.
@@ -6425,7 +6701,18 @@ unsigned PEConcat::test_width(Design*des, NetScope*scope, width_mode_t&)
 		  return 0;
 	    }
 
-            repeat_count_ = rep->value().as_ulong();
+            unsigned long raw_rep = rep->value().as_ulong();
+            const unsigned long max_rep_bits = 1UL << 24;
+            if ((expr_width_ > 0 && raw_rep > max_rep_bits / expr_width_) ||
+                raw_rep > max_rep_bits) {
+		  cerr << get_fileline() << ": error: Concatenation repeat "
+		       << "exceeds maximum supported width (" << max_rep_bits
+		       << ")." << endl;
+		  des->errors += 1;
+		  delete tmp;
+		  return 0;
+            }
+            repeat_count_ = raw_rep;
 
             tested_scope_ = scope;
       }
@@ -6808,6 +7095,7 @@ bool PEIdent::calculate_up_do_width_(Design*des, NetScope*scope,
       NetExpr*wid_ex = elab_and_eval(des, scope, index_tail.lsb, -1, true);
       const NetEConst*wid_c = dynamic_cast<NetEConst*>(wid_ex);
 
+      const unsigned long max_part_wid = 1UL << 24;
       wid = wid_c ? wid_c->value().as_ulong() : 0;
       if (wid == 0) {
 	    cerr << index_tail.lsb->get_fileline() << ": error: "
@@ -6816,6 +7104,13 @@ bool PEIdent::calculate_up_do_width_(Design*des, NetScope*scope,
 	    cerr << index_tail.lsb->get_fileline() << ":      : "
 		  "This width expression violates that rule: "
 		 << *index_tail.lsb << endl;
+	    des->errors += 1;
+	    flag = false;
+	    wid = 1;
+      } else if (wid > max_part_wid) {
+	    cerr << index_tail.lsb->get_fileline() << ": error: "
+		  "Indexed part select width exceeds maximum supported size ("
+		 << max_part_wid << ")." << endl;
 	    des->errors += 1;
 	    flag = false;
 	    wid = 1;
@@ -7691,7 +7986,17 @@ NetExpr* PEIdent::elaborate_expr_(Design*des, NetScope*scope,
 		 << endl;
       }
 
-      if (path_.size() > 1) {
+	// Find the net/parameter/event object that this name refers
+	// to. The path_ may be a scoped path, and may include method
+	// or member name parts. For example, main.a.b.c may refer to
+	// a net called "b" in the scope "main.a" and with a member
+	// named "c". symbol_search() handles this for us.
+      symbol_search_results sr;
+      symbol_search(this, des, scope, path_, lexical_pos(), &sr);
+
+      bool is_hier_ref = sr.is_found() ? (sr.path_head.size() > 1)
+                                       : (path_.size() > 1);
+      if (is_hier_ref) {
             if (NEED_CONST & flags) {
                   cerr << get_fileline() << ": error: A hierarchical reference"
                           " (`" << path_ << "') is not allowed in a constant"
@@ -7708,14 +8013,6 @@ NetExpr* PEIdent::elaborate_expr_(Design*des, NetScope*scope,
             }
             scope->is_const_func(false);
       }
-
-	// Find the net/parameter/event object that this name refers
-	// to. The path_ may be a scoped path, and may include method
-	// or member name parts. For example, main.a.b.c may refer to
-	// a net called "b" in the scope "main.a" and with a member
-	// named "c". symbol_search() handles this for us.
-      symbol_search_results sr;
-      symbol_search(this, des, scope, path_, lexical_pos(), &sr);
 
       if (!sr.require_non_type(this, des, "in an expression"))
 	    return 0;

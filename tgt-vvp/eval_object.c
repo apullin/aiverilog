@@ -297,9 +297,23 @@ static int eval_object_null(ivl_expr_t ex)
       return 0;
 }
 
-static int eval_object_property(ivl_expr_t expr)
+void draw_load_property_object(ivl_expr_t expr)
 {
       ivl_signal_t sig = ivl_expr_signal(expr);
+      if (ivl_signal_dimensions(sig) == 0) {
+	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
+	    return;
+      }
+      ivl_expr_t word_ex = ivl_expr_oper2(expr);
+      assert(word_ex);
+      int word_ix = allocate_word();
+      draw_eval_expr_into_integer(word_ex, word_ix);
+      fprintf(vvp_out, "    %%load/obja v%p, %d;\n", sig, word_ix);
+      clr_word(word_ix);
+}
+
+static int eval_object_property(ivl_expr_t expr)
+{
       unsigned pidx = ivl_expr_property_idx(expr);
 
       int idx = 0;
@@ -313,7 +327,7 @@ static int eval_object_property(ivl_expr_t expr)
 	    draw_eval_expr_into_integer(idx_expr, idx);
       }
 
-      fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
+      draw_load_property_object(expr);
       fprintf(vvp_out, "    %%prop/obj %u, %d; eval_object_property\n", pidx, idx);
       fprintf(vvp_out, "    %%pop/obj 1, 1;\n");
 

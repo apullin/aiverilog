@@ -5262,8 +5262,18 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 		  return elaborate_non_void_function_(des, scope, use_path);
 	    }
 
-	    NetESignal*use_this = new NetESignal(net);
-	    use_this->set_line(*this);
+	    NetExpr*use_this = 0;
+	    if (net->unpacked_dimensions() > 0 &&
+	        !sr.path_head.back().index.empty()) {
+		  PEIdent obj_id(sr.path_head, lexical_pos());
+		  obj_id.set_line(*this);
+		  use_this = obj_id.elaborate_expr(des, scope, -1, 0);
+		  if (!use_this) return 0;
+	    } else {
+		  NetESignal*sig_this = new NetESignal(net);
+		  sig_this->set_line(*this);
+		  use_this = sig_this;
+	    }
 
 	    // A call through super is not virtual.
 	    bool nonvirtual = use_path.back().name == "#";

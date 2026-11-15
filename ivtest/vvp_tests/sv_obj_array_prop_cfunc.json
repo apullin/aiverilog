@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "sv_obj_array_prop_cfunc.v",
+    "iverilog-args" : [ "-g2012" ]
+}
