@@ -1,0 +1,5 @@
+{
+    "type"   : "CE",
+    "source" : "sv_darray_incompat_elem_fail.v",
+    "iverilog-args" : [ "-g2012" ]
+}
