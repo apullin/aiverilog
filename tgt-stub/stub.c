@@ -1217,8 +1217,13 @@ static int show_process(ivl_process_t net, void*x)
 static void show_parameter(ivl_parameter_t net)
 {
       const char*name = ivl_parameter_basename(net);
+      if (ivl_parameter_is_type(net)) {
+	    fprintf(out, "   parameter type %s;\n", name);
+	    return;
+      }
       fprintf(out, "   parameter %s;\n", name);
-      show_expression(ivl_parameter_expr(net), 7);
+      if (ivl_parameter_expr(net))
+	    show_expression(ivl_parameter_expr(net), 7);
 }
 
 static void show_event(ivl_event_t net)

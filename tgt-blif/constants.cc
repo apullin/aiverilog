@@ -25,6 +25,12 @@ static void print_constant(FILE*fd, ivl_net_const_t net)
 {
       unsigned wid = ivl_const_width(net);
       const char*val = ivl_const_bits(net);
+      if (val == 0) {
+	    fprintf(stderr, "%s:%u: sorry: BLIF: Non-vector constant is not supported.\n",
+		    ivl_const_file(net), ivl_const_lineno(net));
+	    blif_errors += 1;
+	    return;
+      }
       ivl_nexus_t nex = ivl_const_nex(net);
       blif_nex_data_t*ned = blif_nex_data_t::get_nex_data(nex);
 
