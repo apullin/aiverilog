@@ -190,6 +190,7 @@ static PLI_INT32 sys_bitstoreal_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
     PLI_UINT32 bits[2];
 
     (void)name;  /* Parameter is not used. */
+    if (arg == 0) return 0;
 
     /* get value */
     value.format = vpiVectorVal;
@@ -216,6 +217,7 @@ static PLI_INT32 sys_bitstoshortreal_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
     PLI_UINT32 bits;
 
     (void)name;  /* Parameter is not used. */
+    if (arg == 0) return 0;
 
     /* get value */
     value.format = vpiVectorVal;
@@ -239,6 +241,7 @@ static PLI_INT32 sys_itor_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
     s_vpi_value value;
 
     (void)name;  /* Parameter is not used. */
+    if (arg == 0) return 0;
 
     /* get value */
     value.format = vpiIntVal;
@@ -264,6 +267,7 @@ static PLI_INT32 sys_realtobits_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
     PLI_UINT32 bits[2];
 
     (void)name;  /* Parameter is not used. */
+    if (arg == 0) return 0;
 
     /* get value */
     value.format = vpiRealVal;
@@ -296,6 +300,7 @@ static PLI_INT32 sys_shortrealtobits_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
     PLI_UINT32 bits;
 
     (void)name;  /* Parameter is not used. */
+    if (arg == 0) return 0;
 
     /* get value */
     value.format = vpiRealVal;
@@ -325,6 +330,7 @@ static PLI_INT32 sys_rtoi_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
     double val;
 
     (void)name;  /* Parameter is not used. */
+    if (arg == 0) return 0;
 
     /* get value */
     value.format = vpiRealVal;

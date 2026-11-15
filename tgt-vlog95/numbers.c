@@ -34,7 +34,7 @@ static int32_t get_int32_from_bits(const char *bits, unsigned nbits,
       unsigned trim_wid = nbits - 1;
       const char msb = is_signed ? bits[trim_wid] : '0';
       unsigned idx;
-      int32_t value = 0;
+      uint32_t uvalue = 0;
 	/* Trim any duplicate bits from the MSB. */
       for (/* none */; trim_wid > 0; trim_wid -= 1) {
 	    if (msb != bits[trim_wid]) {
@@ -50,7 +50,7 @@ static int32_t get_int32_from_bits(const char *bits, unsigned nbits,
       }
 	/* Now build the value from the bits. */
       for (idx = 0; idx < trim_wid; idx += 1) {
-	    if (bits[idx] == '1') value |= (int32_t)1 << idx;
+	    if (bits[idx] == '1') uvalue |= (uint32_t)1 << idx;
 	    else if (bits[idx] != '0') {
 		  *result_type = -1;
 		    /* If the value is entirely x/z then return -2 or -3. */
@@ -65,11 +65,11 @@ static int32_t get_int32_from_bits(const char *bits, unsigned nbits,
 // HERE: Need to emit 1 instead of -1 for some of the constants.
 //      if (is_signed && (nbits > 1) && (msb == '1') && (trim_wid < 32U)) {
       if (is_signed && (msb == '1') && (trim_wid < 32U)) {
-	    value |= ~(((uint32_t)1 << trim_wid) - (uint32_t)1);
+	    uvalue |= ~(((uint32_t)1 << trim_wid) - (uint32_t)1);
       }
       *result_type = 0;
       if ((msb == 'x') || (msb == 'z')) *result_type = -1;
-      return value;
+      return (int32_t)uvalue;
 }
 
 /* Emit the given bits as either a signed or unsigned constant. If the
