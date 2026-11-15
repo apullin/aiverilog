@@ -79,13 +79,85 @@ void __vpiStringVar::vpi_get_value(p_vpi_value val)
       val->format = vpiSuppressVal;
 }
 
+static string vec4_to_sv_string(const vvp_vector4_t&vec)
+{
+      string res;
+      unsigned nbytes = (vec.size() + 7) / 8;
+      for (unsigned b = nbytes ; b > 0 ; b -= 1) {
+	    unsigned base = (b - 1) * 8;
+	    unsigned char ch = 0;
+	    for (unsigned idx = 0 ; idx < 8 && base + idx < vec.size() ; idx += 1) {
+		  if (vec.value(base + idx) == BIT4_1)
+			ch |= (1u << idx);
+	    }
+	    if (ch != 0)
+		  res.push_back(static_cast<char>(ch));
+      }
+      return res;
+}
+
 vpiHandle __vpiStringVar::vpi_put_value(p_vpi_value val, int)
 {
       vvp_fun_signal_string*fun = dynamic_cast<vvp_fun_signal_string*> (get_net()->fun);
       assert(fun);
-      assert(val->format == vpiStringVal);
+
+      string out;
+      switch (val->format) {
+	  case vpiStringVal:
+	    out = val->value.str ? val->value.str : "";
+	    break;
+	  case vpiIntVal: {
+		vvp_vector4_t vec(32, static_cast<uint64_t>(static_cast<uint32_t>(val->value.integer)));
+		out = vec4_to_sv_string(vec);
+		break;
+	  }
+	  case vpiScalarVal: {
+		vvp_vector4_t vec(8, BIT4_0);
+		if (val->value.scalar == vpi1 || val->value.scalar == vpiH)
+		      vec.set_bit(0, BIT4_1);
+		out = vec4_to_sv_string(vec);
+		break;
+	  }
+	  case vpiBinStrVal:
+	  case vpiOctStrVal:
+	  case vpiDecStrVal:
+	  case vpiHexStrVal: {
+		const char*s = val->value.str ? val->value.str : "";
+		size_t slen = strlen(s);
+		unsigned wid = slen > 8 ? static_cast<unsigned>(slen * 4) : 32;
+		wid = ((wid + 7) / 8) * 8;
+		vvp_vector4_t vec(wid, BIT4_0);
+		if (val->format == vpiBinStrVal) vpip_bin_str_to_vec4(vec, s);
+		else if (val->format == vpiOctStrVal) vpip_oct_str_to_vec4(vec, s);
+		else if (val->format == vpiDecStrVal) vpip_dec_str_to_vec4(vec, s);
+		else vpip_hex_str_to_vec4(vec, s);
+		out = vec4_to_sv_string(vec);
+		break;
+	  }
+	  case vpiVectorVal: {
+		unsigned sz = fun->get_string().size() * 8;
+		if (sz == 0) sz = 32;
+		vvp_vector4_t vec(sz, BIT4_0);
+		for (unsigned idx = 0 ; idx < sz ; idx += 1) {
+		      uint32_t aval = static_cast<uint32_t>(val->value.vector[idx/32].aval);
+		      uint32_t bval = static_cast<uint32_t>(val->value.vector[idx/32].bval);
+		      if (((bval >> (idx%32)) & 1u) == 0 && ((aval >> (idx%32)) & 1u) == 1)
+			    vec.set_bit(idx, BIT4_1);
+		}
+		out = vec4_to_sv_string(vec);
+		break;
+	  }
+	  case vpiRealVal: {
+		vvp_vector4_t vec(64, val->value.real);
+		out = vec4_to_sv_string(vec);
+		break;
+	  }
+	  default:
+	    break;
+      }
+
       vvp_net_ptr_t dest (get_net(), 0);
-      vvp_send_string(dest, val->value.str, vthread_get_wt_context());
+      vvp_send_string(dest, out, vthread_get_wt_context());
       return 0;
 }
 
