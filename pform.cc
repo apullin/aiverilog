@@ -3551,8 +3551,11 @@ PProcess* pform_make_behavior(ivl_process_type_t type, Statement*st,
 
 void pform_start_modport_item(const struct vlltype&loc, const char*name)
 {
-      Module*scope = pform_cur_module.front();
-      ivl_assert(loc, scope && scope->is_interface);
+      Module*scope = pform_cur_module.empty() ? 0 : pform_cur_module.front();
+      if (!scope || !scope->is_interface) {
+	    delete[] name;
+	    return;
+      }
       ivl_assert(loc, pform_cur_modport == 0);
 
       perm_string use_name = lex_strings.make(name);
@@ -3565,9 +3568,8 @@ void pform_start_modport_item(const struct vlltype&loc, const char*name)
       delete[] name;
 }
 
-void pform_end_modport_item(const struct vlltype&loc)
+void pform_end_modport_item(const struct vlltype&)
 {
-      ivl_assert(loc, pform_cur_modport);
       pform_cur_modport = 0;
 }
 
@@ -3575,7 +3577,10 @@ void pform_add_modport_port(const struct vlltype&loc,
                             NetNet::PortType port_type,
                             perm_string name, PExpr*expr)
 {
-      ivl_assert(loc, pform_cur_modport);
+      if (!pform_cur_modport) {
+	    delete expr;
+	    return;
+      }
 
       if (pform_cur_modport->simple_ports.find(name)
 	  != pform_cur_modport->simple_ports.end()) {

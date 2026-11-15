@@ -1,0 +1,5 @@
+{
+    "type"   : "CE",
+    "source" : "parser_class_for_modport_recovery_fail.v",
+    "iverilog-args" : [ "-g2012" ]
+}
