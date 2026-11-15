@@ -354,6 +354,7 @@ nb_ec_repeat_auto		vvp_tests/nb_ec_repeat_auto.json
 nba_repeat_wide_count		vvp_tests/nba_repeat_wide_count.json
 nba_repeat_wide_count_real_array	vvp_tests/nba_repeat_wide_count_real_array.json
 non-polymorphic-abs		vvp_tests/non-polymorphic-abs.json
+packed_array_undef_nonzero_lval	vvp_tests/packed_array_undef_nonzero_lval.json
 packed_struct_idx_part_lval	vvp_tests/packed_struct_idx_part_lval.json
 packed_typedef_part_select	vvp_tests/packed_typedef_part_select.json
 param_array_packed		vvp_tests/param_array_packed.json

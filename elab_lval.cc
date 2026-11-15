@@ -586,10 +586,8 @@ bool PEIdent::elaborate_lval_net_bit_(Design*des,
 		  mux = 0;
 	      // The index is undefined and this is a packed array.
 	    } else if (prefix_indices.size()+2 <= reg->packed_dims().size()) {
-		  long loff;
-		  unsigned long lwid;
-		  bool rcl = reg->sb_to_slice(prefix_indices, lsb, loff, lwid);
-		  ivl_assert(*this, rcl);
+		  unsigned long lwid = reg->slice_width(prefix_indices.size() + 1);
+		  ivl_assert(*this, lwid > 0);
 		  if (warn_ob_select) {
 			cerr << get_fileline()
 			     << ": warning: L-value packed array select of "
