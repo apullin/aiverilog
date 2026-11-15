@@ -96,6 +96,20 @@ static NetExpr* fix_assign_value(const NetNet*lhs, NetExpr*rhs)
 
 NetExpr* NetFuncDef::evaluate_function(const LineInfo&loc, const std::vector<NetExpr*>&args) const
 {
+      static unsigned cfunc_depth = 0;
+      const unsigned max_cfunc_depth = 1024;
+      if (cfunc_depth >= max_cfunc_depth) {
+	    cerr << loc.get_fileline() << ": error: Constant function '"
+		 << scope()->basename() << "' exceeded maximum recursion depth ("
+		 << max_cfunc_depth << ")." << endl;
+	    return 0;
+      }
+      struct depth_guard_t {
+	    unsigned& d;
+	    explicit depth_guard_t(unsigned& r) : d(r) { ++d; }
+	    ~depth_guard_t() { --d; }
+      } depth_guard(cfunc_depth);
+
 	// Make the context map.
       map<perm_string,LocalVar>::iterator ptr;
       map<perm_string,LocalVar>context_map;
@@ -1048,10 +1062,11 @@ NetExpr* NetESelect::evaluate_function(const LineInfo&loc,
 				map<perm_string,LocalVar>&context_map) const
 {
       NetExpr*sub_exp = expr_->evaluate_function(loc, context_map);
-      ivl_assert(loc, sub_exp);
+      if (sub_exp == 0)
+	    return 0;
 
       const NetEConst*sub_const = dynamic_cast<NetEConst*> (sub_exp);
-      ivl_assert(loc, sub_exp);
+      ivl_assert(loc, sub_const);
 
       verinum sub = sub_const->value();
       delete sub_exp;
@@ -1062,7 +1077,8 @@ NetExpr* NetESelect::evaluate_function(const LineInfo&loc,
       long base = 0;
       if (base_) {
 	    NetExpr*base_val = base_->evaluate_function(loc, context_map);
-	    ivl_assert(loc, base_val);
+	    if (base_val == 0)
+		  return 0;
 
 	    const NetEConst*base_const = dynamic_cast<NetEConst*>(base_val);
 	    ivl_assert(loc, base_const);
@@ -1194,6 +1210,11 @@ NetExpr* NetETernary::evaluate_function(const LineInfo&loc,
 
       NetExpr*tval = true_val_->evaluate_function(loc, context_map);
       NetExpr*fval = false_val_->evaluate_function(loc, context_map);
+      if (tval == 0 || fval == 0) {
+	    delete tval;
+	    delete fval;
+	    return 0;
+      }
 
       NetExpr*res = blended_arguments_(tval, fval);
       delete tval;
@@ -1437,9 +1458,15 @@ NetExpr* NetEUFunc::evaluate_function(const LineInfo&loc,
       const NetFuncDef*def = func_->func_def();
       ivl_assert(*this, def);
 
-      vector<NetExpr*>args(parms_.size());
-      for (unsigned idx = 0 ;  idx < parms_.size() ;  idx += 1)
+      vector<NetExpr*>args(parms_.size(), 0);
+      for (unsigned idx = 0 ;  idx < parms_.size() ;  idx += 1) {
 	    args[idx] = parms_[idx]->evaluate_function(loc, context_map);
+	    if (args[idx] == 0) {
+		  for (unsigned j = 0; j < idx; j += 1)
+			delete args[j];
+		  return 0;
+	    }
+      }
 
       NetExpr*res = def->evaluate_function(*this, args);
       if (NetEConst*value = dynamic_cast<NetEConst*>(res)) {

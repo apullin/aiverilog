@@ -629,7 +629,14 @@ bool PEIdent::elaborate_lval_net_bit_(Design*des,
 		  long loff;
 		  unsigned long lwid;
 		  bool rcl = reg->sb_to_slice(prefix_indices, lsb, loff, lwid);
-		  ivl_assert(*this, rcl);
+		  if (!rcl) {
+			if (des->errors == 0) {
+			      cerr << get_fileline() << ": error: Index of "
+				   << reg->name() << " is out of range." << endl;
+			      des->errors += 1;
+			}
+			return false;
+		  }
 
 		  if ((reg->type()==NetNet::UNRESOLVED_WIRE) && !is_force) {
 			ivl_assert(*this, reg->coerced_to_uwire());
@@ -1779,7 +1786,14 @@ bool PEIdent::elaborate_lval_net_packed_member_(Design*des, NetScope*scope,
 	    }
 
 	    off += tmp_off;
-	    ivl_assert(*this, use_width >= (unsigned long)member->net_type->packed_width());
+	    if (use_width < (unsigned long)member->net_type->packed_width()) {
+		  if (des->errors == 0) {
+			cerr << get_fileline() << ": error: Invalid packed "
+			     << "member width for " << member_name << "." << endl;
+			des->errors += 1;
+		  }
+		  return false;
+	    }
 	    use_width = member->net_type->packed_width();
 
 	      // At this point, off and use_width are the part select

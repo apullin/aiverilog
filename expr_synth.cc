@@ -746,6 +746,11 @@ NetNet* NetEConcat::synthesize(Design*des, NetScope*scope, NetExpr*root)
       bool flag = true;
       ivl_variable_type_t data_type = IVL_VT_NO_TYPE;
       for (unsigned idx = 0 ;  idx < parms_.size() ;  idx += 1) {
+	    if (parms_[idx] == 0) {
+		  tmp[idx] = 0;
+		  flag = false;
+		  continue;
+	    }
 	    if (parms_[idx]->expr_width() == 0) {
 		    /* We need to synthesize a replication of zero. */
 		  tmp[idx] = parms_[idx]->synthesize(des, scope, root);
@@ -753,7 +758,10 @@ NetNet* NetEConcat::synthesize(Design*des, NetScope*scope, NetExpr*root)
 		  num_parms -= 1;
 	    } else {
 		  tmp[idx] = parms_[idx]->synthesize(des, scope, root);
-		  if (tmp[idx] == 0) flag = false;
+		  if (tmp[idx] == 0) {
+			flag = false;
+			continue;
+		  }
 		    /* Set the data type to the first one found. */
 		  switch (data_type) {
 		      case IVL_VT_NO_TYPE:

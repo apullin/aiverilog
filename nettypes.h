@@ -120,8 +120,8 @@ class netrange_t {
 
       inline unsigned long width()const
       { if (!defined()) return 0;
-	else if (msb_ >= lsb_) return msb_-lsb_+1;
-	else return lsb_-msb_+1;
+	else if (msb_ >= lsb_) return (unsigned long)msb_ - (unsigned long)lsb_ + 1UL;
+	else return (unsigned long)lsb_ - (unsigned long)msb_ + 1UL;
       }
 
       inline long get_msb() const { assert(defined()); return msb_; }

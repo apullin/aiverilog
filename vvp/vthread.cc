@@ -5031,6 +5031,16 @@ bool of_NEW_DARRAY(vthread_t thr, vvp_code_t cp)
 	    return false;
       }
       size_t size = static_cast<size_t>(raw_size);
+      const size_t max_darray_elems = 1ULL << 24;
+      if (size > max_darray_elems) {
+	    cerr << thr->get_fileline()
+	         << "VVP error: dynamic array new[] size (" << size
+	         << ") exceeds maximum supported size (" << max_darray_elems
+	         << ")." << endl;
+	    vpip_set_return_value(1);
+	    schedule_finish(0);
+	    return false;
+      }
       unsigned word_wid;
       size_t n;
 
