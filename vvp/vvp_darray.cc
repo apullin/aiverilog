@@ -169,7 +169,7 @@ void compile_darray_port(char*label, char*name, char*addr, char*type)
 
       define_functor_symbol(label, net);
       free(label);
-      free(type);
+      delete[] type;
 
       input_connect(net, 0, name);
       input_connect(net, 1, addr);
@@ -182,7 +182,7 @@ void compile_darray_port(char*label, char*name, long addr, char*type)
 
       define_functor_symbol(label, net);
       free(label);
-      free(type);
+      delete[] type;
 
       input_connect(net, 0, name);
 }
