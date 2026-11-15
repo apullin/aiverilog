@@ -544,13 +544,11 @@ static vhdl_expr *translate_ufunc(ivl_expr_t e)
 {
    ivl_scope_t defscope = ivl_expr_def(e);
    ivl_scope_t parentscope = ivl_scope_parent(defscope);
-   assert(ivl_scope_type(parentscope) == IVL_SCT_MODULE);
-
-   // A function is always declared in a module, which should have
-   // a corresponding entity by this point: so we can get type
-   // information, etc. from the declaration
-   vhdl_entity *parent_ent = find_entity(parentscope);
-   assert(parent_ent);
+   vhdl_entity *parent_ent = parentscope ? find_entity(parentscope) : NULL;
+   if (!parent_ent) {
+      error("Calls to functions outside module scopes are not supported in VHDL target");
+      return NULL;
+   }
 
    const char *funcname = ivl_scope_tname(defscope);
 

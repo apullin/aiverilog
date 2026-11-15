@@ -174,10 +174,11 @@ vhdl_entity* find_entity(const string& name)
 vhdl_entity* find_entity(ivl_scope_t scope)
 {
    // Skip over generate scopes
-   while (ivl_scope_type(scope) == IVL_SCT_GENERATE)
+   while (scope && ivl_scope_type(scope) == IVL_SCT_GENERATE)
       scope = ivl_scope_parent(scope);
 
-   assert(ivl_scope_type(scope) == IVL_SCT_MODULE);
+   if (!scope || ivl_scope_type(scope) != IVL_SCT_MODULE)
+      return NULL;
 
    if (is_default_scope_instance(scope)) {
       scope_name_map_t::iterator it = g_scope_names.find(scope);

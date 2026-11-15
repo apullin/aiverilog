@@ -1007,6 +1007,7 @@ partsel_real_idx	CE,-g2012		ivltests gold=partsel_real_idx.gold
 ipsdownsel_real_idx	CE,-g2012		ivltests gold=ipsdownsel_real_idx.gold
 ipsupsel_real_idx	CE,-g2012		ivltests gold=ipsupsel_real_idx.gold
 real_edges		CE,-g2012		ivltests gold=real_edges.gold
+tgt_vhdl_1bit_ashr		CO,-g2012,-tvhdl	ivltests
 sizer_class_scope		CO,-g2012,-tsizer	ivltests
 tgt_blif_wide_xor		CO,-g2012,-tblif	ivltests
 tgt_blif_multi_pdim		CO,-g2012,-tblif	ivltests

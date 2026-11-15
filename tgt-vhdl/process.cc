@@ -116,13 +116,19 @@ extern "C" int draw_process(ivl_process_t proc, void *)
    // Skip over any generate and begin scopes until we find
    // the module that contains them - this is where we will
    // generate the process
-   while (ivl_scope_type(scope) == IVL_SCT_GENERATE
-      || ivl_scope_type(scope) == IVL_SCT_BEGIN)
+   while (scope && (ivl_scope_type(scope) == IVL_SCT_GENERATE
+      || ivl_scope_type(scope) == IVL_SCT_BEGIN))
       scope = ivl_scope_parent(scope);
 
-   assert(ivl_scope_type(scope) == IVL_SCT_MODULE);
+   if (!scope || ivl_scope_type(scope) != IVL_SCT_MODULE) {
+      error("Processes outside module scopes are not supported in VHDL target");
+      return 1;
+   }
    vhdl_entity *ent = find_entity(scope);
-   assert(ent != NULL);
+   if (ent == NULL) {
+      error("Processes outside module scopes are not supported in VHDL target");
+      return 1;
+   }
 
    return generate_vhdl_process(ent, proc);
 }

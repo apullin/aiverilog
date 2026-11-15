@@ -99,16 +99,19 @@ void sheet_box(ivl_scope_t scope, const map<string,attr_value>&)
 	    ivl_signal_t sig = ivl_scope_sig(scope, idx);
 	    printf("   Wire %s\n", ivl_signal_basename(sig));
 
-	    assert(ivl_signal_array_count(sig) == 1);
-	    ivl_nexus_t nex = ivl_signal_nex(sig, 0);
+	    for (unsigned wdx = 0 ; wdx < ivl_signal_array_count(sig) ; wdx += 1) {
+		  ivl_nexus_t nex = ivl_signal_nex(sig, wdx);
+		  if (nex == 0)
+			continue;
 
-	    struct nexus_data*nex_data = reinterpret_cast<nexus_data*>
-		  (ivl_nexus_get_private(nex));
-	    if (nex_data == 0) {
-		  nex_data = new nexus_data;
-		  nex_data->name = wire_name(sig);
-		  nexus_list.push_back(nex_data);
-		  ivl_nexus_set_private(nex, nex_data);
+		  struct nexus_data*nex_data = reinterpret_cast<nexus_data*>
+			(ivl_nexus_get_private(nex));
+		  if (nex_data == 0) {
+			nex_data = new nexus_data;
+			nex_data->name = wire_name(sig);
+			nexus_list.push_back(nex_data);
+			ivl_nexus_set_private(nex, nex_data);
+		  }
 	    }
       }
 
