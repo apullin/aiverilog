@@ -21,8 +21,10 @@
 # include  "netenum.h"
 # include  "netmisc.h"
 # include  "compiler.h"
+# include  <cctype>
 # include  <cmath>
 # include  <cstring>
+# include  <memory>
 # include  <typeinfo>
 # include  "ivl_assert.h"
 
@@ -38,10 +40,36 @@ static const NetScope*disable = 0;
 static bool loop_break;
 static bool loop_continue;
 
+static string verinum_to_sv_string(const verinum&v)
+{
+      if (v.is_string() && (v.len() % 8 == 0))
+	    return v.as_string();
+      string res;
+      unsigned nbytes = (v.len() + 7) / 8;
+      for (unsigned b = nbytes ; b > 0 ; b -= 1) {
+	    unsigned base = (b - 1) * 8;
+	    unsigned char ch = 0;
+	    for (unsigned idx = 0 ; idx < 8 && base + idx < v.len() ; idx += 1) {
+		  if (v[base + idx] == verinum::V1)
+			ch |= (1u << idx);
+	    }
+	    if (ch != 0)
+		  res.push_back(static_cast<char>(ch));
+      }
+      return res;
+}
+
 static NetExpr* fix_assign_value(const NetNet*lhs, NetExpr*rhs)
 {
       NetEConst*ce = dynamic_cast<NetEConst*>(rhs);
       if (ce == 0) return rhs;
+
+      if (lhs->data_type() == IVL_VT_STRING) {
+	    NetEConst*se = new NetEConst(verinum(verinum_to_sv_string(ce->value())));
+	    se->set_line(*rhs);
+	    delete rhs;
+	    return se;
+      }
 
       if (lhs->data_type() == IVL_VT_BOOL && !ce->value().is_defined()) {
 	    verinum v2(ce->value());
@@ -1237,6 +1265,10 @@ NetExpr* NetESignal::evaluate_function(const LineInfo&loc,
 	    switch (expr_type()) {
 		case IVL_VT_REAL:
 		  return new NetECReal( verireal(0.0) );
+		case IVL_VT_STRING:
+		  res = new NetEConst(verinum(string("")));
+		  res->set_line(*this);
+		  return res;
 		case IVL_VT_BOOL:
 		  res = make_const_0(expr_width());
 		  break;
@@ -1382,6 +1414,106 @@ NetExpr* NetEUnary::evaluate_function(const LineInfo&loc,
       return res;
 }
 
+static NetExpr* eval_cfunc_string_method(const LineInfo&loc,
+					 const char*fname,
+					 const vector<NetExpr*>&parms,
+					 map<perm_string,LocalVar>&context_map)
+{
+      if (parms.empty() || !parms[0])
+	    return 0;
+      std::unique_ptr<NetExpr> s0(parms[0]->evaluate_function(loc, context_map));
+      const NetEConst*c0 = dynamic_cast<const NetEConst*>(s0.get());
+      if (!c0)
+	    return 0;
+      string str = verinum_to_sv_string(c0->value());
+
+      if (strcmp(fname, "$ivl_string_method$len") == 0) {
+	    verinum rv(static_cast<uint64_t>(str.size()), 32);
+	    rv.has_sign(true);
+	    NetEConst*res = new NetEConst(rv);
+	    res->set_line(loc);
+	    return res;
+      }
+
+      if (strcmp(fname, "$ivl_string_method$toupper") == 0) {
+	    for (char&ch : str)
+		  ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+	    NetEConst*res = new NetEConst(verinum(str));
+	    res->set_line(loc);
+	    return res;
+      }
+
+      if (strcmp(fname, "$ivl_string_method$tolower") == 0) {
+	    for (char&ch : str)
+		  ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+	    NetEConst*res = new NetEConst(verinum(str));
+	    res->set_line(loc);
+	    return res;
+      }
+
+      if (strcmp(fname, "$ivl_string_method$getc") == 0 && parms.size() == 2) {
+	    std::unique_ptr<NetExpr> i0(parms[1]->evaluate_function(loc, context_map));
+	    const NetEConst*ci = dynamic_cast<const NetEConst*>(i0.get());
+	    if (!ci)
+		  return 0;
+	    uint8_t byte_val = 0;
+	    if (ci->value().is_defined()) {
+		  int64_t idx = ci->value().as_long();
+		  if (idx >= 0 && static_cast<uint64_t>(idx) < str.size())
+			byte_val = static_cast<unsigned char>(str[static_cast<size_t>(idx)]);
+	    }
+	    verinum rv(static_cast<uint64_t>(byte_val), 8);
+	    rv.has_sign(true);
+	    NetEConst*res = new NetEConst(rv);
+	    res->set_line(loc);
+	    return res;
+      }
+
+      if ((strcmp(fname, "$ivl_string_method$compare") == 0 ||
+	   strcmp(fname, "$ivl_string_method$icompare") == 0) && parms.size() == 2) {
+	    std::unique_ptr<NetExpr> s1(parms[1]->evaluate_function(loc, context_map));
+	    const NetEConst*c1 = dynamic_cast<const NetEConst*>(s1.get());
+	    if (!c1)
+		  return 0;
+	    string rhs = verinum_to_sv_string(c1->value());
+	    if (strcmp(fname, "$ivl_string_method$icompare") == 0) {
+		  for (char&ch : str)
+			ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+		  for (char&ch : rhs)
+			ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+	    }
+	    int cmp = str.compare(rhs);
+	    verinum rv(static_cast<uint64_t>(static_cast<int64_t>(cmp)), 32);
+	    rv.has_sign(true);
+	    NetEConst*res = new NetEConst(rv);
+	    res->set_line(loc);
+	    return res;
+      }
+
+      if (strcmp(fname, "$ivl_string_method$substr") == 0 && parms.size() == 3) {
+	    std::unique_ptr<NetExpr> a1(parms[1]->evaluate_function(loc, context_map));
+	    std::unique_ptr<NetExpr> a2(parms[2]->evaluate_function(loc, context_map));
+	    const NetEConst*c1 = dynamic_cast<const NetEConst*>(a1.get());
+	    const NetEConst*c2 = dynamic_cast<const NetEConst*>(a2.get());
+	    if (!c1 || !c2)
+		  return 0;
+	    string sub;
+	    if (c1->value().is_defined() && c2->value().is_defined()) {
+		  int64_t i = c1->value().as_long();
+		  int64_t j = c2->value().as_long();
+		  if (i >= 0 && j >= i && static_cast<uint64_t>(j) < str.size()) {
+			sub = str.substr(static_cast<size_t>(i),
+					 static_cast<size_t>(j - i + 1));
+		  }
+	    }
+	    NetEConst*res = new NetEConst(verinum(sub));
+	    res->set_line(loc);
+	    return res;
+      }
+
+      return 0;
+}
+
 NetExpr* NetESFunc::evaluate_function(const LineInfo&loc,
 				map<perm_string,LocalVar>&context_map) const
 {
@@ -1396,8 +1528,13 @@ NetExpr* NetESFunc::evaluate_function(const LineInfo&loc,
 	    return res;
       }
 
+      if (strncmp(name(), "$ivl_string_method$", 19) == 0) {
+	    return eval_cfunc_string_method(loc, name(), parms_, context_map);
+      }
+
       ID id = built_in_id_();
-      ivl_assert(*this, id != NOT_BUILT_IN);
+      if (id == NOT_BUILT_IN)
+	    return 0;
 
       NetExpr*val0 = 0;
       NetExpr*val1 = 0;
