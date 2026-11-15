@@ -262,6 +262,7 @@ dimension_idx_down_fail		vvp_tests/dimension_idx_down_fail.json
 dimension_idx_up_fail		vvp_tests/dimension_idx_up_fail.json
 display_format_overflow		vvp_tests/display_format_overflow.json
 display_time_wide		vvp_tests/display_time_wide.json
+div_wide_net_msb		vvp_tests/div_wide_net_msb.json
 drive_strength4			vvp_tests/drive_strength4.json
 dumpfile			vvp_tests/dumpfile.json
 early_sig_elab1			vvp_tests/early_sig_elab1.json
