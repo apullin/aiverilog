@@ -7771,6 +7771,39 @@ void PSpecPath::elaborate(Design*des, NetScope*scope) const
       }
 }
 
+static void connect_timing_check_delayed_sig(const LineInfo*li, Design*des,
+					     NetScope*scope,
+					     const pform_name_t&src_path,
+					     const pform_name_t&dst_path)
+{
+      PEIdent src_id(src_path, UINT_MAX, true);
+      src_id.set_line(*li);
+      NetExpr*src_ex = elab_and_eval(des, scope, &src_id, -1, false);
+      if (src_ex == nullptr)
+	    return;
+      NetNet*sig = src_ex->synthesize(des, scope, src_ex);
+      delete src_ex;
+      if (sig == nullptr)
+	    return;
+
+      PEIdent dst_id(dst_path, UINT_MAX, true);
+      dst_id.set_line(*li);
+      NetNet*sig_delayed = dst_id.elaborate_lnet(des, scope, true);
+      if (sig_delayed == nullptr)
+	    return;
+
+      if (sig->vector_width() != sig_delayed->vector_width()) {
+	    cerr << li->get_fileline() << ": error: Timing check delayed "
+		 << "signal width (" << sig_delayed->vector_width()
+		 << ") does not match source signal width ("
+		 << sig->vector_width() << ")." << endl;
+	    des->errors += 1;
+	    return;
+      }
+
+      connect(sig->pin(0), sig_delayed->pin(0));
+}
+
 void PRecRem::elaborate(Design*des, NetScope*scope) const
 {
       // At present, no timing checks are supported.
@@ -7779,62 +7812,26 @@ void PRecRem::elaborate(Design*des, NetScope*scope) const
       // the delayed reference and data signals as per
       // 15.5.4 Option behavior
 
-      if (delayed_reference_ != nullptr)
-      {
-	      if (debug_elaborate) {
-		    cerr << get_fileline() << ": PRecRem::elaborate: Assigning "
+      if (delayed_reference_ != nullptr) {
+	    if (debug_elaborate) {
+		  cerr << get_fileline() << ": PRecRem::elaborate: Assigning "
 		       << reference_event_->name
 		       << " to " << *delayed_reference_ << endl;
-	      }
-
-	      NetNet*sig = des->find_signal(scope, reference_event_->name);
-
-	      if (sig == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << reference_event_->name << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      NetNet*sig_delayed = des->find_signal(scope, *delayed_reference_);
-
-	      if (sig_delayed == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << *delayed_reference_ << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      connect(sig->pin(0), sig_delayed->pin(0));
+	    }
+	    connect_timing_check_delayed_sig(this, des, scope,
+					     reference_event_->name,
+					     *delayed_reference_);
       }
 
-      if (delayed_data_ != nullptr)
-      {
-	      if (debug_elaborate) {
-		    cerr << get_fileline() << ": PRecRem::elaborate: Assigning "
+      if (delayed_data_ != nullptr) {
+	    if (debug_elaborate) {
+		  cerr << get_fileline() << ": PRecRem::elaborate: Assigning "
 		       << data_event_->name
 		       << " to " << *delayed_data_ << endl;
-	      }
-
-	      NetNet*sig = des->find_signal(scope, data_event_->name);
-
-	      if (sig == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << data_event_->name << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      NetNet*sig_delayed = des->find_signal(scope, *delayed_data_);
-
-	      if (sig_delayed == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << *delayed_data_ << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      connect(sig->pin(0), sig_delayed->pin(0));
+	    }
+	    connect_timing_check_delayed_sig(this, des, scope,
+					     data_event_->name,
+					     *delayed_data_);
       }
 }
 
@@ -7846,62 +7843,26 @@ void PSetupHold::elaborate(Design*des, NetScope*scope) const
       // the delayed reference and data signals as per
       // 15.5.4 Option behavior
 
-      if (delayed_reference_ != nullptr)
-      {
-	      if (debug_elaborate) {
-		    cerr << get_fileline() << ": PSetupHold::elaborate: Assigning"
+      if (delayed_reference_ != nullptr) {
+	    if (debug_elaborate) {
+		  cerr << get_fileline() << ": PSetupHold::elaborate: Assigning"
 		       << reference_event_->name
 		       << " to " << *delayed_reference_ << endl;
-	      }
-
-	      NetNet*sig = des->find_signal(scope, reference_event_->name);
-
-	      if (sig == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << reference_event_->name << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      NetNet*sig_delayed = des->find_signal(scope, *delayed_reference_);
-
-	      if (sig_delayed == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << *delayed_reference_ << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      connect(sig->pin(0), sig_delayed->pin(0));
+	    }
+	    connect_timing_check_delayed_sig(this, des, scope,
+					     reference_event_->name,
+					     *delayed_reference_);
       }
 
-      if (delayed_data_ != nullptr)
-      {
-	      if (debug_elaborate) {
-		    cerr << get_fileline() << ": PSetupHold::elaborate: Assigning"
+      if (delayed_data_ != nullptr) {
+	    if (debug_elaborate) {
+		  cerr << get_fileline() << ": PSetupHold::elaborate: Assigning"
 		       << data_event_->name
 		       << " to " << *delayed_data_ << endl;
-	      }
-
-	      NetNet*sig = des->find_signal(scope, data_event_->name);
-
-	      if (sig == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << data_event_->name << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      NetNet*sig_delayed = des->find_signal(scope, *delayed_data_);
-
-	      if (sig_delayed == nullptr) {
-		    cerr << get_fileline() << ": error: Cannot find: "
-		       << *delayed_data_ << endl;
-		    des->errors += 1;
-		    return;
-	      }
-
-	      connect(sig->pin(0), sig_delayed->pin(0));
+	    }
+	    connect_timing_check_delayed_sig(this, des, scope,
+					     data_event_->name,
+					     *delayed_data_);
       }
 }
 
