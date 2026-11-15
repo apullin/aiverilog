@@ -1,0 +1,5 @@
+{
+    "type" : "normal",
+    "source" : "sv_pkg_param_class_extends.v",
+    "iverilog-args" : [ "-g2012" ]
+}
