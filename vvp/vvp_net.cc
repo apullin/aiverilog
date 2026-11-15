@@ -817,7 +817,7 @@ vvp_vector4_t::vvp_vector4_t(unsigned size__, double val)
       }
 
       unsigned nwords = (exponent-1) / BITS_PER_WORD;
-      unsigned my_words = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD - 1;
+      unsigned my_words = (std::size_t(size_) + BITS_PER_WORD - 1) / BITS_PER_WORD - 1;
 
       fraction = ldexp(fraction, (exponent-1) % BITS_PER_WORD + 1);
 
@@ -882,7 +882,7 @@ vvp_vector4_t::vvp_vector4_t(const vvp_vector4_t&that,
       }
 
       if (wid > BITS_PER_WORD) {
-	    unsigned words = (wid + BITS_PER_WORD - 1) / BITS_PER_WORD;
+	    unsigned words = (std::size_t(wid) + BITS_PER_WORD - 1) / BITS_PER_WORD;
 	    abits_ptr_ = alloc_block_(words);
 	    bbits_ptr_ = abits_ptr_ + words;
       } else {
@@ -900,7 +900,7 @@ vvp_vector4_t::vvp_vector4_t(const vvp_vector4_t&that,
 	    unsigned ptr = adr / BITS_PER_WORD;
 	    unsigned long off = adr % BITS_PER_WORD;
 	    if (off == 0) {
-		  unsigned words = (wid + BITS_PER_WORD - 1) / BITS_PER_WORD;
+		  unsigned words = (std::size_t(wid) + BITS_PER_WORD - 1) / BITS_PER_WORD;
 		  memcpy(abits_ptr_, that.abits_ptr_ + ptr,
 			 words * sizeof(unsigned long));
 		  memcpy(bbits_ptr_, that.bbits_ptr_ + ptr,
@@ -996,7 +996,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
       if (size_ == newsize)
 	    return;
 
-      unsigned cnt = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD;
+      unsigned cnt = (std::size_t(size_) + BITS_PER_WORD - 1) / BITS_PER_WORD;
       unsigned long word_pad_abits = 0;
       unsigned long word_pad_bbits = 0;
       switch (pad_bit) {
@@ -1019,7 +1019,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
       }
 
       if (newsize > BITS_PER_WORD) {
-	    unsigned newcnt = (newsize + BITS_PER_WORD - 1) / BITS_PER_WORD;
+	    unsigned newcnt = (std::size_t(newsize) + BITS_PER_WORD - 1) / BITS_PER_WORD;
 	    if (newcnt == cnt) {
 		    // If the word count doesn't change, then there is
 		    // no need for re-allocation so we are done now.
