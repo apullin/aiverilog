@@ -43,6 +43,15 @@ static NetExpr* fix_assign_value(const NetNet*lhs, NetExpr*rhs)
       NetEConst*ce = dynamic_cast<NetEConst*>(rhs);
       if (ce == 0) return rhs;
 
+      if (lhs->data_type() == IVL_VT_BOOL && !ce->value().is_defined()) {
+	    verinum v2(ce->value());
+	    v2.cast_to_int2();
+	    NetEConst*ce2 = new NetEConst(v2);
+	    ce2->set_line(*rhs);
+	    delete rhs;
+	    rhs = ce = ce2;
+      }
+
       unsigned lhs_width = lhs->vector_width();
       unsigned rhs_width = rhs->expr_width();
       if (rhs_width < lhs_width) {
@@ -301,8 +310,12 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 		  return true;
 	    }
 
-	    if (old_lval == 0)
-		  old_lval = make_const_x(lval->sig()->vector_width());
+	    if (old_lval == 0) {
+		  if (lval->sig()->data_type() == IVL_VT_BOOL)
+			old_lval = make_const_0(lval->sig()->vector_width());
+		  else
+			old_lval = make_const_x(lval->sig()->vector_width());
+	    }
 
 	    const NetEConst*lval_const = dynamic_cast<NetEConst*>(old_lval);
 	    ivl_assert(loc, lval_const);
@@ -311,7 +324,9 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 	    ivl_assert(loc, rval_const);
 	    verinum rval_v = rval_const->value();
 
-	    verinum lpart(verinum::Vx, lval->lwidth());
+	    verinum::V def_bit = (lval->sig()->data_type() == IVL_VT_BOOL)
+	                         ? verinum::V0 : verinum::Vx;
+	    verinum lpart(def_bit, lval->lwidth());
 	    if (op_) {
 		  lpart.has_sign(lval->get_signed());
 		  for (unsigned idx = 0 ; idx < lpart.len() ; idx += 1) {
@@ -331,11 +346,15 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 
 	    delete base_result;
 	    delete rval_result;
+	    if (lval->sig()->data_type() == IVL_VT_BOOL)
+		  lval_v.cast_to_int2();
 	    rval_result = new NetEConst(lval_v);
       } else {
 	    if (op_ == 0) {
 		  rval_result = fix_assign_value(lval->sig(), rval_result);
 	    } else if (dynamic_cast<NetECReal*>(rval_result)) {
+		  if (old_lval == 0)
+			old_lval = new NetECReal(verireal(0.0));
 		  const NetECReal*lval_const = dynamic_cast<NetECReal*>(old_lval);
 		  ivl_assert(loc, lval_const);
 		  verireal lval_r = lval_const->value();
@@ -348,14 +367,24 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 		  delete rval_result;
 		  rval_result = new NetECReal(lval_r);
 	    } else {
+		  if (old_lval == 0) {
+			unsigned lwid = lval->sig()->vector_width();
+			if (lval->sig()->data_type() == IVL_VT_BOOL)
+			      old_lval = make_const_0(lwid);
+			else
+			      old_lval = make_const_x(lwid);
+		  }
 		  const NetEConst*lval_const = dynamic_cast<NetEConst*>(old_lval);
 		  ivl_assert(loc, lval_const);
 		  verinum lval_v = lval_const->value();
+		  lval_v.has_sign(lval->get_signed());
 		  const NetEConst*rval_const = dynamic_cast<NetEConst*>(rval_result);
 		  ivl_assert(loc, rval_const);
 		  verinum rval_v = rval_const->value();
 
 		  eval_func_lval_op_(loc, lval_v, rval_v);
+		  if (lval->sig()->data_type() == IVL_VT_BOOL)
+			lval_v.cast_to_int2();
 
 		  delete rval_result;
 		  rval_result = new NetEConst(lval_v);
