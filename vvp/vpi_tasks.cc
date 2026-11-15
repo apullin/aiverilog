@@ -533,6 +533,11 @@ vpiHandle sysfunc_rnet::vpi_put_value(p_vpi_value vp, int)
 	    value = vp->value.real;
 	    break;
 
+	  case vpiIntVal:
+	  case vpiVectorVal:
+	    value = 0.0;
+	    break;
+
 	  default:
 	    value = 0.0;
 	    fprintf(stderr, "Unsupported format %d.\n", (int)vp->format);
