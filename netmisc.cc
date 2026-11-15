@@ -1177,6 +1177,30 @@ bool evaluate_range(Design*des, NetScope*scope, const LineInfo*li,
             }
       }
 
+      if (dimension_ok) {
+            const long max_dim_span = 1L << 30;
+            if (index_l < INT_MIN || index_l > INT_MAX ||
+                index_r < INT_MIN || index_r > INT_MAX) {
+                  cerr << li->get_fileline() << ": error: "
+                          "Dimension bound exceeds 32-bit signed integer range."
+                       << endl;
+                  dimension_ok = false;
+                  des->errors += 1;
+            } else {
+                  unsigned long span = (index_l >= index_r)
+                        ? (unsigned long)index_l - (unsigned long)index_r + 1UL
+                        : (unsigned long)index_r - (unsigned long)index_l + 1UL;
+                  if (span > (unsigned long)max_dim_span) {
+                        cerr << li->get_fileline() << ": error: "
+                                "Dimension size (" << span
+                             << ") exceeds maximum supported size ("
+                             << max_dim_span << ")." << endl;
+                        dimension_ok = false;
+                        des->errors += 1;
+                  }
+            }
+      }
+
         /* Error recovery */
       if (!dimension_ok) {
             index_l = 0;
@@ -1190,12 +1214,26 @@ bool evaluate_ranges(Design*des, NetScope*scope, const LineInfo*li,
 		     netranges_t&llist, const list<pform_range_t>&rlist)
 {
       bool dimensions_ok = true;
+      const unsigned long max_total_span = 1UL << 30;
+      unsigned long total = 1;
 
       for (list<pform_range_t>::const_iterator cur = rlist.begin()
 		 ; cur != rlist.end() ; ++cur) {
             long index_l, index_r;
             dimensions_ok &= evaluate_range(des, scope, li, *cur, index_l, index_r);
-            llist.push_back(netrange_t(index_l, index_r));
+            netrange_t rng(index_l, index_r);
+            unsigned long w = rng.width();
+            if (w > 0 && total > max_total_span / w) {
+                  cerr << li->get_fileline() << ": error: "
+                          "Total dimension size exceeds maximum supported size ("
+                       << max_total_span << ")." << endl;
+                  dimensions_ok = false;
+                  des->errors += 1;
+                  rng = netrange_t(0, 0);
+            } else if (w > 0) {
+                  total *= w;
+            }
+            llist.push_back(rng);
       }
 
       return dimensions_ok;

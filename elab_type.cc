@@ -30,6 +30,7 @@
 # include  "netstruct.h"
 # include  "netvector.h"
 # include  "netmisc.h"
+# include  "compiler.h"
 # include  <set>
 # include  <typeinfo>
 # include  "ivl_assert.h"
@@ -360,6 +361,21 @@ static ivl_type_t elaborate_static_array_type(Design *des, const LineInfo &li,
 	    des->errors++;
 	    // Recover
 	    base_type = new netvector_t(IVL_VT_LOGIC);
+      }
+
+      unsigned long total_elems = 1;
+      for (size_t idx = 0; idx < dims.size(); idx += 1) {
+	    unsigned long w = dims[idx].width();
+	    if (w > 0 && total_elems > array_size_limit / w) {
+		  cerr << li.get_fileline() << ": error: "
+		       << "Unpacked array size exceeds " << array_size_limit
+		       << " elements (set by -pARRAY_SIZE_LIMIT)." << endl;
+		  des->errors += 1;
+		  dims.clear();
+		  dims.push_back(netrange_t(0, 0));
+		  break;
+	    }
+	    if (w > 0) total_elems *= w;
       }
 
       ivl_type_t type = new netuarray_t(dims, base_type);
