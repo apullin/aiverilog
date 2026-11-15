@@ -1,0 +1,5 @@
+{
+    "type"   : "CE",
+    "source" : "specify_invalid_path_fail.v",
+    "iverilog-args" : [ "-g2012", "-gspecify" ]
+}

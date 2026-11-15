@@ -520,7 +520,10 @@ void pform_pop_block_scope(bool keep_scope)
 
       for (const auto& symbol : scope->local_symbols) {
 	    auto nested_scope = dynamic_cast<LexicalScope *> (symbol.second);
-	    assert(nested_scope);
+	    if (!nested_scope) {
+		  assert(error_count > 0);
+		  continue;
+	    }
 	    nested_scope->set_parent_scope(lexical_scope);
 	    add_local_symbol(lexical_scope, symbol.first, symbol.second);
       }
@@ -1332,12 +1335,20 @@ verinum* pform_verinum_with_size(verinum*siz, verinum*val,
 				 const char*file, unsigned lineno)
 {
       assert(siz->is_defined());
+      const unsigned long max_lit_size = 1UL << 24;
       unsigned long size = siz->as_ulong();
 
       if (size == 0) {
 	    cerr << file << ":" << lineno << ": error: Sized numeric constant "
 		    "must have a size greater than zero." << endl;
 	    error_count += 1;
+	    size = 1;
+      } else if (size > max_lit_size) {
+	    cerr << file << ":" << lineno << ": error: Sized numeric constant "
+		    "width exceeds maximum supported size (" << max_lit_size
+		 << ")." << endl;
+	    error_count += 1;
+	    size = 1;
       }
 
       verinum::V pad;
@@ -1588,6 +1599,14 @@ void pform_endmodule(const char*name, bool inside_celldefine,
 	    VLerror(msg.str().c_str());
       } else {
 	    use_module_map[mod_name] = cur_module;
+      }
+
+	// After syntax error recovery (e.g. an unclosed block or malformed
+	// for-loop declaration), unwind any leftover child scopes back to
+	// cur_module before popping the module scope.
+      if (error_count > 0) {
+	    while (lexical_scope && lexical_scope != cur_module)
+		  pform_pop_scope();
       }
 
 	// The current lexical scope should be this module by now.
@@ -3061,7 +3080,7 @@ void pform_set_type_attrib(perm_string name, const string&key,
 			   char*value)
 {
       map<perm_string,PUdp*>::const_iterator udp = pform_primitives.find(name);
-      if (udp == pform_primitives.end()) {
+      if (udp == pform_primitives.end() || (*udp).second == 0) {
 	    VLerror("error: Type name is not (yet) defined.");
 	    delete[] value;
 	    return;
