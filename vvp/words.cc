@@ -183,7 +183,9 @@ void compile_variable(char*label, char*name,
 		      int msb, int lsb, int vpi_type_code,
 		      bool signed_flag, bool local_flag, char*enum_label)
 {
-      unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
+      unsigned wid = (unsigned)(((msb > lsb)
+                                 ? (int64_t)msb - (int64_t)lsb
+                                 : (int64_t)lsb - (int64_t)msb) + 1);
 
       vvp_net_t*net = new vvp_net_t;
 
@@ -341,7 +343,9 @@ static void do_compile_net(vvp_net_t*node, vvp_array_t array,
 			   int msb, int lsb, unsigned array_addr,
 			   int vpi_type_code, bool signed_flag, bool local_flag)
 {
-      unsigned wid = ((msb > lsb)? msb-lsb : lsb-msb) + 1;
+      unsigned wid = (unsigned)(((msb > lsb)
+                                 ? (int64_t)msb - (int64_t)lsb
+                                 : (int64_t)lsb - (int64_t)msb) + 1);
       assert(node);
 
       vvp_wire_base*vsig = dynamic_cast<vvp_wire_base*>(node->fil);

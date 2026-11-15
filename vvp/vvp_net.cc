@@ -701,7 +701,7 @@ void vvp_vector4_t::copy_bits(const vvp_vector4_t&that)
  */
 void vvp_vector4_t::copy_from_big_(const vvp_vector4_t&that)
 {
-      unsigned words = (size_+BITS_PER_WORD-1) / BITS_PER_WORD;
+      std::size_t words = (std::size_t(size_)+BITS_PER_WORD-1) / BITS_PER_WORD;
       abits_ptr_ = new unsigned long[2*words];
       bbits_ptr_ = abits_ptr_ + words;
 
@@ -720,7 +720,7 @@ void vvp_vector4_t::copy_inverted_from_(const vvp_vector4_t&that)
 {
       size_ = that.size_;
       if (size_ > BITS_PER_WORD) {
-	    unsigned words = (size_+BITS_PER_WORD-1) / BITS_PER_WORD;
+	    std::size_t words = (std::size_t(size_)+BITS_PER_WORD-1) / BITS_PER_WORD;
 	    abits_ptr_ = new unsigned long[2*words];
 	    bbits_ptr_ = abits_ptr_ + words;
 
@@ -750,12 +750,12 @@ void vvp_vector4_t::copy_inverted_from_(const vvp_vector4_t&that)
 void vvp_vector4_t::allocate_words_(unsigned long inita, unsigned long initb)
 {
       if (size_ > BITS_PER_WORD) {
-	    unsigned cnt = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD;
+	    std::size_t cnt = (std::size_t(size_) + BITS_PER_WORD - 1) / BITS_PER_WORD;
 	    abits_ptr_ = new unsigned long[2*cnt];
 	    bbits_ptr_ = abits_ptr_ + cnt;
-	    for (unsigned idx = 0 ;  idx < cnt ;  idx += 1)
+	    for (std::size_t idx = 0 ;  idx < cnt ;  idx += 1)
 		  abits_ptr_[idx] = inita;
-	    for (unsigned idx = 0 ;  idx < cnt ;  idx += 1)
+	    for (std::size_t idx = 0 ;  idx < cnt ;  idx += 1)
 		  bbits_ptr_[idx] = initb;
 
       } else {
@@ -963,7 +963,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
       if (size_ == newsize)
 	    return;
 
-      unsigned cnt = (size_ + BITS_PER_WORD - 1) / BITS_PER_WORD;
+      std::size_t cnt = (std::size_t(size_) + BITS_PER_WORD - 1) / BITS_PER_WORD;
       unsigned long word_pad_abits = 0;
       unsigned long word_pad_bbits = 0;
       switch (pad_bit) {
@@ -986,7 +986,7 @@ void vvp_vector4_t::resize(unsigned newsize, vvp_bit4_t pad_bit)
       }
 
       if (newsize > BITS_PER_WORD) {
-	    unsigned newcnt = (newsize + BITS_PER_WORD - 1) / BITS_PER_WORD;
+	    std::size_t newcnt = (std::size_t(newsize) + BITS_PER_WORD - 1) / BITS_PER_WORD;
 	    if (newcnt == cnt) {
 		    // If the word count doesn't change, then there is
 		    // no need for re-allocation so we are done now.
