@@ -345,7 +345,9 @@ void pform_check_extern_ports(const struct vlltype&loc,
 		       << "' but the prototype at " << where << " names it '"
 		       << pw->basename() << "'." << endl;
 		  error_count += 1;
-	    } else if (pw->get_port_type() != dw->get_port_type()) {
+	    } else if (pw->get_port_type() != dw->get_port_type()
+		       || (pw->get_port_type() == PortType::PREF
+			   && pw->get_const() != dw->get_const())) {
 		  cerr << loc << ": error: Port '" << dw->basename()
 		       << "' of extern " << what << " has a different "
 		       << "direction than in the prototype at " << where

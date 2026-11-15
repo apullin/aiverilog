@@ -4708,6 +4708,13 @@ NetProc* PCallTask::elaborate_sys_task_method_(Design*des, NetScope*scope,
 					       const char *sys_task_name,
 					       const std::vector<perm_string> &parm_names) const
 {
+      if (net->get_const()) {
+	    cerr << get_fileline() << ": error: Assignment to const signal `"
+	         << net->name() << "` is not allowed." << endl;
+	    des->errors += 1;
+	    return 0;
+      }
+
       NetESignal*sig = new NetESignal(net);
       sig->set_line(*this);
 
@@ -4753,6 +4760,14 @@ NetProc* PCallTask::elaborate_sys_task_property_method_(Design*des, NetScope*sco
 							const char *sys_task_name,
 							const std::vector<perm_string> &parm_names) const
 {
+      const netclass_t*pcls = dynamic_cast<const netclass_t*>(net->net_type());
+      if (pcls && pcls->get_prop_qual(property_idx).test_const()) {
+	    cerr << get_fileline() << ": error: Assignment to const property `"
+	         << pcls->get_prop_name(property_idx) << "` is not allowed." << endl;
+	    des->errors += 1;
+	    return 0;
+      }
+
       NetEProperty*prop = new NetEProperty(net, property_idx, 0);
       prop->set_line(*this);
 
@@ -4874,6 +4889,13 @@ NetProc* PCallTask::elaborate_queue_method_(Design*des, NetScope*scope,
 					    const char *sys_task_name,
 					    const std::vector<perm_string> &parm_names) const
 {
+      if (net->get_const()) {
+	    cerr << get_fileline() << ": error: Assignment to const signal `"
+	         << net->name() << "` is not allowed." << endl;
+	    des->errors += 1;
+	    return 0;
+      }
+
       NetESignal*sig = new NetESignal(net);
       sig->set_line(*this);
 
@@ -4893,6 +4915,12 @@ NetProc* PCallTask::elaborate_queue_property_method_(Design*des, NetScope*scope,
 {
       const netclass_t*cls = dynamic_cast<const netclass_t*>(net->net_type());
       ivl_assert(*this, cls);
+      if (cls->get_prop_qual(property_idx).test_const()) {
+	    cerr << get_fileline() << ": error: Assignment to const property `"
+	         << cls->get_prop_name(property_idx) << "` is not allowed." << endl;
+	    des->errors += 1;
+	    return 0;
+      }
       ivl_type_t ptype = cls->get_prop_type(property_idx);
       const netdarray_t*use_darray = dynamic_cast<const netdarray_t*>(ptype);
       ivl_assert(*this, use_darray);
@@ -5055,17 +5083,21 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 									    "$ivl_queue_method$insert",
 									    parm_names);
 			      }
-			      if (queue && method_name == "pop_front") {
+			      if (queue && (method_name == "pop_front" ||
+					    method_name == "pop_back")) {
+				    if (cls->get_prop_qual(pidx).test_const()) {
+					  cerr << get_fileline() << ": error: Assignment to const property `"
+					       << cls->get_prop_name(pidx)
+					       << "` is not allowed." << endl;
+					  des->errors += 1;
+					  return 0;
+				    }
+				    const char*sf = method_name == "pop_front"
+					  ? "$ivl_queue_method$pop_front"
+					  : "$ivl_queue_method$pop_back";
 				    return elaborate_method_property_func_(scope, net, pidx,
 									   use_darray->element_type(),
-									   method_name,
-									   "$ivl_queue_method$pop_front");
-			      }
-			      if (queue && method_name == "pop_back") {
-				    return elaborate_method_property_func_(scope, net, pidx,
-									   use_darray->element_type(),
-									   method_name,
-									   "$ivl_queue_method$pop_back");
+									   method_name, sf);
 			      }
 			      if (!queue && method_name == "delete") {
 				    static const std::vector<perm_string> parm_names = {
@@ -5234,18 +5266,20 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 		  return elaborate_queue_method_(des, scope, net, method_name,
 						 "$ivl_queue_method$insert",
 						 parm_names);
-	    } else if (method_name == "pop_front") {
+	    } else if (method_name == "pop_front" || method_name == "pop_back") {
+		  if (net->get_const()) {
+			cerr << get_fileline() << ": error: Assignment to const signal `"
+			     << net->name() << "` is not allowed." << endl;
+			des->errors += 1;
+			return 0;
+		  }
 		  const netdarray_t*use_darray = net->darray_type();
+		  const char*sf = method_name == "pop_front"
+			? "$ivl_queue_method$pop_front"
+			: "$ivl_queue_method$pop_back";
 		  return elaborate_method_func_(scope, net,
 		                                use_darray->element_type(),
-		                                method_name,
-		                                "$ivl_queue_method$pop_front");
-	    } else if (method_name == "pop_back") {
-		  const netdarray_t*use_darray = net->darray_type();
-		  return elaborate_method_func_(scope, net,
-		                                use_darray->element_type(),
-		                                method_name,
-		                                "$ivl_queue_method$pop_back");
+		                                method_name, sf);
 	    }
       }
 
@@ -8147,6 +8181,8 @@ static bool virtual_types_match(ivl_type_t base, ivl_type_t over, bool covariant
 	    return covariant ? base->type_compatible(over) : base == over;
 	  case IVL_VT_BOOL:
 	  case IVL_VT_LOGIC:
+	  case IVL_VT_DARRAY:
+	  case IVL_VT_QUEUE:
 	    return base->type_equivalent(over);
 	  default:
 	    return true;
@@ -8179,6 +8215,8 @@ static const char*virtual_mismatch(NetScope*over, NetScope*root)
 	    const NetNet*rp = rdef->port(idx);
 	    if (op->port_type() != rp->port_type())
 		  return "a different argument direction";
+	    if (op->port_type() == NetNet::PREF && op->get_const() != rp->get_const())
+		  return "a different argument direction";
 	    if (op->unpacked_dimensions() != rp->unpacked_dimensions()
 		|| !virtual_types_match(rp->net_type(), op->net_type(), false))
 		  return "a different argument type";
@@ -8206,6 +8244,8 @@ static const char*virtual_mismatch(NetScope*over, NetScope*root)
  */
 static bool extern_types_match(ivl_type_t a, ivl_type_t b)
 {
+      if (!a || !b)
+	    return a == b;
       return a->base_type() == b->base_type() && a->type_equivalent(b);
 }
 
@@ -8213,7 +8253,7 @@ static void check_extern_types(Design*des, NetScope*class_scope,
 			       const perm_string&cname, perm_string name,
 			       const PClass::extern_method_t&proto)
 {
-      if (!proto.defined || name == "new")
+      if (!proto.defined)
 	    return;
 
       NetScope*method = class_scope->child(hname_t(name));
@@ -8233,8 +8273,13 @@ static void check_extern_types(Design*des, NetScope*class_scope,
 								    unpacked);
 		  if (ptype == 0)
 			continue;
+		  ivl_type_t stype = sig->net_type();
+		  if (!stype) {
+			if (const netuarray_t*ua = dynamic_cast<const netuarray_t*>(sig->array_type()))
+			      stype = ua->element_type();
+		  }
 		  if (unpacked == sig->unpacked_dims()
-		      && extern_types_match(ptype, sig->net_type()))
+		      && extern_types_match(ptype, stype))
 			continue;
 		  cerr << proto.def.get_fileline() << ": error: Port '"
 		       << port.port->basename() << "' of extern " << what
@@ -8245,7 +8290,7 @@ static void check_extern_types(Design*des, NetScope*class_scope,
 	    }
       }
 
-      if (proto.is_task)
+      if (proto.is_task || name == "new")
 	    return;
 
       ivl_type_t rtype;

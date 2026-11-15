@@ -754,6 +754,7 @@ sv_const_fail6			vvp_tests/sv_const_fail6.json
 sv_const_fail7			vvp_tests/sv_const_fail7.json
 sv_const_fail8			vvp_tests/sv_const_fail8.json
 sv_const_fail9			vvp_tests/sv_const_fail9.json
+sv_const_ref_and_override_fail	vvp_tests/sv_const_ref_and_override_fail.json
 sv_const_string_getc_err	vvp_tests/sv_const_string_getc_err.json
 sv_const_string_getc		vvp_tests/sv_const_string_getc.json
 sv_const_string_i_compare_err	vvp_tests/sv_const_string_i_compare_err.json
