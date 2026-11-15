@@ -258,6 +258,7 @@ extern void draw_eval_string(ivl_expr_t ex);
  * and pushes the object onto the object stack.
  */
 extern int draw_eval_object(ivl_expr_t ex);
+extern void draw_load_property_object(ivl_expr_t expr);
 
 /*
  * Emit vvp for $ivl_queue_method$find* / find*_with when the call appears

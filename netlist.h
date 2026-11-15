@@ -4838,12 +4838,14 @@ class NetENull : public NetExpr {
  */
 class NetEProperty : public NetExpr {
     public:
-      NetEProperty(NetNet*n, size_t pidx_, NetExpr*canon_index =0);
+      NetEProperty(NetNet*n, size_t pidx_, NetExpr*canon_index =0,
+		   NetExpr*array_idx =0);
       ~NetEProperty() override;
 
       inline const NetNet* get_sig() const { return net_.get(); }
       inline size_t property_idx() const { return pidx_; }
       inline const NetExpr*get_index() const { return index_.get(); }
+      inline const NetExpr*get_array_index() const { return array_idx_.get(); }
 
     public: // Overridden methods
       virtual void expr_scan(struct expr_scan_t*) const override;
@@ -4857,6 +4859,7 @@ class NetEProperty : public NetExpr {
       NetERef net_;
       size_t pidx_;
       NetExpr::Ptr index_;
+      NetExpr::Ptr array_idx_;
 };
 
 /*

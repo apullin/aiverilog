@@ -59,10 +59,9 @@ static void string_ex_concat(ivl_expr_t expr)
 
 static void string_ex_property(ivl_expr_t expr)
 {
-      ivl_signal_t sig = ivl_expr_signal(expr);
       unsigned pidx = ivl_expr_property_idx(expr);
 
-      fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
+      draw_load_property_object(expr);
       fprintf(vvp_out, "    %%prop/str %u;\n", pidx);
       fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
 }

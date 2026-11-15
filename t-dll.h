@@ -345,6 +345,7 @@ struct ivl_expr_s {
 		  ivl_signal_t sig;
 		  unsigned prop_idx;
 		  ivl_expr_t index;
+		  ivl_expr_t array_idx;
 	    } property_;
       } u_;
 };

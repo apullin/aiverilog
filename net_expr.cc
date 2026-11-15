@@ -389,8 +389,9 @@ NetENull::~NetENull()
 {
 }
 
-NetEProperty::NetEProperty(NetNet*net, size_t pidx, NetExpr*idx)
-: net_(net), pidx_(pidx), index_(idx)
+NetEProperty::NetEProperty(NetNet*net, size_t pidx, NetExpr*idx,
+			   NetExpr*array_idx)
+: net_(net), pidx_(pidx), index_(idx), array_idx_(array_idx)
 {
       const netclass_t*use_type = dynamic_cast<const netclass_t*>(net->net_type());
       ivl_assert(*this, use_type);
