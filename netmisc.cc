@@ -1978,6 +1978,29 @@ static bool class_derives_from(const netclass_t*cls, const netclass_t*base)
       return false;
 }
 
+static bool check_cast_dest_not_const(Design*des, const LineInfo*li,
+				      const NetESignal*dest_sig,
+				      const NetEProperty*dest_prop)
+{
+      if (dest_sig && dest_sig->sig()->get_const()) {
+	    cerr << li->get_fileline() << ": error: Assignment to const signal `"
+	         << dest_sig->sig()->name() << "` is not allowed." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+      if (dest_prop) {
+	    const netclass_t*cls = dynamic_cast<const netclass_t*>(dest_prop->get_sig()->net_type());
+	    if (cls && cls->get_prop_qual(dest_prop->property_idx()).test_const()) {
+		  cerr << li->get_fileline() << ": error: Assignment to const property `"
+		       << cls->get_prop_name(dest_prop->property_idx())
+		       << "` is not allowed." << endl;
+		  des->errors += 1;
+		  return false;
+	    }
+      }
+      return true;
+}
+
 bool check_class_cast_args(Design*des, const LineInfo*li,
 			   const NetExpr*dest, const NetExpr*src)
 {
@@ -2007,6 +2030,8 @@ bool check_class_cast_args(Design*des, const LineInfo*li,
 	    des->errors += 1;
 	    return false;
       }
+      if (!check_cast_dest_not_const(des, li, dest_sig, dest_prop))
+	    return false;
 
       if (dynamic_cast<const NetENull*>(src))
 	    return true;

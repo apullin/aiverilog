@@ -618,6 +618,19 @@ NetExpr* elaborate_ref_argument(Design*des, NetScope*scope,
 	    return 0;
       }
 
+      if (const NetEProperty*eprop = dynamic_cast<NetEProperty*>(res)) {
+	    const netclass_t*cls = dynamic_cast<const netclass_t*>(sig->net_type());
+	    if (cls && !formal->get_const()
+		&& cls->get_prop_qual(eprop->property_idx()).test_const()) {
+		  cerr << expr->get_fileline() << ": error: The const property `"
+		       << cls->get_prop_name(eprop->property_idx())
+		       << "` can only be passed to a const ref argument." << endl;
+		  des->errors += 1;
+		  delete res;
+		  return 0;
+	    }
+      }
+
       if (dynamic_cast<NetESignal*>(res) && !formal->get_const() &&
 	  sig->name() == perm_string::literal(THIS_TOKEN)) {
 	    cerr << expr->get_fileline() << ": error: \"this\" can only be "
@@ -4864,26 +4877,25 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 				    sys_expr->parm(0, prop);
 				    return sys_expr;
 			      }
-			      if (queue && method_name == "pop_back") {
+			      if (queue && (method_name == "pop_back" ||
+					    method_name == "pop_front")) {
+				    if (cls->get_prop_qual(pidx).test_const()) {
+					  cerr << get_fileline() << ": error: Assignment to const property `"
+					       << cls->get_prop_name(pidx)
+					       << "` is not allowed." << endl;
+					  des->errors += 1;
+					  delete prop;
+					  return 0;
+				    }
 				    if (parms_.size() != 0) {
-					  cerr << get_fileline() << ": error: pop_back() method "
-					       << "takes no arguments" << endl;
+					  cerr << get_fileline() << ": error: " << method_name
+					       << "() method takes no arguments" << endl;
 					  des->errors += 1;
 				    }
-				    NetESFunc*sys_expr = new NetESFunc("$ivl_queue_method$pop_back",
-								      element_type, 1);
-				    sys_expr->set_line(*this);
-				    sys_expr->parm(0, prop);
-				    return sys_expr;
-			      }
-			      if (queue && method_name == "pop_front") {
-				    if (parms_.size() != 0) {
-					  cerr << get_fileline() << ": error: pop_front() method "
-					       << "takes no arguments" << endl;
-					  des->errors += 1;
-				    }
-				    NetESFunc*sys_expr = new NetESFunc("$ivl_queue_method$pop_front",
-								      element_type, 1);
+				    const char*sf = method_name == "pop_back"
+					  ? "$ivl_queue_method$pop_back"
+					  : "$ivl_queue_method$pop_front";
+				    NetESFunc*sys_expr = new NetESFunc(sf, element_type, 1);
 				    sys_expr->set_line(*this);
 				    sys_expr->parm(0, prop);
 				    return sys_expr;
@@ -5010,27 +5022,23 @@ NetExpr* PECallFunction::elaborate_expr_method_(Design*des, NetScope*scope,
 					  : static_cast<ivl_type_t>(dar);
 	    const char* kind = queue ? "queue" : "dynamic array";
 
-	    if (queue && method_name == "pop_back") {
+	    if (queue && (method_name == "pop_back" || method_name == "pop_front")) {
+		  if (search_results.net && search_results.net->get_const()) {
+			cerr << get_fileline() << ": error: Assignment to const signal `"
+			     << search_results.net->name() << "` is not allowed." << endl;
+			des->errors += 1;
+			delete sub_expr;
+			return 0;
+		  }
 		  if (parms_.size() != 0) {
-			cerr << get_fileline() << ": error: pop_back() method "
-			     << "takes no arguments" << endl;
+			cerr << get_fileline() << ": error: " << method_name
+			     << "() method takes no arguments" << endl;
 			des->errors += 1;
 		  }
-		  NetESFunc*sys_expr = new NetESFunc("$ivl_queue_method$pop_back",
-						     element_type, 1);
-		  sys_expr->set_line(*this);
-		  sys_expr->parm(0, sub_expr);
-		  return sys_expr;
-	    }
-
-	    if (queue && method_name == "pop_front") {
-		  if (parms_.size() != 0) {
-			cerr << get_fileline() << ": error: pop_front() method "
-			     << "takes no arguments" << endl;
-			des->errors += 1;
-		  }
-		  NetESFunc*sys_expr = new NetESFunc("$ivl_queue_method$pop_front",
-						     element_type, 1);
+		  const char*sf = method_name == "pop_back"
+			? "$ivl_queue_method$pop_back"
+			: "$ivl_queue_method$pop_front";
+		  NetESFunc*sys_expr = new NetESFunc(sf, element_type, 1);
 		  sys_expr->set_line(*this);
 		  sys_expr->parm(0, sub_expr);
 		  return sys_expr;
@@ -6792,11 +6800,17 @@ static NetExpr* build_unpacked_reduction(Design *des,
       return fun;
 }
 
-static NetExpr* build_queue_method(const LineInfo &loc,
+static NetExpr* build_queue_method(Design*des, const LineInfo &loc,
                                    symbol_search_results&sr,
                                    ivl_type_t element_type,
                                    const char* nm)
 {
+      if (sr.net && sr.net->get_const()) {
+	    cerr << loc.get_fileline() << ": error: Assignment to const signal `"
+	         << sr.net->name() << "` is not allowed." << endl;
+	    des->errors += 1;
+	    return 0;
+      }
       char buf[64];
       int res = snprintf(buf, sizeof buf, "$ivl_queue_method$%s", nm);
       ivl_assert(loc, res < static_cast<int>(sizeof buf));
@@ -6895,7 +6909,7 @@ NetExpr* PEIdent::elaborate_expr(Design*des, NetScope*scope,
 	    if ((member_comp.name == "pop_back") ||
 	        (member_comp.name == "pop_front")) {
 		  ivl_type_t element_type = queue->element_type();
-		  return build_queue_method(*this, sr, element_type, member_comp.name);
+		  return build_queue_method(des, *this, sr, element_type, member_comp.name);
 	    }
 
 	    if ((member_comp.name == "max") ||
@@ -7242,7 +7256,7 @@ NetExpr* PEIdent::elaborate_expr_(Design*des, NetScope*scope,
 		  if ((member_comp.name == "pop_back") ||
 		      (member_comp.name == "pop_front")) {
 			ivl_type_t element_type = queue->element_type();
-			return build_queue_method(*this, sr, element_type, member_comp.name);
+			return build_queue_method(des, *this, sr, element_type, member_comp.name);
 		  }
 
 		  if ((member_comp.name == "max") ||
