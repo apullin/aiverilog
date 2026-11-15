@@ -1225,13 +1225,13 @@ int main(int argc, char*argv[])
       }
 
       if (rc) {
-	    return rc;
+	    return (rc > 125 || rc < 0) ? 125 : rc;
       }
 
       if (pre_process_fail_count) {
 	    cerr << "Preprocessor failed with " << pre_process_fail_count
 	         << " error(s)." << endl;
-	    return pre_process_fail_count;
+	    return pre_process_fail_count > 125 ? 125 : pre_process_fail_count;
       }
 
 
@@ -1395,7 +1395,7 @@ int main(int argc, char*argv[])
 		  cerr << "error: Code generator failure: " << emit_rc << endl;
 		  delete des;
 		  EOC_cleanup();
-		  return -1;
+		  return 1;
 	    }
 	    assert(emit_rc);
       }
@@ -1437,6 +1437,8 @@ int main(int argc, char*argv[])
       }
 
       int rtn = des? des->errors : 1;
+      if (rtn > 125 || rtn <= 0)
+	    rtn = 125;
       delete des;
       EOC_cleanup();
       return rtn;
