@@ -721,11 +721,19 @@ static void draw_select_vec4(ivl_expr_t expr)
 	    draw_eval_vec4(subexpr);
 	    fprintf(vvp_out, "    %%parti/%c %u, %lu, %u;\n",
 		    sign_suff, wid, val0, base_wid);
+	    if (ivl_expr_value(expr) == IVL_VT_BOOL &&
+	        ivl_expr_type(subexpr) != IVL_EX_NUMBER) {
+		  fprintf(vvp_out, "    %%cast2;\n");
+	    }
 
       } else {
 	    draw_eval_vec4(subexpr);
 	    draw_eval_vec4(base);
 	    fprintf(vvp_out, "    %%part/%c %u;\n", sign_suff, wid);
+	    if (ivl_expr_value(expr) == IVL_VT_BOOL &&
+	        ivl_expr_type(subexpr) != IVL_EX_NUMBER) {
+		  fprintf(vvp_out, "    %%cast2;\n");
+	    }
       }
 }
 
