@@ -56,9 +56,12 @@ int print_lpm_shift(FILE*fd, ivl_lpm_t net, bool left)
       // * data width of 1
 
       for (size_t lvl = 0 ; lvl < shiftw ; lvl += 1) {
+	    size_t step = (lvl < 8 * sizeof(size_t)) ? (size_t(1) << lvl) : dataw;
 	    for (unsigned idx = 0 ; idx < dataw ; idx += 1) {
-		  unsigned idx_2 = left ? idx - (1 << lvl) : idx + (1 << lvl);
-		  bool borrow = idx_2 >= dataw;
+		  bool borrow = (step >= dataw) ||
+		                (left ? (idx < step) : (idx + step >= dataw));
+		  unsigned idx_2 = borrow ? 0
+		                 : (left ? unsigned(idx - step) : unsigned(idx + step));
 		  bool signed_borrow = borrow && !left && signed_;
 
 		  // First arg (shift)

@@ -23,6 +23,7 @@
 # include  "ivl_target.h"
 # include  "nex_data.h"
 # include  <vector>
+# include  <string>
 # include  <cstdio>
 # include  <cstring>
 # include  <cassert>
@@ -128,10 +129,41 @@ const char* target_query(const char*key)
  * lines of a .model. All the bits need to be exploded, so print each
  * bit of a vector as its own name.
  */
-static void print_signal_bits(FILE*fd, ivl_signal_t sig)
+static void format_sig_bit_name(ivl_signal_t sig, unsigned idx, char*buf, size_t cap)
+{
+      std::string tmp = ivl_signal_basename(sig);
+      for (ivl_scope_t sscope = ivl_signal_scope(sig);
+           ivl_scope_parent(sscope);
+           sscope = ivl_scope_parent(sscope)) {
+	    tmp = ivl_scope_basename(sscope) + std::string("/") + tmp;
+      }
+      if (ivl_signal_width(sig) > 1) {
+	    int msb = ivl_signal_packed_msb(sig, 0);
+	    int lsb = ivl_signal_packed_lsb(sig, 0);
+	    int dir = (lsb <= msb) ? 1 : -1;
+	    int val = lsb + (int)idx * dir;
+	    snprintf(buf, cap, "%s[%d]", tmp.c_str(), val);
+      } else {
+	    snprintf(buf, cap, "%s", tmp.c_str());
+      }
+}
+
+static void print_signal_bits(FILE*fd, ivl_signal_t sig,
+                              std::vector<ivl_signal_t>*aliased_ports)
 {
       ivl_nexus_t nex = ivl_signal_nex(sig, 0);
       blif_nex_data_t* ned = blif_nex_data_t::get_nex_data(nex);
+      if (ned->name_ != 0) {
+	    if (aliased_ports)
+		  aliased_ports->push_back(sig);
+	    unsigned wid = ivl_signal_width(sig);
+	    for (unsigned idx = 0; idx < wid; idx += 1) {
+		  char buf[256];
+		  format_sig_bit_name(sig, idx, buf, sizeof buf);
+		  fprintf(fd, " %s", buf);
+	    }
+	    return;
+      }
       ned->set_name(sig);
 
       for (unsigned idx = 0 ; idx < ned->get_width() ; idx += 1) {
@@ -197,11 +229,12 @@ static void emit_blif(const char*blif_path, ivl_design_t des, ivl_scope_t model)
 	    }
       }
 
+      std::vector<ivl_signal_t> aliased_outputs;
       if (ports_in.size() > 0) {
 	    fprintf(fd, ".inputs");
 	    for (size_t idx = 0 ; idx < ports_in.size() ; idx += 1) {
 		  ivl_signal_t prt = ports_in[idx];
-		  print_signal_bits(fd, prt);
+		  print_signal_bits(fd, prt, 0);
 	    }
 	    fprintf(fd, "\n");
       }
@@ -209,9 +242,22 @@ static void emit_blif(const char*blif_path, ivl_design_t des, ivl_scope_t model)
 	    fprintf(fd, ".outputs");
 	    for (size_t idx = 0 ; idx < ports_out.size() ; idx += 1) {
 		  ivl_signal_t prt = ports_out[idx];
-		  print_signal_bits(fd, prt);
+		  print_signal_bits(fd, prt, &aliased_outputs);
 	    }
 	    fprintf(fd, "\n");
+      }
+
+      for (size_t idx = 0; idx < aliased_outputs.size(); idx += 1) {
+	    ivl_signal_t prt = aliased_outputs[idx];
+	    ivl_nexus_t nex = ivl_signal_nex(prt, 0);
+	    blif_nex_data_t*ned = blif_nex_data_t::get_nex_data(nex);
+	    unsigned wid = ivl_signal_width(prt);
+	    for (unsigned b = 0; b < wid; b += 1) {
+		  char dst_buf[256];
+		  format_sig_bit_name(prt, b, dst_buf, sizeof dst_buf);
+		  fprintf(fd, ".names %s%s %s\n1 1\n",
+			  ned->get_name(), ned->get_name_index(b), dst_buf);
+	    }
       }
 
       emit_scope(fd, model);
