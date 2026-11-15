@@ -29,6 +29,7 @@
 # include  <cstdio>
 # include  <sstream>
 # include  <algorithm>
+# include  <cmath>
 # include  <set>
 
 /*
@@ -669,6 +670,50 @@ static void elaborate_scope_classes(Design*des, NetScope*scope,
       }
 }
 
+static bool class_param_expr_equal(const NetExpr*a_val, const NetExpr*b_val)
+{
+      if (auto a_const = dynamic_cast<const NetEConst*>(a_val)) {
+	    auto b_const = dynamic_cast<const NetEConst*>(b_val);
+	    if (!b_const)
+		  return false;
+	    const verinum&va = a_const->value();
+	    const verinum&vb = b_const->value();
+	    if (va.has_sign() != vb.has_sign()
+		|| va.is_string() != vb.is_string()
+		|| va.len() != vb.len())
+		  return false;
+	    for (unsigned idx = 0 ; idx < va.len() ; idx += 1) {
+		  if (va[idx] != vb[idx])
+			return false;
+	    }
+	    return true;
+      }
+
+      if (auto a_real = dynamic_cast<const NetECReal*>(a_val)) {
+	    auto b_real = dynamic_cast<const NetECReal*>(b_val);
+	    if (!b_real)
+		  return false;
+	    double da = a_real->value().as_double();
+	    double db = b_real->value().as_double();
+	    if (std::isnan(da) && std::isnan(db))
+		  return true;
+	    return da == db && std::signbit(da) == std::signbit(db);
+      }
+
+      if (auto a_arr = dynamic_cast<const NetEArrayPattern*>(a_val)) {
+	    auto b_arr = dynamic_cast<const NetEArrayPattern*>(b_val);
+	    if (!b_arr || a_arr->item_size() != b_arr->item_size())
+		  return false;
+	    for (size_t idx = 0 ; idx < a_arr->item_size() ; idx += 1) {
+		  if (!class_param_expr_equal(a_arr->item(idx), b_arr->item(idx)))
+			return false;
+	    }
+	    return true;
+      }
+
+      return false;
+}
+
 /*
  * Compare the parameters of two specializations of a class.
  */
@@ -676,7 +721,7 @@ static bool class_parameters_equal(Design*des, NetScope*a, NetScope*b,
 				   const list<perm_string>&names)
 {
       for (perm_string name : names) {
-	    ivl_type_t a_type, b_type;
+	    ivl_type_t a_type = nullptr, b_type = nullptr;
 	    const NetExpr*a_val = a->get_parameter(des, name, a_type);
 	    const NetExpr*b_val = b->get_parameter(des, name, b_type);
 
@@ -688,19 +733,13 @@ static bool class_parameters_equal(Design*des, NetScope*a, NetScope*b,
 		  continue;
 	    }
 
-	    if (auto a_const = dynamic_cast<const NetEConst*>(a_val)) {
-		  auto b_const = dynamic_cast<const NetEConst*>(b_val);
-		  if (!b_const
-		      || (a_const->value() == b_const->value()) != verinum::V1)
-			return false;
-	    } else if (auto a_real = dynamic_cast<const NetECReal*>(a_val)) {
-		  auto b_real = dynamic_cast<const NetECReal*>(b_val);
-		  if (!b_real || a_real->value().as_double()
-				 != b_real->value().as_double())
-			return false;
-	    } else {
+	    if ((a_type != nullptr) != (b_type != nullptr))
 		  return false;
-	    }
+	    if (a_type && !a_type->type_equivalent(b_type))
+		  return false;
+
+	    if (!class_param_expr_equal(a_val, b_val))
+		  return false;
       }
 
       return true;
