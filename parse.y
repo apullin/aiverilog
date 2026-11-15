@@ -239,6 +239,7 @@ static data_type_t *pform_new_type_identifier(const struct vlltype &loc,
       PEIdent *identifier;
       if (package) {
 	    identifier = new PEIdent(pform_scoped_name_t(package, path));
+	    identifier->lexical_pos(loc.lexical_pos);
 	    FILE_NAME(identifier, loc);
       } else {
 	    identifier = pform_new_ident(loc, path, true);
