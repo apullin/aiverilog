@@ -1286,4 +1286,34 @@ class PEVoid : public PExpr {
                                      unsigned flags) const override;
 };
 
+/*
+ * SystemVerilog member/property access on a function/method call result:
+ *   r.get().v, r.get().a.b, r.get().v[3:0]
+ */
+class PECallMember : public PExpr {
+
+    public:
+      explicit PECallMember(PExpr* prefix, const pform_name_t& tail);
+      ~PECallMember() override;
+
+      const PExpr* peek_prefix() const { return prefix_; }
+      const pform_name_t& peek_tail() const { return tail_; }
+      PExpr* release_prefix() { PExpr* tmp = prefix_; prefix_ = nullptr; return tmp; }
+
+      virtual void dump(std::ostream&) const override;
+      virtual void declare_implicit_nets(LexicalScope*scope, NetNet::Type type) override;
+      virtual bool has_aa_term(Design*des, NetScope*scope) const override;
+      virtual unsigned test_width(Design*des, NetScope*scope,
+				  width_mode_t&mode) override;
+      virtual NetExpr* elaborate_expr(Design*des, NetScope*scope,
+				      ivl_type_t type, unsigned flags) const override;
+      virtual NetExpr* elaborate_expr(Design*des, NetScope*scope,
+				      unsigned expr_wid, unsigned flags) const override;
+
+    private:
+      NetExpr* elaborate_expr_(Design*des, NetScope*scope, unsigned flags) const;
+      PExpr* prefix_;
+      pform_name_t tail_;
+};
+
 #endif /* IVL_PExpr_H */

@@ -1,0 +1,6 @@
+{
+    "type"          : "normal",
+    "source"        : "sv_call_result_member.v",
+    "iverilog-args" : [ "-g2012" ],
+    "gold"          : "sv_call_result_member"
+}

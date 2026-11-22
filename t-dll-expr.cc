@@ -444,7 +444,7 @@ void dll_target::expr_property(const NetEProperty*net)
       FILE_NAME(expr_, net);
       expr_->value_  = net->expr_type();
       expr_->net_type= net->net_type();
-      expr_->u_.property_.sig = find_signal(net->get_sig());
+      expr_->u_.property_.sig = net->get_sig() ? find_signal(net->get_sig()) : 0;
       expr_->u_.property_.prop_idx = net->property_idx();
       expr_->u_.property_.index = index;
       expr_->u_.property_.array_idx = array_idx;
@@ -660,7 +660,7 @@ void dll_target::expr_ufunc(const NetEUFunc*net)
 
       expr->type_ = IVL_EX_UFUNC;
       expr->value_= net->expr_type();
-      expr->net_type=0;
+      expr->net_type= net->net_type();
       expr->width_= net->expr_width();
       expr->signed_ = net->has_sign()? 1 : 0;
       expr->sized_= 1;

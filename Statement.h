@@ -127,6 +127,7 @@ class PAssign_  : public Statement {
       PExpr* delay_;
       PEventStatement*event_;
       PExpr* count_;
+      void clear_rval_() { rval_ = nullptr; }
 
     private:
       PExpr* lval_;
@@ -237,10 +238,14 @@ class PCallTask  : public Statement {
       explicit PCallTask(const pform_scoped_name_t &n,
 			 const std::list<named_pexpr_t> &parms);
       explicit PCallTask(const pform_name_t &n, const std::list<named_pexpr_t> &parms);
+      explicit PCallTask(const pform_name_t &n, const std::vector<named_pexpr_t> &parms);
       explicit PCallTask(perm_string n, const std::list<named_pexpr_t> &parms);
+      explicit PCallTask(PExpr* chain_prefix, const pform_name_t &method,
+			 const std::list<named_pexpr_t> &parms);
       ~PCallTask() override;
 
       const pform_name_t& path() const;
+      PExpr* take_call_expr();
 
       virtual void dump(std::ostream&out, unsigned ind) const override;
       virtual NetProc* elaborate(Design*des, NetScope*scope) const override;
@@ -310,6 +315,7 @@ class PCallTask  : public Statement {
 
       pform_scoped_name_t path_;
       std::vector<named_pexpr_t> parms_;
+      PExpr* chain_prefix_ = nullptr;
       bool void_cast_ = false;
 };
 

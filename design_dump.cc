@@ -1888,7 +1888,11 @@ void NetENull::dump(ostream&o) const
 
 void NetEProperty::dump(ostream&o) const
 {
-      o << net_->name() << ".<" << pidx_ << ">";
+      if (net_.get())
+	    o << net_->name();
+      else
+	    o << *array_idx_;
+      o << ".<" << pidx_ << ">";
       if (index_)
 	    o << "[" << *index_ << "]";
 }

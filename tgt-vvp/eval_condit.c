@@ -297,7 +297,6 @@ static int draw_compare_class(ivl_expr_t expr)
       }
 
       if (ivl_expr_type(re)==IVL_EX_NULL && ivl_expr_type(le)==IVL_EX_PROPERTY) {
-	    ivl_signal_t sig = ivl_expr_signal(le);
 	    unsigned pidx = ivl_expr_property_idx(le);
 	    ivl_expr_t idx_expr = ivl_expr_oper1(le);
 	    int idx = 0;
@@ -309,7 +308,7 @@ static int draw_compare_class(ivl_expr_t expr)
 		  draw_eval_expr_into_integer(idx_expr, idx);
 	    }
 
-	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
+	    draw_load_property_object(le);
 	    fprintf(vvp_out, "    %%test_nul/prop %u, %d;\n", pidx, idx);
 	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
 	    if ((ivl_expr_opcode(expr) == 'n') ||

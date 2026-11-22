@@ -622,7 +622,8 @@ static void draw_property_vec4(ivl_expr_t expr)
       ivl_expr_t index_ex = ivl_expr_oper1(expr);
 
       if (index_ex) {
-	    ivl_type_t cls_type = ivl_signal_net_type(sig);
+	    ivl_type_t cls_type = sig ? ivl_signal_net_type(sig)
+				      : ivl_expr_net_type(ivl_expr_oper2(expr));
 	    ivl_type_t ptype = ivl_type_prop_type(cls_type, pidx);
 	    if (ptype) {
 		  ivl_variable_type_t pbase = ivl_type_base(ptype);
@@ -674,16 +675,14 @@ static void draw_select_vec4(ivl_expr_t expr)
 	/* Class property that is a queue or dynamic array: c.q[idx] */
       if (ivl_expr_type(subexpr) == IVL_EX_PROPERTY &&
           ivl_expr_oper1(subexpr) == 0) {
-	    ivl_signal_t clas = ivl_expr_signal(subexpr);
 	    unsigned pidx = ivl_expr_property_idx(subexpr);
-	    ivl_type_t cls_type = ivl_signal_net_type(clas);
-	    ivl_type_t ptype = ivl_type_prop_type(cls_type, pidx);
+	    ivl_type_t ptype = ivl_expr_net_type(subexpr);
 	    if (ptype) {
 		  ivl_variable_type_t pbase = ivl_type_base(ptype);
 		  if (pbase == IVL_VT_QUEUE || pbase == IVL_VT_DARRAY) {
 			assert(base);
 			draw_eval_expr_into_integer(base, 3);
-			fprintf(vvp_out, "    %%load/obj v%p_0;\n", clas);
+			draw_load_property_object(subexpr);
 			fprintf(vvp_out, "    %%load/prop/dar/vec4 %u, %u;\n",
 			        pidx, wid);
 			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");

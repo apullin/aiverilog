@@ -120,7 +120,7 @@ static void string_ex_select(ivl_expr_t expr)
 	/* Class property that is a queue or dynamic array: c.q[idx] */
       if (ivl_expr_type(sube) == IVL_EX_PROPERTY) {
 	    draw_eval_expr_into_integer(shift, 3);
-	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", ivl_expr_signal(sube));
+	    draw_load_property_object(sube);
 	    assert(ivl_expr_property_idx(sube) >= 0);
 	    fprintf(vvp_out, "    %%load/prop/dar/str %d;\n",
 	            ivl_expr_property_idx(sube));

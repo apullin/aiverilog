@@ -2084,7 +2084,10 @@ static bool check_cast_dest_not_const(Design*des, const LineInfo*li,
 	    return false;
       }
       if (dest_prop) {
-	    const netclass_t*cls = dynamic_cast<const netclass_t*>(dest_prop->get_sig()->net_type());
+	    const ivl_type_s*obj_t = dest_prop->get_sig()
+		  ? dest_prop->get_sig()->net_type()
+		  : dest_prop->get_array_index()->net_type();
+	    const netclass_t*cls = dynamic_cast<const netclass_t*>(obj_t);
 	    if (cls && cls->get_prop_qual(dest_prop->property_idx()).test_const()) {
 		  cerr << li->get_fileline() << ": error: Assignment to const property `"
 		       << cls->get_prop_name(dest_prop->property_idx())
