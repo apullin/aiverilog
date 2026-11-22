@@ -53,6 +53,7 @@ static struct __vpiModPath*modpath_dst = 0;
       char*text;
       char **table;
       uint64_t numb;
+      double real;
       bool flag;
 
       comp_operands_t opa;
@@ -61,6 +62,8 @@ static struct __vpiModPath*modpath_dst = 0;
       struct symbv_s symbv;
 
       struct numbv_s numbv;
+
+      struct vardim_s vardim;
 
       struct enum_name_s enum_name;
       std::list<struct enum_name_s>*enum_namev;
@@ -80,7 +83,7 @@ static struct __vpiModPath*modpath_dst = 0;
 %token K_ARITH_MOD_R K_ARITH_MOD_S
 %token K_ARITH_MULT K_ARITH_MULT_R K_ARITH_SUB K_ARITH_SUB_R
 %token K_ARITH_SUM K_ARITH_SUM_R K_ARITH_POW K_ARITH_POW_R K_ARITH_POW_S
-%token K_ARRAY K_ARRAY_2U K_ARRAY_2S K_ARRAY_I K_ARRAY_OBJ K_ARRAY_R K_ARRAY_S K_ARRAY_STR K_ARRAY_PORT
+%token K_ARRAY K_ARRAY_2U K_ARRAY_4U K_ARRAY_2S K_ARRAY_I K_ARRAY_OBJ K_ARRAY_R K_ARRAY_S K_ARRAY_STR K_ARRAY_PORT
 %token K_CAST_INT K_CAST_REAL K_CAST_REAL_S K_CAST_2
 %token K_CLASS
 %token K_CMP_EEQ K_CMP_EQ K_CMP_EQX K_CMP_EQZ K_CMP_WEQ K_CMP_WNE
@@ -99,6 +102,9 @@ static struct __vpiModPath*modpath_dst = 0;
 %token K_RESOLV K_RTRAN K_RTRANIF0 K_RTRANIF1
 %token K_SCOPE K_SFUNC K_SFUNC_E K_SHIFTL K_SHIFTR K_SHIFTRS
 %token K_SUBSTITUTE
+%token K_TCHK_WIDTH K_TCHK_PERIOD K_TCHK_SETUP K_TCHK_HOLD
+%token K_TCHK_RECOVERY K_TCHK_REMOVAL K_TCHK_RECREM
+%token K_TCHK_SETUPHOLD
 %token K_REFVAR K_THREAD K_TIMESCALE K_TRAN K_TRANIF0 K_TRANIF1 K_TRANVP
 %token K_UFUNC_REAL K_UFUNC_REAL_E K_UFUNC_VEC4 K_UFUNC_E K_UDP K_UDP_C K_UDP_S
 %token K_VAR K_VAR_COBJECT K_VAR_DARRAY K_VIRT
@@ -113,6 +119,7 @@ static struct __vpiModPath*modpath_dst = 0;
 
 %token <text> T_INSTR
 %token <text> T_LABEL
+%token <real> T_REAL
 %token <numb> T_NUMBER
 %token <text> T_STRING
 %token <text> T_SYMBOL
@@ -120,12 +127,13 @@ static struct __vpiModPath*modpath_dst = 0;
 
 %type <flag>  local_flag net_variable_flag
 %type <vpi_enum> port_type
-%type <numb>  signed_t_number
+%type <numb>  signed_t_number pulse_condition_form_opt
 %type <numb>  dimension dimensions dimensions_opt
 %type <symb>  symbol symbol_opt
 %type <symbv> symbols symbols_net
 %type <numbv> numbers
 %type <text> enum_ref_opt
+%type <vardim> var_dims net_range word_dims
 %type <text> label_opt
 %type <opa>  operand operands operands_opt
 %type <table> udp_table
@@ -224,22 +232,29 @@ statement
 
   /* Memory.  Definition, port, initialization */
 
-        | T_LABEL K_ARRAY T_STRING ',' signed_t_number signed_t_number ',' signed_t_number signed_t_number ';'
-                { compile_var_array($1, $3, $5, $6, $8, $9, 0); }
+  /* A plain .array with a word range cannot say that its words are
+     scalars, since without the range it is the net array below. That
+     is what .array/4u is for. */
 
-        | T_LABEL K_ARRAY_2U T_STRING ',' signed_t_number signed_t_number ',' signed_t_number signed_t_number ';'
-                { compile_var2_array($1, $3, $5, $6, $8, $9, false); }
-        | T_LABEL K_ARRAY_2S T_STRING ',' signed_t_number signed_t_number ',' signed_t_number signed_t_number ';'
-                { compile_var2_array($1, $3, $5, $6, $8, $9, true); }
+        | T_LABEL K_ARRAY T_STRING ',' signed_t_number signed_t_number ',' signed_t_number signed_t_number ';'
+                { compile_var_array($1, $3, $5, $6, $8, $9, ($8 != $9)? 1 : -1, 0); }
+
+        | T_LABEL K_ARRAY_4U T_STRING ',' signed_t_number signed_t_number word_dims ';'
+                { compile_var_array($1, $3, $5, $6, $7.msb, $7.lsb, $7.vec, 0); }
+
+        | T_LABEL K_ARRAY_2U T_STRING ',' signed_t_number signed_t_number word_dims ';'
+                { compile_var2_array($1, $3, $5, $6, $7.msb, $7.lsb, $7.vec, false); }
+        | T_LABEL K_ARRAY_2S T_STRING ',' signed_t_number signed_t_number word_dims ';'
+                { compile_var2_array($1, $3, $5, $6, $7.msb, $7.lsb, $7.vec, true); }
 
         | T_LABEL K_ARRAY_I T_STRING ',' signed_t_number signed_t_number ',' signed_t_number signed_t_number ';'
-                { compile_var_array($1, $3, $5, $6, $8, $9, 2); }
+                { compile_var_array($1, $3, $5, $6, $8, $9, 1, 2); }
 
         | T_LABEL K_ARRAY_R T_STRING ',' signed_t_number signed_t_number ';'
                 { compile_real_array($1, $3, $5, $6); }
 
-        | T_LABEL K_ARRAY_S T_STRING ',' signed_t_number signed_t_number ',' signed_t_number signed_t_number ';'
-                { compile_var_array($1, $3, $5, $6, $8, $9, 1); }
+        | T_LABEL K_ARRAY_S T_STRING ',' signed_t_number signed_t_number word_dims ';'
+                { compile_var_array($1, $3, $5, $6, $7.msb, $7.lsb, $7.vec, 1); }
 
         | T_LABEL K_ARRAY_STR T_STRING ',' signed_t_number signed_t_number ';'
                 { compile_string_array($1, $3, $5, $6); }
@@ -735,6 +750,125 @@ statement
 		{ compile_scope_recall($2); }
 
 
+  /* WIDTH/PERIOD limits use the recalled module's units. A qualified record
+     carries its truth table and may also identify the source expression. */
+
+        | K_TCHK_WIDTH T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_width($2, $3, $5, $7, $9, $11, $13); }
+        | K_TCHK_WIDTH T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_STRING ';'
+                { /* T_STRING is new[]; lookup labels use malloc ownership. */
+                  char* notifier = strdup($13);
+                  delete[] $13;
+                  compile_tchk_width($2, $3, $5, $7, $9, $11, notifier); }
+        | K_TCHK_WIDTH T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_SYMBOL ',' T_SYMBOL ',' T_NUMBER pulse_condition_form_opt ';'
+                { compile_tchk_width($2, $3, $5, $7, $9, $11, $13, $15, $17, $18); }
+        | K_TCHK_WIDTH T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_STRING ',' T_SYMBOL ',' T_NUMBER pulse_condition_form_opt ';'
+                { char* notifier = strdup($13);
+                  delete[] $13;
+                  compile_tchk_width($2, $3, $5, $7, $9, $11, notifier, $15, $17, $18); }
+
+        | K_TCHK_PERIOD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_period($2, $3, $5, $7, $9, $11); }
+        | K_TCHK_PERIOD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ';'
+                { /* T_STRING is new[]; lookup labels use malloc ownership. */
+                  char* notifier = strdup($11);
+                  delete[] $11;
+                  compile_tchk_period($2, $3, $5, $7, $9, notifier); }
+        | K_TCHK_PERIOD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ',' T_SYMBOL ',' T_NUMBER pulse_condition_form_opt ';'
+                { compile_tchk_period($2, $3, $5, $7, $9, $11, $13, $15, $16); }
+        | K_TCHK_PERIOD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ',' T_SYMBOL ',' T_NUMBER pulse_condition_form_opt ';'
+                { char* notifier = strdup($11);
+                  delete[] $11;
+                  compile_tchk_period($2, $3, $5, $7, $9, notifier, $13, $15, $16); }
+
+        | K_TCHK_RECREM T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_recrem($2, $3, $5, $7, $9, $11, $13, $15, $17); }
+        | K_TCHK_RECREM T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_STRING ';'
+                { char* notifier = strdup($17);
+                  delete[] $17;
+                  compile_tchk_recrem($2, $3, $5, $7, $9, $11, $13, $15, notifier); }
+        | K_TCHK_RECREM T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_SYMBOL ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { compile_tchk_recrem($2, $3, $5, $7, $9, $11, $13, $15, $17,
+                                         $19, $21, $23, $25); }
+        | K_TCHK_RECREM T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_STRING ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { char* notifier = strdup($17);
+                  delete[] $17;
+                  compile_tchk_recrem($2, $3, $5, $7, $9, $11, $13, $15, notifier,
+                                         $19, $21, $23, $25); }
+        | K_TCHK_SETUPHOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_setuphold($2, $3, $5, $7, $9, $11, $13, $15, $17); }
+        | K_TCHK_SETUPHOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_STRING ';'
+                { char* notifier = strdup($17);
+                  delete[] $17;
+                  compile_tchk_setuphold($2, $3, $5, $7, $9, $11, $13, $15, notifier); }
+        | K_TCHK_SETUPHOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_SYMBOL ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { compile_tchk_setuphold($2, $3, $5, $7, $9, $11, $13, $15, $17,
+                                         $19, $21, $23, $25); }
+        | K_TCHK_SETUPHOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_REAL ',' T_STRING ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { char* notifier = strdup($17);
+                  delete[] $17;
+                  compile_tchk_setuphold($2, $3, $5, $7, $9, $11, $13, $15, notifier,
+                                         $19, $21, $23, $25); }
+        | K_TCHK_SETUP T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_two_event(vpiSetup, $2, $3, $5, $7, $9, $11, $13, $15); }
+        | K_TCHK_SETUP T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiSetup, $2, $3, $5, $7, $9, $11, $13, notifier); }
+        | K_TCHK_HOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_two_event(vpiHold, $2, $3, $5, $7, $9, $11, $13, $15); }
+        | K_TCHK_HOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiHold, $2, $3, $5, $7, $9, $11, $13, notifier); }
+        | K_TCHK_SETUP T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { compile_tchk_two_event(vpiSetup, $2, $3, $5, $7, $9, $11, $13, $15,
+                                         $17, $19, $21, $23); }
+        | K_TCHK_SETUP T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiSetup, $2, $3, $5, $7, $9, $11, $13, notifier,
+                                         $17, $19, $21, $23); }
+        | K_TCHK_HOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { compile_tchk_two_event(vpiHold, $2, $3, $5, $7, $9, $11, $13, $15,
+                                         $17, $19, $21, $23); }
+        | K_TCHK_HOLD T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiHold, $2, $3, $5, $7, $9, $11, $13, notifier,
+                                         $17, $19, $21, $23); }
+
+        | K_TCHK_RECOVERY T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_two_event(vpiRecovery, $2, $3, $5, $7, $9, $11, $13, $15); }
+        | K_TCHK_RECOVERY T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiRecovery, $2, $3, $5, $7, $9, $11, $13, notifier); }
+
+        | K_TCHK_REMOVAL T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ';'
+                { compile_tchk_two_event(vpiRemoval, $2, $3, $5, $7, $9, $11, $13, $15); }
+        | K_TCHK_REMOVAL T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiRemoval, $2, $3, $5, $7, $9, $11, $13, notifier); }
+
+        | K_TCHK_RECOVERY T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { compile_tchk_two_event(vpiRecovery, $2, $3, $5, $7, $9, $11, $13, $15,
+                                         $17, $19, $21, $23); }
+        | K_TCHK_RECOVERY T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiRecovery, $2, $3, $5, $7, $9, $11, $13, notifier,
+                                         $17, $19, $21, $23); }
+        | K_TCHK_REMOVAL T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_SYMBOL ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { compile_tchk_two_event(vpiRemoval, $2, $3, $5, $7, $9, $11, $13, $15,
+                                         $17, $19, $21, $23); }
+        | K_TCHK_REMOVAL T_NUMBER T_NUMBER ',' T_STRING ',' symbol ',' T_STRING ',' symbol ',' T_REAL ',' T_STRING ',' T_STRING ',' T_NUMBER ',' T_STRING ',' T_NUMBER ';'
+                { char* notifier = strdup($15);
+                  delete[] $15;
+                  compile_tchk_two_event(vpiRemoval, $2, $3, $5, $7, $9, $11, $13, notifier,
+                                         $17, $19, $21, $23); }
+
   /* Port information for scopes... currently this is just meta-data for VPI queries */
 
 	| K_PORT_INFO T_NUMBER port_type T_NUMBER T_STRING T_SYMBOL ';'
@@ -773,22 +907,22 @@ statement
      creates a functor with the same name that acts as the output of
      the variable in the netlist. */
 
-  | T_LABEL K_VAR local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
-      { compile_variable($1, $4, $6, $7, vpiLogicVar, false, $3, $8); }
+  | T_LABEL K_VAR local_flag T_STRING var_dims ';'
+      { compile_variable($1, $4, $5.msb, $5.lsb, $5.vec, vpiLogicVar, false, $3, $5.enum_label); }
 
-  | T_LABEL K_VAR_S local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
-      { compile_variable($1, $4, $6, $7, vpiLogicVar, true, $3, $8); }
+  | T_LABEL K_VAR_S local_flag T_STRING var_dims ';'
+      { compile_variable($1, $4, $5.msb, $5.lsb, $5.vec, vpiLogicVar, true, $3, $5.enum_label); }
 
-  | T_LABEL K_VAR_I local_flag T_STRING ',' T_NUMBER T_NUMBER enum_ref_opt ';'
-      { compile_variable($1, $4, $6, $7, vpiIntegerVar, true, $3, $8); }
+  | T_LABEL K_VAR_I local_flag T_STRING var_dims ';'
+      { compile_variable($1, $4, $5.msb, $5.lsb, $5.vec, vpiIntegerVar, true, $3, $5.enum_label); }
 
-  | T_LABEL K_VAR_2S local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
-      { compile_variable($1, $4, $6, $7, vpiIntVar, true, $3, $8); }
+  | T_LABEL K_VAR_2S local_flag T_STRING var_dims ';'
+      { compile_variable($1, $4, $5.msb, $5.lsb, $5.vec, vpiIntVar, true, $3, $5.enum_label); }
 
-  | T_LABEL K_VAR_2U local_flag T_STRING ',' signed_t_number signed_t_number enum_ref_opt ';'
-      { compile_variable($1, $4, $6, $7, vpiIntVar, false, $3, $8); }
+  | T_LABEL K_VAR_2U local_flag T_STRING var_dims ';'
+      { compile_variable($1, $4, $5.msb, $5.lsb, $5.vec, vpiIntVar, false, $3, $5.enum_label); }
 
-  | T_LABEL K_VAR_R local_flag T_STRING ',' signed_t_number signed_t_number ';'
+  | T_LABEL K_VAR_R local_flag T_STRING ';'
       { compile_var_real($1, $4, $3); }
 
   | T_LABEL K_VAR_STR T_STRING ';'
@@ -806,71 +940,55 @@ statement
   /* Net statements are similar to .var statements, except that they
      declare nets, and they have an input list. */
 
-  | T_LABEL K_NET net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, vpiLogicVar, false, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, vpiLogicVar, false, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_S net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, vpiLogicVar, true, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET_S net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, vpiLogicVar, true, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_2U net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, vpiIntVar, false, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET_2U net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, vpiIntVar, false, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_2S net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, vpiIntVar, true, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET_2S net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, vpiIntVar, true, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET8 net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, -vpiLogicVar, false, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET8 net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, -vpiLogicVar, false, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET8_2U net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, -vpiLogicVar, false, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET8_2U net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, -vpiLogicVar, false, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET8_S net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, -vpiLogicVar, true, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET8_S net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, -vpiLogicVar, true, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET8_2S net_variable_flag local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net($1, $5, $7, $8, -vpiLogicVar, true, $4, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET8_2S net_variable_flag local_flag T_STRING ',' net_range symbols_net ';'
+      { compile_net($1, $5, $7.msb, $7.lsb, $7.vec, -vpiLogicVar, true, $4, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_R local_flag T_STRING ',' signed_t_number signed_t_number
-    ',' symbols_net ';'
-      { compile_net_real($1, $4, $6, $7, $3, $9.cnt, $9.vect); }
+  | T_LABEL K_NET_R local_flag T_STRING ',' symbols_net ';'
+      { compile_net_real($1, $4, $3, $6.cnt, $6.vect); }
 
   /* Arrayed versions of net directives. */
 
-  | T_LABEL K_NET net_variable_flag T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw($1, $4, $5, $7, $8, vpiLogicVar, false, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET net_variable_flag T_SYMBOL T_NUMBER ',' net_range symbols_net ';'
+      { compile_netw($1, $4, $5, $7.msb, $7.lsb, $7.vec, vpiLogicVar, false, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_S net_variable_flag T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw($1, $4, $5, $7, $8, vpiLogicVar, true, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET_S net_variable_flag T_SYMBOL T_NUMBER ',' net_range symbols_net ';'
+      { compile_netw($1, $4, $5, $7.msb, $7.lsb, $7.vec, vpiLogicVar, true, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_2U net_variable_flag T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw($1, $4, $5, $7, $8, vpiIntVar, false, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET_2U net_variable_flag T_SYMBOL T_NUMBER ',' net_range symbols_net ';'
+      { compile_netw($1, $4, $5, $7.msb, $7.lsb, $7.vec, vpiIntVar, false, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_2S net_variable_flag T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw($1, $4, $5, $7, $8, vpiIntVar, true, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET_2S net_variable_flag T_SYMBOL T_NUMBER ',' net_range symbols_net ';'
+      { compile_netw($1, $4, $5, $7.msb, $7.lsb, $7.vec, vpiIntVar, true, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET8 net_variable_flag T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw($1, $4, $5, $7, $8, -vpiLogicVar, false, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET8 net_variable_flag T_SYMBOL T_NUMBER ',' net_range symbols_net ';'
+      { compile_netw($1, $4, $5, $7.msb, $7.lsb, $7.vec, -vpiLogicVar, false, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET8_S net_variable_flag T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw($1, $4, $5, $7, $8, -vpiLogicVar, true, $3, $10.cnt, $10.vect); }
+  | T_LABEL K_NET8_S net_variable_flag T_SYMBOL T_NUMBER ',' net_range symbols_net ';'
+      { compile_netw($1, $4, $5, $7.msb, $7.lsb, $7.vec, -vpiLogicVar, true, $3, $8.cnt, $8.vect); }
 
-  | T_LABEL K_NET_R T_SYMBOL T_NUMBER ',' signed_t_number signed_t_number ','
-    symbols_net ';'
-      { compile_netw_real($1, $3, $4, $6, $7, $9.cnt, $9.vect); }
+  | T_LABEL K_NET_R T_SYMBOL T_NUMBER ',' symbols_net ';'
+      { compile_netw_real($1, $3, $4, $6.cnt, $6.vect); }
 
   /* Parameter statements come in a few simple forms. The most basic
      is the string parameter. */
@@ -1019,6 +1137,35 @@ enum_ref_opt
   | { $$ = 0; }
   ;
 
+  /* A vector declaration has a range, a scalar does not. The optional
+     enum reference follows the range, if any. */
+
+var_dims
+  : { $$.vec = false; $$.msb = 0; $$.lsb = 0; $$.enum_label = 0; }
+  | ',' T_SYMBOL
+      { $$.vec = false; $$.msb = 0; $$.lsb = 0; $$.enum_label = $2; }
+  | ',' signed_t_number signed_t_number enum_ref_opt
+      { $$.vec = true; $$.msb = $2; $$.lsb = $3; $$.enum_label = $4; }
+  ;
+
+  /* The words of a variable array are vectors if the .array statement
+     has a word range, and scalars if it does not. */
+
+word_dims
+  : { $$.vec = false; $$.msb = 0; $$.lsb = 0; $$.enum_label = 0; }
+  | ',' signed_t_number signed_t_number
+      { $$.vec = true; $$.msb = $2; $$.lsb = $3; $$.enum_label = 0; }
+  ;
+
+  /* The range of a net includes the comma that follows it, since the
+     input symbol list comes next. */
+
+net_range
+  : { $$.vec = false; $$.msb = 0; $$.lsb = 0; $$.enum_label = 0; }
+  | signed_t_number signed_t_number ','
+      { $$.vec = true; $$.msb = $1; $$.lsb = $2; $$.enum_label = 0; }
+  ;
+
 local_flag
   : '*' { $$ = true; }
   |     { $$ = false; }
@@ -1028,6 +1175,11 @@ net_variable_flag
   : K_NET_VAR { $$ = true; }
   |           { $$ = false; }
   ;
+
+pulse_condition_form_opt
+        : ',' T_NUMBER { $$ = $2; }
+        |              { $$ = 3; }
+        ;
 
   /* There are a few places where the label is optional. This rule
      returns the label value if present, or 0 if not. */

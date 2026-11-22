@@ -135,6 +135,9 @@ _BEGIN_DECL
  *    that is fully elaborated, with defparams and other parameter
  *    overrides taken care of.
  *
+ * ivl_period_t
+ *    An elaborated scalar $period timing check.
+ *
  * ivl_process_t
  *    A Verilog process is represented by one of these. A process may
  *    be an "initial" or an "always" process. These come from initial
@@ -152,6 +155,9 @@ _BEGIN_DECL
  *
  * ivl_switch_t
  *    Switches are the tran/tranif devices in the design.
+ *
+ * ivl_width_t
+ *    An elaborated scalar $width timing check.
  *
  * -- A Note About Bit Sets --
  * Some objects hold a value as an array of bits. In these cases there
@@ -175,6 +181,8 @@ typedef struct ivl_design_s   *ivl_design_t;
 typedef _CLASS ivl_discipline_s*ivl_discipline_t;
 typedef const _CLASS netenum_t*ivl_enumtype_t;
 typedef struct ivl_event_s    *ivl_event_t;
+typedef struct ivl_setup_s    *ivl_setup_t;
+typedef struct ivl_hold_s    *ivl_hold_t;
 typedef struct ivl_expr_s     *ivl_expr_t;
 typedef struct ivl_island_s   *ivl_island_t;
 typedef struct ivl_lpm_s      *ivl_lpm_t;
@@ -187,14 +195,20 @@ typedef struct ivl_net_probe_s*ivl_net_probe_t;
 typedef struct ivl_nexus_s    *ivl_nexus_t;
 typedef struct ivl_nexus_ptr_s*ivl_nexus_ptr_t;
 typedef struct ivl_parameter_s*ivl_parameter_t;
+typedef struct ivl_period_s   *ivl_period_t;
 typedef struct ivl_process_s  *ivl_process_t;
+typedef struct ivl_recovery_s    *ivl_recovery_t;
+typedef struct ivl_recrem_s *ivl_recrem_t;
+typedef struct ivl_removal_s    *ivl_removal_t;
 typedef struct ivl_scope_s    *ivl_scope_t;
+typedef struct ivl_setuphold_s *ivl_setuphold_t;
 typedef struct ivl_signal_s   *ivl_signal_t;
 typedef struct ivl_port_info_s*ivl_port_info_t;
 typedef struct ivl_switch_s   *ivl_switch_t;
 typedef struct ivl_memory_s   *ivl_memory_t; //XXXX __attribute__((deprecated));
 typedef struct ivl_statement_s*ivl_statement_t;
 typedef const _CLASS ivl_type_s*ivl_type_t;
+typedef struct ivl_width_s    *ivl_width_t;
 
 /*
  * These are types that are defined as enumerations. These have
@@ -455,6 +469,24 @@ typedef enum ivl_sfunc_as_task_e {
       IVL_SFUNC_AS_TASK_WARNING = 1,
       IVL_SFUNC_AS_TASK_IGNORE  = 2
 } ivl_sfunc_as_task_t;
+
+/* Retained local scalar timing-event qualifier. NONE has no condition signal.
+ * CASE_EQ/CASE_NE preserve ===/!==; LOGIC_EQ/LOGIC_NE preserve ==/!=.
+ * SETUP, HOLD, RECOVERY and REMOVAL use BARE and CASE_EQ.
+ * WIDTH and PERIOD use all forms. */
+typedef enum ivl_tchk_cond_e {
+      IVL_TCHK_COND_NONE = 0,
+      IVL_TCHK_COND_BARE = 1,
+      IVL_TCHK_COND_CASE_EQ0 = 2,
+      IVL_TCHK_COND_CASE_EQ1 = 3,
+      IVL_TCHK_COND_BIT_NOT = 4,
+      IVL_TCHK_COND_LOGIC_EQ0 = 5,
+      IVL_TCHK_COND_LOGIC_EQ1 = 6,
+      IVL_TCHK_COND_LOGIC_NE0 = 7,
+      IVL_TCHK_COND_LOGIC_NE1 = 8,
+      IVL_TCHK_COND_CASE_NE0 = 9,
+      IVL_TCHK_COND_CASE_NE1 = 10
+} ivl_tchk_cond_t;
 
 /* This is the type of a variable, and also used as the type for an
    expression. */
@@ -1524,6 +1556,11 @@ extern const char*ivl_lpm_string(ivl_lpm_t net);
  *    for the local part selecting I might to in the lval object, as
  *    well as the target object width.
  *
+ * ivl_lval_data_type
+ *    The data type of this l-value component, accounting for selected
+ *    members and array elements. This can differ from the containing
+ *    signal's type, such as a two-state member of a four-state struct.
+ *
  * ivl_lval_mux (* obsolete *)
  *
  * ivl_lval_nest
@@ -1576,6 +1613,7 @@ extern const char*ivl_lpm_string(ivl_lpm_t net);
  */
 
 extern unsigned    ivl_lval_width(ivl_lval_t net);
+extern ivl_variable_type_t ivl_lval_data_type(ivl_lval_t net);
 extern ivl_expr_t  ivl_lval_mux(ivl_lval_t net) __attribute__((deprecated)); /* XXXX Obsolete? */
 extern ivl_expr_t  ivl_lval_idx(ivl_lval_t net);
 extern ivl_expr_t  ivl_lval_part_off(ivl_lval_t net);
@@ -1739,6 +1777,44 @@ extern int         ivl_parameter_is_type(ivl_parameter_t net);
 extern const char* ivl_parameter_file(ivl_parameter_t net);
 extern unsigned    ivl_parameter_lineno(ivl_parameter_t net);
 
+/* PERIOD CHECKS
+ * These accessors describe scalar $period checks.
+ *
+ * ivl_period_condition
+ *    Returns the local scalar timing-event qualifier, or NULL if absent.
+ *
+ * ivl_period_condition_kind
+ *    Returns the source form of the timing-event qualifier.
+ *
+ * ivl_period_file
+ * ivl_period_lineno
+ *    Return the source file and line of the timing check declaration.
+ *
+ * ivl_period_limit
+ *    Returns the elaborated limit in the owning scope's time units
+ *    (ivl_scope_time_units), before rounding to its precision.
+ *
+ * ivl_period_notifier
+ *    Returns the local scalar notifier variable, or NULL if omitted.
+ *
+ * ivl_period_posedge
+ *    Returns 1 for a posedge reference event and 0 for negedge.
+ *
+ * ivl_period_reference
+ *    Returns the local scalar signal of the reference event.
+ *
+ * ivl_period_scope
+ *    Returns the scope containing the declaration.
+ */
+extern ivl_signal_t    ivl_period_condition(ivl_period_t check);
+extern ivl_tchk_cond_t ivl_period_condition_kind(ivl_period_t check);
+extern const char*  ivl_period_file(ivl_period_t check);
+extern double       ivl_period_limit(ivl_period_t check);
+extern unsigned     ivl_period_lineno(ivl_period_t check);
+extern ivl_signal_t ivl_period_notifier(ivl_period_t check);
+extern int          ivl_period_posedge(ivl_period_t check);
+extern ivl_signal_t ivl_period_reference(ivl_period_t check);
+extern ivl_scope_t  ivl_period_scope(ivl_period_t check);
 
 /* SCOPE
  * Scopes of various sort have these properties. Use these methods to
@@ -1859,6 +1935,11 @@ extern unsigned    ivl_parameter_lineno(ivl_parameter_t net);
  *    If this is a non-root scope, then the parent is the scope that
  *    contains this scope. Otherwise, the parent is nil.
  *
+ * ivl_scope_periods
+ *    Returns the number of $period checks in this scope.
+ * ivl_scope_period
+ *    Returns the check at idx, where 0 <= idx < ivl_scope_periods(net).
+ *
  * ivl_scope_port
  * ivl_scope_ports
  *    Scopes that are functions or tasks have ports defined by
@@ -1867,6 +1948,11 @@ extern unsigned    ivl_parameter_lineno(ivl_parameter_t net);
  *    If this scope represents a function, then the ports list
  *    includes the return value, as port 0. The remaining ports are
  *    the input ports in order.
+ *
+ * ivl_scope_setuphold
+ *    Returns the check at idx, where 0 <= idx < ivl_scope_setupholds(net).
+ * ivl_scope_setupholds
+ *    Returns the number of $setuphold checks in this scope.
  *
  * ivl_scope_sig
  * ivl_scope_sigs
@@ -1890,6 +1976,11 @@ extern unsigned    ivl_parameter_lineno(ivl_parameter_t net);
  *    an instance of module foo, its type is IVL_SCT_MODULE and its
  *    type name is "foo". This is different from the instance name
  *    returned by ivl_scope_name above.
+ *
+ * ivl_scope_widths
+ *    Returns the number of $width checks in this scope.
+ * ivl_scope_width
+ *    Returns the check at idx, where 0 <= idx < ivl_scope_widths(net).
  */
 
 extern unsigned        ivl_scope_attr_cnt(ivl_scope_t net);
@@ -1908,6 +1999,105 @@ extern unsigned   ivl_scope_classes(ivl_scope_t net);
 extern ivl_type_t ivl_scope_class(ivl_scope_t net, unsigned idx);
 extern unsigned       ivl_scope_enumerates(ivl_scope_t net);
 extern ivl_enumtype_t ivl_scope_enumerate(ivl_scope_t net, unsigned idx);
+/* Standalone SETUP: normalized reference/data roles; limits use declaring
+ * scope units. Edges are -1 (negedge), 0 (any change), or 1 (posedge).
+ * Each event has its own optional qualifier, sampled on that event; a null
+ * condition signal pairs with NONE and means the event is unconditional. */
+extern unsigned ivl_scope_setups(ivl_scope_t net);
+extern ivl_setup_t ivl_scope_setup(ivl_scope_t net, unsigned idx);
+extern ivl_scope_t ivl_setup_scope(ivl_setup_t check);
+extern ivl_signal_t ivl_setup_reference(ivl_setup_t check);
+extern ivl_signal_t ivl_setup_data(ivl_setup_t check);
+extern ivl_signal_t ivl_setup_notifier(ivl_setup_t check);
+extern ivl_signal_t ivl_setup_data_condition(ivl_setup_t check);
+extern ivl_tchk_cond_t ivl_setup_data_condition_kind(ivl_setup_t check);
+extern ivl_signal_t ivl_setup_reference_condition(ivl_setup_t check);
+extern ivl_tchk_cond_t ivl_setup_reference_condition_kind(ivl_setup_t check);
+extern int ivl_setup_reference_edge(ivl_setup_t check);
+extern int ivl_setup_data_edge(ivl_setup_t check);
+extern double ivl_setup_limit(ivl_setup_t check);
+extern const char*ivl_setup_file(ivl_setup_t check);
+extern unsigned ivl_setup_lineno(ivl_setup_t check);
+
+/* Standalone HOLD: normalized reference/data roles; limits use declaring
+ * scope units. Edges are -1 (negedge), 0 (any change), or 1 (posedge).
+ * Each event has its own optional qualifier, sampled on that event; a null
+ * condition signal pairs with NONE and means the event is unconditional. */
+extern unsigned ivl_scope_holds(ivl_scope_t net);
+extern ivl_hold_t ivl_scope_hold(ivl_scope_t net, unsigned idx);
+extern ivl_scope_t ivl_hold_scope(ivl_hold_t check);
+extern ivl_signal_t ivl_hold_reference(ivl_hold_t check);
+extern ivl_signal_t ivl_hold_data(ivl_hold_t check);
+extern ivl_signal_t ivl_hold_notifier(ivl_hold_t check);
+extern ivl_signal_t ivl_hold_data_condition(ivl_hold_t check);
+extern ivl_tchk_cond_t ivl_hold_data_condition_kind(ivl_hold_t check);
+extern ivl_signal_t ivl_hold_reference_condition(ivl_hold_t check);
+extern ivl_tchk_cond_t ivl_hold_reference_condition_kind(ivl_hold_t check);
+extern int ivl_hold_reference_edge(ivl_hold_t check);
+extern int ivl_hold_data_edge(ivl_hold_t check);
+extern double ivl_hold_limit(ivl_hold_t check);
+extern const char*ivl_hold_file(ivl_hold_t check);
+extern unsigned ivl_hold_lineno(ivl_hold_t check);
+
+/* Standalone RECOVERY: normalized reference/data roles; limits use declaring
+ * scope units. Edges are -1 (negedge), 0 (any change), or 1 (posedge).
+ * Each event has its own optional qualifier, sampled on that event; a null
+ * condition signal pairs with NONE and means the event is unconditional. */
+extern unsigned ivl_scope_recoveries(ivl_scope_t net);
+extern ivl_recovery_t ivl_scope_recovery(ivl_scope_t net, unsigned idx);
+extern ivl_signal_t ivl_recovery_data(ivl_recovery_t check);
+extern ivl_signal_t ivl_recovery_data_condition(ivl_recovery_t check);
+extern ivl_tchk_cond_t ivl_recovery_data_condition_kind(ivl_recovery_t check);
+extern int ivl_recovery_data_edge(ivl_recovery_t check);
+extern const char*ivl_recovery_file(ivl_recovery_t check);
+extern double ivl_recovery_limit(ivl_recovery_t check);
+extern unsigned ivl_recovery_lineno(ivl_recovery_t check);
+extern ivl_signal_t ivl_recovery_notifier(ivl_recovery_t check);
+extern ivl_signal_t ivl_recovery_reference(ivl_recovery_t check);
+extern ivl_signal_t ivl_recovery_reference_condition(ivl_recovery_t check);
+extern ivl_tchk_cond_t ivl_recovery_reference_condition_kind(ivl_recovery_t check);
+extern int ivl_recovery_reference_edge(ivl_recovery_t check);
+extern ivl_scope_t ivl_recovery_scope(ivl_recovery_t check);
+
+/* Standalone REMOVAL: normalized reference/data roles; limits use declaring
+ * scope units. Edges are -1 (negedge), 0 (any change), or 1 (posedge).
+ * Each event has its own optional qualifier, sampled on that event; a null
+ * condition signal pairs with NONE and means the event is unconditional. */
+extern ivl_removal_t ivl_scope_removal(ivl_scope_t net, unsigned idx);
+extern unsigned ivl_scope_removals(ivl_scope_t net);
+extern ivl_signal_t ivl_removal_data(ivl_removal_t check);
+extern ivl_signal_t ivl_removal_data_condition(ivl_removal_t check);
+extern ivl_tchk_cond_t ivl_removal_data_condition_kind(ivl_removal_t check);
+extern int ivl_removal_data_edge(ivl_removal_t check);
+extern const char*ivl_removal_file(ivl_removal_t check);
+extern double ivl_removal_limit(ivl_removal_t check);
+extern unsigned ivl_removal_lineno(ivl_removal_t check);
+extern ivl_signal_t ivl_removal_notifier(ivl_removal_t check);
+extern ivl_signal_t ivl_removal_reference(ivl_removal_t check);
+extern ivl_signal_t ivl_removal_reference_condition(ivl_removal_t check);
+extern ivl_tchk_cond_t ivl_removal_reference_condition_kind(ivl_removal_t check);
+extern int ivl_removal_reference_edge(ivl_removal_t check);
+extern ivl_scope_t ivl_removal_scope(ivl_removal_t check);
+
+/* Combined RECREM: reference is control, data is clock. Limits use declaring
+ * scope units. Edges are -1 (negedge), 0 (any change), or 1 (posedge). */
+extern ivl_recrem_t ivl_scope_recrem(ivl_scope_t net, unsigned idx);
+extern unsigned ivl_scope_recrems(ivl_scope_t net);
+extern ivl_signal_t ivl_recrem_data(ivl_recrem_t check);
+extern ivl_signal_t ivl_recrem_data_condition(ivl_recrem_t check);
+extern ivl_tchk_cond_t ivl_recrem_data_condition_kind(ivl_recrem_t check);
+extern int ivl_recrem_data_edge(ivl_recrem_t check);
+extern const char*ivl_recrem_file(ivl_recrem_t check);
+extern unsigned ivl_recrem_lineno(ivl_recrem_t check);
+extern ivl_signal_t ivl_recrem_notifier(ivl_recrem_t check);
+extern double ivl_recrem_recovery_limit(ivl_recrem_t check);
+extern ivl_signal_t ivl_recrem_reference(ivl_recrem_t check);
+extern ivl_signal_t ivl_recrem_reference_condition(ivl_recrem_t check);
+extern ivl_tchk_cond_t ivl_recrem_reference_condition_kind(ivl_recrem_t check);
+extern int ivl_recrem_reference_edge(ivl_recrem_t check);
+extern double ivl_recrem_removal_limit(ivl_recrem_t check);
+extern ivl_scope_t ivl_recrem_scope(ivl_recrem_t check);
+
 extern unsigned     ivl_scope_events(ivl_scope_t net);
 extern ivl_event_t  ivl_scope_event(ivl_scope_t net, unsigned idx);
 extern const char* ivl_scope_file(ivl_scope_t net);
@@ -1925,6 +2115,8 @@ extern const char*  ivl_scope_basename(ivl_scope_t net);
 extern unsigned     ivl_scope_params(ivl_scope_t net);
 extern ivl_parameter_t ivl_scope_param(ivl_scope_t net, unsigned idx);
 extern ivl_scope_t  ivl_scope_parent(ivl_scope_t net);
+extern unsigned     ivl_scope_periods(ivl_scope_t net);
+extern ivl_period_t ivl_scope_period(ivl_scope_t net, unsigned idx);
 
 extern unsigned ivl_scope_mod_module_ports(ivl_scope_t net);
 extern const char *ivl_scope_mod_module_port_name(ivl_scope_t net, unsigned idx );
@@ -1935,6 +2127,8 @@ extern ivl_net_logic_t ivl_scope_mod_module_port_buffer(ivl_scope_t net, unsigne
 extern unsigned     ivl_scope_ports(ivl_scope_t net);
 extern ivl_signal_t ivl_scope_port(ivl_scope_t net, unsigned idx);
 extern ivl_nexus_t  ivl_scope_mod_port(ivl_scope_t net, unsigned idx);
+extern ivl_setuphold_t ivl_scope_setuphold(ivl_scope_t net, unsigned idx);
+extern unsigned ivl_scope_setupholds(ivl_scope_t net);
 extern unsigned     ivl_scope_sigs(ivl_scope_t net);
 extern ivl_signal_t ivl_scope_sig(ivl_scope_t net, unsigned idx);
 extern unsigned     ivl_scope_switches(ivl_scope_t net);
@@ -1947,6 +2141,27 @@ extern int          ivl_scope_time_units(ivl_scope_t net);
 extern ivl_variable_type_t ivl_scope_func_type(ivl_scope_t net);
 extern int ivl_scope_func_signed(ivl_scope_t net);
 extern unsigned ivl_scope_func_width(ivl_scope_t net);
+
+extern unsigned    ivl_scope_widths(ivl_scope_t net);
+extern ivl_width_t ivl_scope_width(ivl_scope_t net, unsigned idx);
+
+/* Combined SETUPHOLD: normalized reference/data roles; limits use declaring
+ * scope units. Edges are -1 (negedge), 0 (any change), or 1 (posedge). Each
+ * event has an optional qualifier. A null signal with NONE is unconditional. */
+extern ivl_signal_t ivl_setuphold_data(ivl_setuphold_t check);
+extern ivl_signal_t ivl_setuphold_data_condition(ivl_setuphold_t check);
+extern ivl_tchk_cond_t ivl_setuphold_data_condition_kind(ivl_setuphold_t check);
+extern int ivl_setuphold_data_edge(ivl_setuphold_t check);
+extern const char*ivl_setuphold_file(ivl_setuphold_t check);
+extern double ivl_setuphold_hold_limit(ivl_setuphold_t check);
+extern unsigned ivl_setuphold_lineno(ivl_setuphold_t check);
+extern ivl_signal_t ivl_setuphold_notifier(ivl_setuphold_t check);
+extern ivl_signal_t ivl_setuphold_reference(ivl_setuphold_t check);
+extern ivl_signal_t ivl_setuphold_reference_condition(ivl_setuphold_t check);
+extern ivl_tchk_cond_t ivl_setuphold_reference_condition_kind(ivl_setuphold_t check);
+extern int ivl_setuphold_reference_edge(ivl_setuphold_t check);
+extern ivl_scope_t ivl_setuphold_scope(ivl_setuphold_t check);
+extern double ivl_setuphold_setup_limit(ivl_setuphold_t check);
 
 /* SIGNALS
  * Signals are named things in the Verilog source, like wires and
@@ -2194,6 +2409,11 @@ extern unsigned ivl_stmt_lineno(ivl_statement_t net);
  *    l-values are presumed to be vector values concatenated together
  *    from msb (idx==0) to lsb.
  *
+ * ivl_stmt_lval_signed
+ *    The signedness of the complete assignment target as an operand.
+ *    Explicit bit and part selects and concatenations are unsigned, while
+ *    selected members retain their signedness.
+ *
  * ivl_stmt_rval
  *    Return the rval expression of the assignment. This is the value
  *    that is to be calculated and assigned to the l-value in all the
@@ -2214,8 +2434,8 @@ extern unsigned ivl_stmt_lineno(ivl_statement_t net);
  * the l-value that receives the value. The compiler has already made
  * sure that the types (l-value and r-value) are compatible.
  *
- * If the l-value is a vector, then the compiler also makes sure the
- * expression width of the r-values matches. It handles padding or
+ * For an ordinary vector assignment, the compiler also makes sure the
+ * expression width of the r-value matches. It handles padding or
  * operator sizing as needed to get the width exactly right.
  *
  * The blocking and non-blocking assignments may also have an internal
@@ -2229,7 +2449,11 @@ extern unsigned ivl_stmt_lineno(ivl_statement_t net);
  * is the compressed operator used it statements like this:
  *      foo += <expr>
  * The ivl_stmt_opcode() returns null (0) if this is not a compressed
- * assignment statement.
+ * assignment statement. For integral compound assignments, the r-value is an
+ * operand of the operator and can be wider than the l-value. Shift counts are
+ * self-determined. If either operand is real, the r-value retains its own type,
+ * width and signedness. The target evaluates the operation as real and
+ * converts the completed result to the l-value's width and data type.
  *
  * - IVL_ST_CASSIGN
  * This reflects a procedural continuous assignment to an l-value. The
@@ -2344,6 +2568,9 @@ extern ivl_lval_t ivl_stmt_lval(ivl_statement_t net, unsigned idx);
   /* IVL_ST_ASSIGN IVL_ST_ASSIGN_NB IVL_ST_CASSIGN IVL_ST_DEASSIGN
      IVL_ST_FORCE IVL_ST_RELEASE */
 extern unsigned ivl_stmt_lvals(ivl_statement_t net);
+  /* IVL_ST_ASSIGN IVL_ST_ASSIGN_NB IVL_ST_CASSIGN IVL_ST_DEASSIGN
+     IVL_ST_FORCE IVL_ST_RELEASE */
+extern int ivl_stmt_lval_signed(ivl_statement_t net);
   /* IVL_ST_ASSIGN IVL_ST_ASSIGN_NB IVL_ST_CASSIGN */
 extern unsigned ivl_stmt_lwidth(ivl_statement_t net);
   /* IVL_ST_STASK */
@@ -2446,9 +2673,9 @@ extern unsigned ivl_type_packed_dimensions(ivl_type_t net);
 extern int ivl_type_packed_lsb(ivl_type_t net, unsigned dim);
 extern int ivl_type_packed_msb(ivl_type_t net, unsigned dim);
 extern unsigned ivl_type_packed_width(ivl_type_t net);
-extern int ivl_type_signed(ivl_type_t net);
+extern unsigned ivl_type_signed(ivl_type_t net);
 extern const char* ivl_type_name(ivl_type_t net);
-extern int         ivl_type_properties(ivl_type_t net);
+extern unsigned    ivl_type_properties(ivl_type_t net);
 extern const char* ivl_type_prop_name(ivl_type_t net, int idx);
 extern ivl_type_t  ivl_type_prop_type(ivl_type_t net, int idx);
 
@@ -2465,6 +2692,48 @@ extern ivl_scope_t ivl_type_virtual(ivl_type_t net, unsigned idx);
 /* Maximum element count for a queue type (0 = unbounded). Only valid
  * when ivl_type_base(net) == IVL_VT_QUEUE. */
 extern unsigned ivl_type_queue_max(ivl_type_t net);
+
+/* WIDTH CHECKS
+ * These accessors describe scalar $width checks.
+ *
+ * ivl_width_condition
+ *    Returns the local scalar timing-event qualifier, or NULL if absent.
+ *
+ * ivl_width_condition_kind
+ *    Returns the source form of the timing-event qualifier.
+ *
+ * ivl_width_file
+ * ivl_width_lineno
+ *    Return the source file and line of the timing check declaration.
+ *
+ * ivl_width_limit
+ * ivl_width_threshold
+ *    Return the elaborated limit and threshold in the owning scope's
+ *    time units (ivl_scope_time_units), before rounding to its precision.
+ *    The threshold defaults to zero when omitted.
+ *
+ * ivl_width_notifier
+ *    Returns the local scalar notifier variable, or NULL if omitted.
+ *
+ * ivl_width_posedge
+ *    Returns 1 for a posedge reference event and 0 for negedge.
+ *
+ * ivl_width_reference
+ *    Returns the local scalar signal of the reference event.
+ *
+ * ivl_width_scope
+ *    Returns the scope containing the declaration.
+ */
+extern ivl_signal_t    ivl_width_condition(ivl_width_t check);
+extern ivl_tchk_cond_t ivl_width_condition_kind(ivl_width_t check);
+extern const char*  ivl_width_file(ivl_width_t check);
+extern double       ivl_width_limit(ivl_width_t check);
+extern unsigned     ivl_width_lineno(ivl_width_t check);
+extern ivl_signal_t ivl_width_notifier(ivl_width_t check);
+extern int          ivl_width_posedge(ivl_width_t check);
+extern ivl_signal_t ivl_width_reference(ivl_width_t check);
+extern ivl_scope_t  ivl_width_scope(ivl_width_t check);
+extern double       ivl_width_threshold(ivl_width_t check);
 
 
 #if defined(__MINGW32__) || defined (__CYGWIN__)
@@ -2492,6 +2761,10 @@ extern DLLEXPORT const char* target_query(const char*key);
    ivl core. This function is how the target module is invoked. */
 
 typedef int  (*target_design_f)(ivl_design_t des);
+/* The target returns "1" from target_query("supports-width") or
+ * target_query("supports-period") to consume checks of that type.
+ * The compiler warns for each ignored declaration when the query is
+ * unavailable or returns a different value. */
 typedef const char* (*target_query_f) (const char*key);
 
 

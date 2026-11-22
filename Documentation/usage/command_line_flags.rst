@@ -96,6 +96,66 @@ These flags affect the general behavior of the compiler.
     disabled, specify blocks are parsed but ignored. When enabled, specify
     blocks cause timing path and timing checks to be active.
 
+    The VVP target implements ``$width`` checks on local scalar
+    ``posedge`` or ``negedge`` references. Limits and optional thresholds must
+    be finite nonnegative constants; parameters and specparams are allowed.
+    Values use the declaring module's time unit and precision. A notifier, if
+    supplied, must be a local scalar variable. A violation occurs when the
+    measured pulse width is strictly above the threshold and below the limit.
+    Standard ``$sdf_annotate`` can update the matching WIDTH limit.
+    A WIDTH CELLTYPE mismatch is diagnosed but does not itself prevent an
+    update; reference/edge matching and limit validation still apply.
+
+    ``$period`` checks accept the same local scalar reference,
+    constant limit and optional notifier forms, without a threshold argument.
+    They measure successive selected edges of the reference signal. The first
+    edge establishes history; each later selected edge compares the previous
+    reference time before refreshing it. An interval strictly below the limit
+    violates the check; equality is safe. Standard ``$sdf_annotate`` can update
+    the matching PERIOD limit independently of WIDTH checks on the same signal.
+
+    A WIDTH or PERIOD reference event can have a scalar HDL qualifier after
+    ``&&&``. Supported forms are a local signal, its bitwise complement, or a
+    comparison of that signal with ``1'b0`` or ``1'b1`` using ``==``, ``!=``,
+    ``===`` or ``!==``. With an X/Z signal, logical comparisons and case
+    inequality enable the check. Bare, complemented and case-equality
+    qualifiers require a definite matching bit. The condition is sampled at
+    each physical reference transition without generating events from condition
+    changes. Masked events do not change timing history. WIDTH applies the
+    qualifier to both its declared opening edge and its implicit opposite closing
+    edge, retaining the opening timestamp after a close. PERIOD compares and
+    refreshes history only on qualified selected edges.
+
+    A bare SDF WIDTH/PERIOD event matches every eligible declaration on the
+    selected reference and edge. An explicit ``COND`` matches the declared
+    local scalar signal or its case equality with ``1'b0`` or ``1'b1``,
+    independently of the signal value during annotation. Recompile HDL to
+    retain this source identity in VVP. Older records and the other admitted
+    HDL qualifier forms participate in wildcard annotation and have no
+    ``vpiCondition`` expression handle on the pulse reference terminal.
+    Vector and hierarchical HDL references are diagnosed as unsupported. WIDTH also accepts
+    unconditional lists equivalent to ``posedge`` or ``negedge``. VVP runs
+    these checks and vlog95 emits them. The stub target displays WIDTH for
+    debugging. SDF annotation refusals are reported as
+    diagnostics and do not necessarily change the process exit code. Hot
+    reannotation and general four-state timing-check behavior are not qualified
+    by these finite implementations.
+
+    VVP also implements local scalar ``$setup``, ``$hold``, ``$setuphold``,
+    ``$recovery``, ``$removal`` and ``$recrem`` checks with finite nonnegative
+    limits and optional scalar notifiers.
+    Each event in these checks can independently use a local scalar
+    ``&&&`` qualifier: a bare signal, ``signal === 1'b0``, or
+    ``signal === 1'b1``.
+
+    In scalar ``$setuphold`` and ``$recrem`` declarations, optional delayed
+    reference and data terminals receive zero-delay copies. The HDL check
+    remains active and can be annotated. Signed combined timing checks are
+    approximate: a negative HDL limit, or a negative SDF component applied
+    to a combined check, is diagnosed and treated as zero. Standalone checks
+    still reject negative limits. An unmatched SDF timing check reports an
+    SDF error and annotation continues with the next record.
+
   * std-include/no-std-include
 
     Enable or disable the search of a standard installation include directory

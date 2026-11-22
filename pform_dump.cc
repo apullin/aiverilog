@@ -128,6 +128,9 @@ ostream& operator<< (ostream &o, const pform_scoped_name_t &that)
       if (that.package) {
 	    o << that.package->pscope_name() << "::";
       }
+      if (that.class_scope) {
+	    that.class_scope->debug_dump(o) << "::";
+      }
 
       o << that.name;
       return o;
@@ -398,6 +401,8 @@ void PExpr::dump(ostream&out) const
 
 void PEAssignPattern::dump(ostream&out) const
 {
+      if (type_)
+	    out << *type_;
       if (is_keyed_()) {
 	    out << "'{";
 	    const char*sep = "";
@@ -538,7 +543,7 @@ void PETernary::dump(ostream&out) const
 
 void PETypename::dump(ostream&fd) const
 {
-      data_type_->pform_dump(fd, 0);
+      data_type_->debug_dump(fd);
 }
 
 void PEUnary::dump(ostream&out) const
@@ -1422,6 +1427,82 @@ void PSpecPath::dump(std::ostream&out, unsigned ind) const
 	    assert(delays[idx]);
 	    out << *delays[idx];
       }
+      out << ");" << endl;
+}
+
+void PWidth::dump(std::ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "$width("
+          << (reference_->posedge ? "posedge " : "negedge ")
+          << reference_->name;
+      if (reference_->condition) out << " &&& (" << *reference_->condition << ")";
+      out << ", " << *limit_;
+      if (threshold_) out << ", " << *threshold_;
+      if (notifier_) out << ", " << *notifier_;
+      out << ");" << endl;
+}
+
+void PPeriod::dump(std::ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "$period("
+          << (reference_->posedge ? "posedge " : "negedge ")
+          << reference_->name;
+      if (reference_->condition) out << " &&& (" << *reference_->condition << ")";
+      out << ", " << *limit_;
+      if (notifier_) out << ", " << *notifier_;
+      out << ");" << endl;
+}
+
+static void dump_simple_timing_event(std::ostream&out,
+                                      const PTimingCheck::event_t&event)
+{
+      if (event.posedge) out << "posedge ";
+      else if (event.negedge) out << "negedge ";
+      out << event.name;
+      if (event.condition) out << " &&& " << *event.condition;
+}
+
+void PSetup::dump(std::ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "$setup(";
+      dump_simple_timing_event(out, *data_);
+      out << ", ";
+      dump_simple_timing_event(out, *reference_);
+      out << ", " << *limit_;
+      if (notifier_) out << ", " << *notifier_;
+      out << ");" << endl;
+}
+
+void PHold::dump(std::ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "$hold(";
+      dump_simple_timing_event(out, *reference_);
+      out << ", ";
+      dump_simple_timing_event(out, *data_);
+      out << ", " << *limit_;
+      if (notifier_) out << ", " << *notifier_;
+      out << ");" << endl;
+}
+
+void PRecovery::dump(std::ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "$recovery(";
+      dump_simple_timing_event(out, *reference_);
+      out << ", ";
+      dump_simple_timing_event(out, *data_);
+      out << ", " << *limit_;
+      if (notifier_) out << ", " << *notifier_;
+      out << ");" << endl;
+}
+
+void PRemoval::dump(std::ostream&out, unsigned ind) const
+{
+      out << setw(ind) << "" << "$removal(";
+      dump_simple_timing_event(out, *reference_);
+      out << ", ";
+      dump_simple_timing_event(out, *data_);
+      out << ", " << *limit_;
+      if (notifier_) out << ", " << *notifier_;
       out << ");" << endl;
 }
 

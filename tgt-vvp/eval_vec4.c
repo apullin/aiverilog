@@ -628,8 +628,8 @@ static void draw_property_vec4(ivl_expr_t expr)
 		  ivl_variable_type_t pbase = ivl_type_base(ptype);
 		  if (pbase == IVL_VT_QUEUE || pbase == IVL_VT_DARRAY) {
 			unsigned wid = ivl_expr_width(expr);
-			draw_eval_expr_into_integer(index_ex, 3);
 			draw_load_property_object(expr);
+			draw_eval_expr_into_integer(index_ex, 3);
 			fprintf(vvp_out, "    %%load/prop/dar/vec4 %u, %u;\n",
 			        pidx, wid);
 			fprintf(vvp_out, "    %%pop/obj 1, 0;\n");

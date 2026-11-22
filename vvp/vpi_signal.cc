@@ -23,6 +23,7 @@
  */
 
 # include  "compile.h"
+# include  "delay.h"
 # include  "vpi_priv.h"
 # include  "vvp_net_sig.h"
 # include  "vvp_island.h"
@@ -616,9 +617,9 @@ static int signal_get(int code, vpiHandle ref)
             return rfp->lsb.get_value();
 
 	  case vpiScalar:
-	    return (rfp->msb.get_value() == 0 && rfp->lsb.get_value() == 0);
+	    return !rfp->vec_flag;
 	  case vpiVector:
-	    return (rfp->msb.get_value() != rfp->lsb.get_value());
+	    return rfp->vec_flag;
 
           case vpiAutomatic:
             return vpip_scope(rfp)->is_automatic() ? 1  : 0;
@@ -725,6 +726,14 @@ static vpiHandle signal_iterate(int code, vpiHandle ref)
 
       if (code == vpiIndex) {
 	    return rfp->is_netarray ? rfp->id.index->vpi_iterate(code) : NULL;
+      }
+
+      if (code == vpiDriver && rfp->get_type_code() == vpiNet &&
+          !rfp->is_netarray && !rfp->vec_flag) {
+	    // A .net aliases its driving functor. A resolver or other
+	    // intervening node is outside this direct-driver case.
+	    if (auto*path = dynamic_cast<vvp_fun_modpath*>(rfp->node->fun))
+		  return path->iterate_driver();
       }
 
       return 0;
@@ -1349,6 +1358,7 @@ static vpiHandle fill_in_net4(struct __vpiSignal*obj, __vpiScope*scope,
       obj->lsb = __vpiDecConst(lsb);
       obj->signed_flag = signed_flag? 1 : 0;
       obj->is_netarray = 0;
+      obj->vec_flag = 0;
       obj->node = node;
 
 	// Place this object within a scope. If this object is
