@@ -1,5 +1,5 @@
 {
     "type"   : "normal",
     "source" : "setuphold_bitsel_delayed.v",
-    "iverilog-args" : [ "-g2012", "-gspecify" ]
+    "iverilog-args" : [ "-g2012", "-gno-specify" ]
 }
