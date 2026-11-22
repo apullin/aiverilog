@@ -477,14 +477,9 @@ static void draw_reg_in_scope(ivl_signal_t sig)
       const char *datatype_flag = ivl_signal_integer(sig) ? "/i" :
 			       ivl_signal_signed(sig)? "/s" : "";
       const char *local_flag = local_flag_str(sig);
-      ivl_variable_type_t data_type = ivl_signal_data_type(sig);
-      const char *vector_flag =
-	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL) &&
-	    ivl_signal_packed_dimensions(sig) > 0 &&
-	    ivl_signal_width(sig) == 1? "$vector " : "";
       int vector_dims = 1;
 
-      switch (data_type) {
+      switch (ivl_signal_data_type(sig)) {
 	  case IVL_VT_BOOL:
 	    if (ivl_signal_signed(sig))
 		  datatype_flag = "/2s";
@@ -561,11 +556,10 @@ static void draw_reg_in_scope(ivl_signal_t sig)
 		    ivl_signal_local(sig)? " Local signal" : "");
 
       } else {
-
 	    ivl_enumtype_t enumtype = ivl_type_enumtype(ivl_signal_net_type(sig));
 
-	    fprintf(vvp_out, "v%p_0 .var%s %s%s\"%s\", %d %d",
-		    sig, datatype_flag, vector_flag, local_flag,
+	    fprintf(vvp_out, "v%p_0 .var%s %s\"%s\", %d %d",
+		    sig, datatype_flag, local_flag,
 		    vvp_mangle_name(ivl_signal_basename(sig)), msb, lsb);
 	    if (enumtype) fprintf(vvp_out, ", enum%p", enumtype);
 	    fprintf(vvp_out, ";%s\n",
@@ -603,10 +597,6 @@ static void draw_net_in_scope(ivl_signal_t sig)
       ivl_variable_type_t data_type = ivl_signal_data_type(sig);
       const char*datatype_flag = ivl_signal_signed(sig)? "/s" : "";
       const char *local_flag = local_flag_str(sig);
-      const char *vector_flag =
-	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL) &&
-	    ivl_signal_packed_dimensions(sig) > 0 &&
-	    ivl_signal_width(sig) == 1? "$vector " : "";
       const char *variable_flag = ivl_signal_coerced_to_uwire(sig) &&
 	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL)
 	    ? "$var " : "";
@@ -668,10 +658,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  if (dimensions > 0) {
 			/* If this is a word of an array, then use an
 			   array reference in place of the net name. */
-			fprintf(vvp_out, "v%p_%u .net%s%s %s%sv%p %u, %d %d, %s%s%s;"
+			fprintf(vvp_out, "v%p_%u .net%s%s %sv%p %u, %d %d, %s%s%s;"
 				" %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, variable_flag,
-				vector_flag, sig,
+				sig, iword, vec8, datatype_flag, variable_flag, sig,
 				iword, msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"" );
@@ -692,10 +681,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			/* If this is an isolated word, it uses its
 			   own name. */
 			assert(word_count == 1);
-			fprintf(vvp_out, "v%p_%u .net%s%s %s%s%s\"%s\", %d %d, %s%s%s; "
+			fprintf(vvp_out, "v%p_%u .net%s%s %s%s\"%s\", %d %d, %s%s%s; "
 				" %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, variable_flag,
-				vector_flag, local_flag,
+				sig, iword, vec8, datatype_flag, variable_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
 				msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
@@ -735,10 +723,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 				      swapped ? last : first );
 			}
 
-			fprintf(vvp_out, "v%p_%u .net%s %s%sv%p %u, %d %d, "
+			fprintf(vvp_out, "v%p_%u .net%s %sv%p %u, %d %d, "
 			        "v%p_%u; Alias to %s[%u]\n", sig, iword,
-			        datatype_flag, variable_flag, vector_flag, sig,
-				iword, msb, lsb,
+			        datatype_flag, variable_flag, sig, iword, msb, lsb,
 			        nex_data->net, nex_data->net_word,
 			        ivl_signal_basename(nex_data->net),
 				nex_data->net_word);
@@ -762,10 +749,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  const char*mask_arg = variable_mask && !strength_aware_flag
 			? variable_mask : "";
 
-		  fprintf(vvp_out, "v%p_%u .net%s%s %s%s%s\"%s\", %d %d, %s%s%s; "
+		  fprintf(vvp_out, "v%p_%u .net%s%s %s%s\"%s\", %d %d, %s%s%s; "
 				" alias, %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, variable_flag,
-				vector_flag, local_flag,
+				sig, iword, vec8, datatype_flag, variable_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
 				msb, lsb, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,

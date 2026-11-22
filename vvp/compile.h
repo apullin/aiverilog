@@ -516,8 +516,8 @@ extern void compile_ref_var(char*label);
  */
 extern void compile_variable(char*label, char*name,
 			     int msb, int lsb, int vpi_type_code,
-			     bool signed_flag, bool vector_flag,
-			     bool local_flag, char*enum_label);
+			     bool signed_flag, bool local_flag,
+			     char*enum_label);
 extern void compile_replace_signal_value(const class vvp_signal_value*old_sig,
 					 class vvp_signal_value*new_sig);
 
@@ -550,8 +550,7 @@ extern void compile_port_info( unsigned index, int vpi_port_type, unsigned width
  *  -vpiLogic  -- 8-value (i.e. strength aware) logic
  */
 extern void compile_net(char*label, char*name, int msb, int lsb,
-			int vpi_type_code, bool signed_flag, bool vector_flag,
-			bool local_flag,
+			int vpi_type_code, bool signed_flag, bool local_flag,
 			bool variable_flag,
 			unsigned argc, struct symb_s*argv);
 
@@ -561,7 +560,6 @@ extern void compile_net_real(char*label, char*name,
 
 extern void compile_netw(char*label, char*array_label, unsigned long array_addr,
 			 int msb, int lsb, int vpi_type_code, bool signed_flag,
-			 bool vector_flag,
 			 bool variable_flag,
 			 unsigned argc, struct symb_s*argv);
 
