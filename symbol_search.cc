@@ -68,26 +68,29 @@ static scope_object_search_result_t symbol_search_scope_objects(
       // Special case `super` keyword. Return the `this` object, but
       // with the type of the base class.
       if (path_tail.name == "#") {
-	    if (NetNet *net = scope->find_signal(
-		      perm_string::literal(THIS_TOKEN))) {
-		  const netclass_t *class_type =
-			dynamic_cast<const netclass_t*>(net->net_type());
-		  ivl_assert(*li, class_type);
-		  if (!class_type->get_super()) {
-			cerr << li->get_fileline() << ": error: "
-			     << "Class " << class_type->get_name()
-			     << " uses `super` without a base class."
-			     << endl;
-			des->errors += 1;
-			return scope_object_search_result_t::failed;
+	    NetScope *method_scope = find_method_containing_scope(*li, scope);
+	    if (method_scope && !method_scope->is_static_method()) {
+		  if (NetNet *net = method_scope->find_signal(
+			    perm_string::literal(THIS_TOKEN))) {
+			const netclass_t *class_type =
+			      dynamic_cast<const netclass_t*>(net->net_type());
+			ivl_assert(*li, class_type);
+			if (!class_type->get_super()) {
+			      cerr << li->get_fileline() << ": error: "
+				   << "Class " << class_type->get_name()
+				   << " uses `super` without a base class."
+				   << endl;
+			      des->errors += 1;
+			      return scope_object_search_result_t::failed;
+			}
+			pform_name_t path_head = path;
+			path_head.push_back(path_tail);
+			res->scope = method_scope;
+			res->net = net;
+			res->type = class_type->get_super();
+			res->path_head = path_head;
+			return scope_object_search_result_t::found;
 		  }
-		  pform_name_t path_head = path;
-		  path_head.push_back(path_tail);
-		  res->scope = scope;
-		  res->net = net;
-		  res->type = class_type->get_super();
-		  res->path_head = path_head;
-		  return scope_object_search_result_t::found;
 	    }
 	    return scope_object_search_result_t::failed;
       }

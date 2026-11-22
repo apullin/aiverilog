@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "sv_super_in_block.v",
+    "iverilog-args" : [ "-g2012" ]
+}
