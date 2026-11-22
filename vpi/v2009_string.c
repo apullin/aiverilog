@@ -184,14 +184,14 @@ static PLI_INT32 atoi_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       assert(arg);
       vpi_free_object(argv);
 
-      PLI_INT32 res = 0;
+      PLI_UINT32 res = 0;
 
       value.format = vpiStringVal;
       vpi_get_value(arg, &value);
       const char*bufp = value.value.str;
       while (bufp && *bufp) {
-	    if (isdigit((int)*bufp)) {
-		  res = (res * 10) + (*bufp - '0');
+	    if (isdigit((unsigned char)*bufp)) {
+		  res = (res * 10u) + (PLI_UINT32)(*bufp - '0');
 		  bufp += 1;
 	    } else if (*bufp == '_') {
 		  bufp += 1;
@@ -201,7 +201,7 @@ static PLI_INT32 atoi_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       }
 
       value.format = vpiIntVal;
-      value.value.integer = res;
+      value.value.integer = (PLI_INT32)res;
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
@@ -223,7 +223,7 @@ static PLI_INT32 atohex_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       assert(arg);
       vpi_free_object(argv);
 
-      PLI_INT32 res = 0;
+      PLI_UINT32 res = 0;
 
       value.format = vpiStringVal;
       vpi_get_value(arg, &value);
@@ -240,7 +240,7 @@ static PLI_INT32 atohex_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 		case '7':
 		case '8':
 		case '9':
-		  res = (res * 16) + (*bufp - '0');
+		  res = (res * 16u) + (PLI_UINT32)(*bufp - '0');
 		  bufp += 1;
 		  break;
 		case 'a': case 'A':
@@ -249,7 +249,7 @@ static PLI_INT32 atohex_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 		case 'd': case 'D':
 		case 'e': case 'E':
 		case 'f': case 'F':
-		  res = (res * 16) + (toupper((int)*bufp) - 'A' + 10);
+		  res = (res * 16u) + (PLI_UINT32)(toupper((unsigned char)*bufp) - 'A' + 10);
 		  bufp += 1;
 		  break;
 		case '_':
@@ -262,7 +262,7 @@ static PLI_INT32 atohex_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       }
 
       value.format = vpiIntVal;
-      value.value.integer = res;
+      value.value.integer = (PLI_INT32)res;
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
@@ -284,7 +284,7 @@ static PLI_INT32 atooct_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       assert(arg);
       vpi_free_object(argv);
 
-      PLI_INT32 res = 0;
+      PLI_UINT32 res = 0;
 
       value.format = vpiStringVal;
       vpi_get_value(arg, &value);
@@ -300,7 +300,7 @@ static PLI_INT32 atooct_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 		case '6':
 		case '7':
 		case '8':
-		  res = (res * 8) + (*bufp - '0');
+		  res = (res * 8u) + (PLI_UINT32)(*bufp - '0');
 		  bufp += 1;
 		  break;
 		case '_':
@@ -313,7 +313,7 @@ static PLI_INT32 atooct_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       }
 
       value.format = vpiIntVal;
-      value.value.integer = res;
+      value.value.integer = (PLI_INT32)res;
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
@@ -335,7 +335,7 @@ static PLI_INT32 atobin_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       assert(arg);
       vpi_free_object(argv);
 
-      PLI_INT32 res = 0;
+      PLI_UINT32 res = 0;
 
       value.format = vpiStringVal;
       vpi_get_value(arg, &value);
@@ -344,7 +344,7 @@ static PLI_INT32 atobin_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 	    switch (*bufp) {
 		case '0':
 		case '1':
-		  res = (res * 2) + (*bufp - '0');
+		  res = (res * 2u) + (PLI_UINT32)(*bufp - '0');
 		  bufp += 1;
 		  break;
 		case '_':
@@ -357,7 +357,7 @@ static PLI_INT32 atobin_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       }
 
       value.format = vpiIntVal;
-      value.value.integer = res;
+      value.value.integer = (PLI_INT32)res;
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
