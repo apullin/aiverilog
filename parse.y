@@ -6096,6 +6096,12 @@ lpvalue
 	delete $1;
       }
 
+  | package_scope hierarchy_identifier
+      { lex_in_package_scope(0);
+	$$ = pform_package_ident(@2, $1, $2);
+	delete $2;
+      }
+
   | class_scope hierarchy_identifier
       { $$ = pform_class_scope_ident(@2, $1, $2); }
 

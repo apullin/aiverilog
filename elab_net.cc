@@ -533,7 +533,7 @@ NetNet* PEIdent::elaborate_lnet_common_(Design*des, NetScope*scope,
       ivl_assert(*this, scope);
 
       symbol_search_results sr;
-      symbol_search(this, des, scope, path_.name, lexical_pos(), &sr);
+      symbol_search(this, des, scope, path_, lexical_pos(), &sr);
 
       if (!sr.require_non_type(this, des,
 			       "as a continuous assignment l-value"))
@@ -1241,7 +1241,7 @@ bool PEIdent::is_collapsible_net(Design*des, NetScope*scope,
       ivl_assert(*this, scope);
 
       symbol_search_results sr;
-      symbol_search(this, des, scope, path_.name, lexical_pos(), &sr);
+      symbol_search(this, des, scope, path_, lexical_pos(), &sr);
 
       if (sr.eve != 0)
             return false;
