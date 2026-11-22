@@ -255,6 +255,21 @@ static scope_object_search_result_t symbol_search_scope_objects(
 	    }
       }
 
+	// Inherited class items (typedefs, parameters, static properties,
+	// events) from base classes are visible unless shadowed by a local
+	// method or item in this class.
+      if (scope->type() == NetScope::CLASS && !scope->child_byname(path_tail.name)) {
+	    const netclass_t *clsnet = scope->class_def();
+	    if (const netclass_t *sup = clsnet ? clsnet->get_super() : nullptr) {
+		  NetScope *sup_scope = const_cast<NetScope*>(sup->class_scope());
+		  if (sup_scope) {
+			return symbol_search_scope_objects(
+			      li, des, sup_scope, start_scope, path, path_tail,
+			      UINT_MAX, res, flags);
+		  }
+	    }
+      }
+
       return scope_object_search_result_t::not_found;
 }
 

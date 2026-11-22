@@ -294,6 +294,18 @@ NetScope*NetScope::find_typedef_scope(const Design*des, const typedef_t*type_i)
 	    if (it != cur_scope->typedefs_.end() && it->second == type_i)
 		  return cur_scope;
 
+	    if (cur_scope->type() == CLASS && cur_scope->class_def()) {
+		  for (const netclass_t *sup = cur_scope->class_def()->get_super();
+		       sup; sup = sup->get_super()) {
+			NetScope *sup_scope = const_cast<NetScope*>(sup->class_scope());
+			if (!sup_scope)
+			      continue;
+			auto sit = sup_scope->typedefs_.find(type_i->name);
+			if (sit != sup_scope->typedefs_.end() && sit->second == type_i)
+			      return sup_scope;
+		  }
+	    }
+
 	    if (cur_scope == unit_)
 		  break;
 

@@ -614,10 +614,7 @@ static void elaborate_scope_class(Design*des, NetScope*scope, PClass*p_class)
 	      // template out of the scope tree.
 	    use_class->set_template();
 	    use_class->class_scope()->detach();
-	    scope->add_class(use_class);
-	    return;
       }
-      elaborate_scope_class_finish(des, use_class, p_class);
 
       scope->add_class(use_class);
 }
@@ -681,6 +678,7 @@ static void elaborate_scope_classes(Design*des, NetScope*scope,
 	    if (derived_class->is_template())
 		  continue;
 	    elaborate_scope_class_bind_super(des, derived_class, p_class);
+	    elaborate_scope_class_finish(des, derived_class, p_class);
       }
 }
 
@@ -957,11 +955,11 @@ const netclass_t* netclass_t::specialize(Design*des, NetScope*scope,
 		 << endl;
       }
 
-      elaborate_scope_class_finish(des, use_class, p_class);
       def_scope->add_class(use_class);
       if (des->parameters_evaluated)
 	    cls_scope->evaluate_parameters(des);
       elaborate_scope_class_bind_super(des, use_class, p_class);
+      elaborate_scope_class_finish(des, use_class, p_class);
 
       des->class_specializations_elab.push_back(use_class);
       if (des->class_specializations_sig_done)

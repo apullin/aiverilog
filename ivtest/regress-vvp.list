@@ -900,6 +900,7 @@ sv_ap_uarray_fail2		vvp_tests/sv_ap_uarray_fail2.json
 sv_ap_uarray_single1		vvp_tests/sv_ap_uarray_single1.json
 sv_ap_uarray_single2		vvp_tests/sv_ap_uarray_single2.json
 sv_argumentless_func		vvp_tests/sv_argumentless_func.json
+sv_base_class_typedef		vvp_tests/sv_base_class_typedef.json
 sv_array_assign_fail1		vvp_tests/sv_array_assign_fail1.json
 sv_array_assign_fail2		vvp_tests/sv_array_assign_fail2.json
 sv_array_assign_single_fail1	vvp_tests/sv_array_assign_single_fail1.json
