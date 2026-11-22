@@ -533,13 +533,13 @@ __vpiScope*vpip_timescale_scope_from_handle(vpiHandle obj)
       struct __vpiRealVar*real;
       const __vpiNamedEvent*event;
 
+      if (__vpiScope*sc = dynamic_cast<__vpiScope*>(obj))
+	    return sc;
+
       switch (obj->get_type_code()) {
 	  case vpiSysTaskCall:
 	    task = dynamic_cast<__vpiSysTaskCall*>(obj);
 	    return task->scope;
-
-	  case vpiModule:
-	    return dynamic_cast<__vpiScope*>(obj);
 
 	  case vpiDelayTerm:
 	    return dynamic_cast<__vpiScope*>(
