@@ -1,4 +1,3 @@
-ivltests/sv_class_param_static_call_fail.v:19: error: Unable to bind wire/reg/memory `prop' in `$unit.C.bad'
 ivltests/sv_class_param_static_call_fail.v:31: error: `C::get' is not a static method, so it needs an object to be called.
 ivltests/sv_class_param_static_call_fail.v:32: error: `C::get' is not a static method, so it needs an object to be called.
 ivltests/sv_class_param_static_call_fail.v:33: error: `C::set' is not a static method, so it needs an object to be called.
@@ -7,4 +6,5 @@ ivltests/sv_class_param_static_call_fail.v:35: error: Could not find variable ``
 ivltests/sv_class_param_static_call_fail.v:36: error: `D::get' is not a static method, so it needs an object to be called.
 ivltests/sv_class_param_static_call_fail.v:19: error: Unable to bind wire/reg/memory `prop' in `$unit.C#(2).bad'
 ivltests/sv_class_param_static_call_fail.v:19: error: Unable to bind wire/reg/memory `prop' in `$unit.C#(8).bad'
+ivltests/sv_class_param_static_call_fail.v:19: error: Unable to bind wire/reg/memory `prop' in `$unit.C#(4).bad'
 9 error(s) during elaboration.

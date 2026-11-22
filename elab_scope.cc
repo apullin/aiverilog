@@ -607,10 +607,11 @@ static void elaborate_scope_class(Design*des, NetScope*scope, PClass*p_class)
 
       netclass_t*use_class = elaborate_scope_class_start(des, scope, p_class,
 						 hname_t(p_class->pscope_name()));
-      if (p_class->has_required_params()) {
-	      // There are no values for the parameters, so the class can
-	      // not be elaborated until it is specialized. Keep it out of
-	      // the scope tree.
+      if (!p_class->param_names.empty()) {
+	      // A parameterized class is a generic template, not a concrete
+	      // type, and is elaborated only when specialized (explicitly via
+	      // C#(...) or via its default specialization C). Keep the generic
+	      // template out of the scope tree.
 	    use_class->set_template();
 	    use_class->class_scope()->detach();
 	    scope->add_class(use_class);
@@ -877,7 +878,7 @@ const netclass_t* netclass_t::specialize(Design*des, NetScope*scope,
 		  return base;
       }
 
-      if (replace.empty())
+      if (replace.empty() && !base->is_template())
 	    return base;
 
 	// Elaborate the parameters with the new values in a new
@@ -934,7 +935,8 @@ const netclass_t* netclass_t::specialize(Design*des, NetScope*scope,
 		  des->errors += 1;
 	    }
 	    cls_scope->detach();
-	    return base;
+	    return base->specializations_.empty()
+		  ? base : base->specializations_.front();
       }
 
       string spec_name = class_specialization_name(des, cls_scope,

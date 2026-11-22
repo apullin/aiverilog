@@ -653,14 +653,18 @@ bool symbol_search(const LineInfo *li, Design *des, NetScope *scope,
 	    scope_is_bound = true;
       } else if (path.class_scope) {
 	      // The scope is looked up each time the name is, so report
-	      // a bad scope only once.
-	    static std::set<const data_type_t*> bad_scopes;
-	    if (bad_scopes.count(path.class_scope.get()))
+	      // a bad scope only once per elaborating scope (a type parameter
+	      // AST node may resolve to different types across specializations).
+	    const NetScope *key_scope = scope->get_class_scope()
+		  ? scope->get_class_scope() : scope;
+	    static std::set<std::pair<const data_type_t*, const NetScope*>> bad_scopes;
+	    auto bad_key = std::make_pair(path.class_scope.get(), key_scope);
+	    if (bad_scopes.count(bad_key))
 		  return false;
 	    ivl_type_t type = path.class_scope->elaborate_type(des, scope);
 	    class_type = dynamic_cast<const netclass_t*>(type);
 	    if (!class_type) {
-		  bad_scopes.insert(path.class_scope.get());
+		  bad_scopes.insert(bad_key);
 		  if (type)
 			cerr << li->get_fileline() << ": error: `"
 			     << *path.class_scope << "` is not a class, so "
