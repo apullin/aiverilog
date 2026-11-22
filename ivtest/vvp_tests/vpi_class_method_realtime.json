@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "vpi_class_method_realtime.v",
+    "iverilog-args" : [ "-g2012" ]
+}
