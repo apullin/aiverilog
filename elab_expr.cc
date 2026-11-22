@@ -1292,8 +1292,10 @@ NetExpr* PEAssignPattern::elaborate_expr_struct_(Design *des, NetScope *scope,
 	    des->errors++;
       }
 
-      bool had_err = (members.size() != parms.size());
+      bool sub_err = false;
       size_t n_elab = std::min(parms.size(), members.size());
+      if (n_elab == 0)
+	    return nullptr;
       NetEConcat *neconcat = new NetEConcat(n_elab, 1, struct_type->base_type());
       for (size_t idx = 0; idx < n_elab; idx++) {
 	    auto expr = elaborate_rval_expr(des, scope,
@@ -1302,10 +1304,10 @@ NetExpr* PEAssignPattern::elaborate_expr_struct_(Design *des, NetScope *scope,
 	    if (expr)
 		  neconcat->set(idx, expr);
 	    else
-		  had_err = true;
+		  sub_err = true;
       }
 
-      if (had_err) {
+      if (sub_err) {
 	    delete neconcat;
 	    return nullptr;
       }

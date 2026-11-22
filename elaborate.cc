@@ -3432,6 +3432,12 @@ static NetProc* elaborate_uarray_slice_proc_assign(Design*des, NetScope*scope,
 						   bool is_nb, bool&intercepted)
 {
       intercepted = false;
+      const PEIdent*lid = dynamic_cast<const PEIdent*>(lpe);
+      const PEIdent*rid = dynamic_cast<const PEIdent*>(rpe);
+      if (!lid || (lid->path().back().index.empty() &&
+		   (!rid || rid->path().back().index.empty())))
+	    return nullptr;
+
       uarray_slice_info_t l_probe, r_probe;
       bool l_is_ua = inspect_uarray_slice_ident(des, scope, lpe, false, false, l_probe);
       bool r_is_ua = inspect_uarray_slice_ident(des, scope, rpe, false, false, r_probe);
