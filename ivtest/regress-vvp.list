@@ -1133,6 +1133,7 @@ sv_enum_cast			vvp_tests/sv_enum_cast.json
 sv_enum_cast_task_fail		vvp_tests/sv_enum_cast_task_fail.json
 sv_enum_escaped_name		vvp_tests/sv_enum_escaped_name.json
 sv_enum_method_case_width	vvp_tests/sv_enum_method_case_width.json
+sv_enum_prop_name		vvp_tests/sv_enum_prop_name.json
 sv_enum_reference_order		vvp_tests/sv_enum_reference_order.json
 sv_enum_reference_order_relaxed	vvp_tests/sv_enum_reference_order_relaxed.json
 sv_extern_method	vvp_tests/sv_extern_method.json
