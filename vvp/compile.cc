@@ -20,6 +20,7 @@
 
 # include  "config.h"
 # include  "delay.h"
+# include  "tchk.h"
 # include  "arith.h"
 # include  "compile.h"
 # include  "logic.h"
@@ -135,6 +136,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%cast2",   of_CAST2,  0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%cmp/e",   of_CMPE,   0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%cmp/ne",  of_CMPNE,  0,  {OA_NONE,     OA_NONE,     OA_NONE} },
+      { "%cmp/obj", of_CMPOBJ, 0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%cmp/s",   of_CMPS,   0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%cmp/str", of_CMPSTR, 0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%cmp/u",   of_CMPU,   0,  {OA_NONE,     OA_NONE,     OA_NONE} },
@@ -217,6 +219,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%jmp/0xz",of_JMP0XZ, 2,  {OA_CODE_PTR, OA_BIT1,     OA_NONE} },
       { "%jmp/1",  of_JMP1,   2,  {OA_CODE_PTR, OA_BIT1,     OA_NONE} },
       { "%jmp/1xz",of_JMP1XZ, 2,  {OA_CODE_PTR, OA_BIT1,     OA_NONE} },
+      { "%jmp/flow",of_JMP_FLOW,2,{OA_CODE_PTR2,OA_VPI_PTR,  OA_NONE} },
       { "%join",   of_JOIN,   0,  {OA_NONE,     OA_NONE,     OA_NONE} },
       { "%join/detach",of_JOIN_DETACH,1,{OA_NUMBER,OA_NONE,  OA_NONE} },
       { "%load/ar",of_LOAD_AR,2,  {OA_ARR_PTR,  OA_BIT1,     OA_NONE} },
@@ -225,6 +228,8 @@ static const struct opcode_table_s opcode_table[] = {
       { "%load/dar/vec4",of_LOAD_DAR_VEC4,1, {OA_FUNC_PTR, OA_NONE, OA_NONE} },
       { "%load/obj",   of_LOAD_OBJ,  1,{OA_FUNC_PTR,OA_NONE, OA_NONE} },
       { "%load/obja",  of_LOAD_OBJA, 2,{OA_ARR_PTR, OA_BIT1, OA_NONE} },
+      { "%load/prop/dar/r", of_LOAD_PROP_DAR_R, 1, {OA_NUMBER, OA_NONE, OA_NONE} },
+      { "%load/prop/dar/str", of_LOAD_PROP_DAR_STR, 1, {OA_NUMBER, OA_NONE, OA_NONE} },
       { "%load/prop/dar/vec4", of_LOAD_PROP_DAR_VEC4, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%load/real",  of_LOAD_REAL, 1,{OA_VPI_PTR, OA_NONE, OA_NONE} },
       { "%load/str",   of_LOAD_STR,  1,{OA_FUNC_PTR,OA_NONE, OA_NONE} },
@@ -292,6 +297,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%qpop/prop/f/r",   of_QPOP_PROP_F_REAL, 1, {OA_NUMBER, OA_NONE, OA_NONE} },
       { "%qpop/prop/f/str", of_QPOP_PROP_F_STR, 1, {OA_NUMBER, OA_NONE, OA_NONE} },
       { "%qpop/prop/f/v",   of_QPOP_PROP_F_V,    2, {OA_NUMBER, OA_BIT1, OA_NONE} },
+      { "%qslice", of_QSLICE, 0, {OA_NONE, OA_NONE, OA_NONE} },
       { "%queue/append_word/v", of_QUEUE_APPEND_WORD_V, 1, {OA_BIT1, OA_NONE, OA_NONE} },
       { "%queue/find/index/prop/v", of_QUEUE_FIND_INDEX_PROP_V, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%queue/find/index/v", of_QUEUE_FIND_INDEX_V, 2, {OA_FUNC_PTR, OA_BIT1, OA_NONE} },
@@ -370,10 +376,16 @@ static const struct opcode_table_s opcode_table[] = {
       { "%store/dar/vec4",of_STORE_DAR_VEC4,1,{OA_FUNC_PTR, OA_NONE, OA_NONE} },
       { "%store/obj",   of_STORE_OBJ,   1, {OA_FUNC_PTR,OA_NONE, OA_NONE} },
       { "%store/obja",  of_STORE_OBJA,  2, {OA_ARR_PTR, OA_BIT1, OA_NONE} },
+      { "%store/prop/dar/r",   of_STORE_PROP_DAR_R,   1, {OA_NUMBER, OA_NONE, OA_NONE} },
+      { "%store/prop/dar/str", of_STORE_PROP_DAR_STR, 1, {OA_NUMBER, OA_NONE, OA_NONE} },
+      { "%store/prop/dar/vec4",of_STORE_PROP_DAR_VEC4,1, {OA_NUMBER, OA_NONE, OA_NONE} },
       { "%store/prop/obj",of_STORE_PROP_OBJ,2, {OA_NUMBER,  OA_BIT1, OA_NONE} },
       { "%store/prop/qb/r",   of_STORE_PROP_QB_R,   2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%store/prop/qb/str", of_STORE_PROP_QB_STR, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%store/prop/qb/v",   of_STORE_PROP_QB_V,   3, {OA_NUMBER, OA_BIT1, OA_BIT2} },
+      { "%store/prop/qdar/r",   of_STORE_PROP_QDAR_R,   2, {OA_NUMBER, OA_BIT1, OA_NONE} },
+      { "%store/prop/qdar/str", of_STORE_PROP_QDAR_STR, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
+      { "%store/prop/qdar/v",   of_STORE_PROP_QDAR_V,   3, {OA_NUMBER, OA_BIT1, OA_BIT2} },
       { "%store/prop/qf/r",   of_STORE_PROP_QF_R,   2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%store/prop/qf/str", of_STORE_PROP_QF_STR, 2, {OA_NUMBER, OA_BIT1, OA_NONE} },
       { "%store/prop/qf/v",   of_STORE_PROP_QF_V,   3, {OA_NUMBER, OA_BIT1, OA_BIT2} },
@@ -1808,14 +1820,13 @@ struct __vpiModPath* compile_modpath(char*label, unsigned width,
                                      struct symb_s drv, struct symb_s dest)
 {
       vvp_net_t*net = new vvp_net_t;
-      vvp_fun_modpath*obj = new vvp_fun_modpath(net, width);
+      __vpiModPath*modpath = vpip_make_modpath(net);
+      vvp_fun_modpath*obj = new vvp_fun_modpath(net, width, modpath);
       net->fun = obj;
 
       input_connect(net, 0, drv.text);
 
       define_functor_symbol(label, net);
-
-      __vpiModPath*modpath = vpip_make_modpath(net);
 
       compile_vpi_lookup(&modpath->path_term_out.expr, dest.text);
 
@@ -2682,4 +2693,267 @@ void compile_island(char*label, char*type)
 	    assert(0);
 
       free(type);
+}
+
+/* A missing expression (3) is valid for any of the four evaluation tables.
+ * The optional forms use the same 0/1 case equality and 2 bare encoding
+ * as the two-event VPI terminal. */
+static bool valid_pulse_condition(uint64_t code, uint64_t form)
+{
+      if (form == 3) return code <= 3;
+      return form <= 2 && code == (form == 0 ? 0u : 1u);
+}
+
+/* Adapted from the unconditional WIDTH runtime hookup in Leo Moser's
+ * timingcheck-width work. The compiler now supplies real declarations. */
+void compile_tchk_width(unsigned file_idx, unsigned lineno, char* edge_nm,
+                        struct symb_s reference, double limit,
+                        double threshold, char* notifier,
+                        char* condition, uint64_t condition_code,
+                        uint64_t condition_form)
+{
+      int start_edge = 0;
+      if (strcmp(edge_nm, "posedge") == 0) start_edge = 1;
+      else if (strcmp(edge_nm, "negedge") == 0) start_edge = -1;
+      delete[] edge_nm;
+      __vpiScope* scope = vpip_peek_current_scope();
+      vvp_time64_t limit_ticks, threshold_ticks;
+      if (!start_edge || !valid_pulse_condition(condition_code, condition_form) ||
+          !vpip_tchk_delay_to_ticks(limit, scope, limit_ticks) ||
+          !vpip_tchk_delay_to_ticks(threshold, scope, threshold_ticks)) {
+            yyerror("invalid WIDTH edge/condition or unrepresentable limit/threshold");
+            free(reference.text);
+            free(notifier);
+            free(condition);
+            return;
+      }
+
+      vvp_net_t* net = new vvp_net_t;
+      vvp_fun_tchk_width* fun = new vvp_fun_tchk_width(start_edge,
+                                                     limit_ticks, threshold_ticks,
+                                                     condition_code);
+      net->fun = fun;
+      __vpiTchkWidth* obj = new __vpiTchkWidth(scope, file_idx, lineno, fun, condition_form);
+      fun->vpi_tchk = obj;
+      input_connect(net, 0, strdup(reference.text));
+      compile_vpi_lookup(&obj->reference_, reference.text);
+      if (*notifier) compile_vpi_lookup(&obj->notifier_, notifier);
+      else free(notifier);
+      if (condition) compile_vpi_lookup(&obj->condition_, condition);
+      vpip_attach_to_current_scope(obj);
+}
+
+void compile_tchk_period(unsigned file_idx, unsigned lineno, char* edge_nm,
+                        struct symb_s reference, double limit, char* notifier,
+                        char* condition, uint64_t condition_code,
+                         uint64_t condition_form)
+{
+      int reference_edge = 0;
+      if (strcmp(edge_nm, "posedge") == 0) reference_edge = 1;
+      else if (strcmp(edge_nm, "negedge") == 0) reference_edge = -1;
+      delete[] edge_nm;
+      __vpiScope* scope = vpip_peek_current_scope();
+      vvp_time64_t limit_ticks;
+      if (!reference_edge || !valid_pulse_condition(condition_code, condition_form) ||
+          !vpip_tchk_delay_to_ticks(limit, scope, limit_ticks)) {
+            yyerror("invalid PERIOD edge/condition or unrepresentable limit");
+            free(reference.text);
+            free(notifier);
+            free(condition);
+            return;
+      }
+
+      vvp_net_t* net = new vvp_net_t;
+      vvp_fun_tchk_period* fun = new vvp_fun_tchk_period(reference_edge,
+                                                     limit_ticks, condition_code);
+      net->fun = fun;
+      __vpiTchkPeriod* obj = new __vpiTchkPeriod(scope, file_idx, lineno, fun, condition_form);
+      fun->vpi_tchk = obj;
+      input_connect(net, 0, strdup(reference.text));
+      compile_vpi_lookup(&obj->reference_, reference.text);
+      if (*notifier) compile_vpi_lookup(&obj->notifier_, notifier);
+      else free(notifier);
+      if (condition) compile_vpi_lookup(&obj->condition_, condition);
+      vpip_attach_to_current_scope(obj);
+}
+
+
+static bool parse_tchk_event_edge(const char* text, int& result)
+{
+      if (strcmp(text, "posedge") == 0) result = 1;
+      else if (strcmp(text, "negedge") == 0) result = -1;
+      else if (strcmp(text, "any") == 0) result = 0;
+      else return false;
+      return true;
+}
+
+void compile_tchk_two_event(int kind, unsigned file_idx, unsigned lineno,
+                             char* reference_edge_text, struct symb_s reference,
+                             char* data_edge_text, struct symb_s data,
+                             double limit, char* notifier,
+                             char* reference_condition, uint64_t reference_condition_mode,
+                             char* data_condition, uint64_t data_condition_mode)
+{
+      int reference_edge = 0, data_edge = 0;
+      bool edges_valid = parse_tchk_event_edge(reference_edge_text, reference_edge)
+                      && parse_tchk_event_edge(data_edge_text, data_edge);
+      delete[] reference_edge_text;
+      delete[] data_edge_text;
+      __vpiScope* scope = vpip_peek_current_scope();
+      // Condition labels are quoted VVP strings (new[]); deferred VPI lookups
+      // take malloc-owned labels. An empty label denotes an unqualified role.
+      char* reference_condition_label = reference_condition && *reference_condition
+            ? strdup(reference_condition) : nullptr;
+      char* data_condition_label = data_condition && *data_condition
+            ? strdup(data_condition) : nullptr;
+      delete[] reference_condition;
+      delete[] data_condition;
+      vvp_time64_t limit_ticks;
+      if (!edges_valid || reference_condition_mode > 2 || data_condition_mode > 2
+          || !vpip_tchk_delay_to_ticks(limit, scope, limit_ticks)) {
+            yyerror("invalid two-event timing-check edge or unrepresentable limit");
+            free(reference.text);
+            free(data.text);
+            free(notifier);
+            free(reference_condition_label);
+            free(data_condition_label);
+            return;
+      }
+
+      vvp_net_t* net = new vvp_net_t;
+      vvp_fun_tchk_two_event* fun = new vvp_fun_tchk_two_event(
+            kind, reference_edge, data_edge, limit_ticks,
+            reference_condition_mode == 0 ? 0 : 1,
+            data_condition_mode == 0 ? 0 : 1);
+      net->fun = fun;
+      __vpiTchkTwoEvent* obj = new __vpiTchkTwoEvent(scope, file_idx, lineno, fun);
+      obj->reference_condition_mode_ = reference_condition_mode;
+      obj->data_condition_mode_ = data_condition_mode;
+      fun->vpi_tchk = obj;
+      input_connect(net, 0, strdup(reference.text));
+      input_connect(net, 1, strdup(data.text));
+      compile_vpi_lookup(&obj->reference_, reference.text);
+      compile_vpi_lookup(&obj->data_, data.text);
+      if (*notifier) compile_vpi_lookup(&obj->notifier_, notifier);
+      else free(notifier);
+      if (reference_condition_label)
+            compile_vpi_lookup(&obj->reference_condition_, reference_condition_label);
+      if (data_condition_label)
+            compile_vpi_lookup(&obj->data_condition_, data_condition_label);
+      vpip_attach_to_current_scope(obj);
+}
+
+
+void compile_tchk_recrem(unsigned file_idx, unsigned lineno,
+                            char* reference_edge_text, struct symb_s reference,
+                            char* data_edge_text, struct symb_s data,
+                            double recovery_limit, double removal_limit, char* notifier,
+                            char* reference_condition, uint64_t reference_condition_value,
+                            char* data_condition, uint64_t data_condition_value)
+{
+      int reference_edge = 0, data_edge = 0;
+      bool edges_valid = parse_tchk_event_edge(reference_edge_text, reference_edge)
+                      && parse_tchk_event_edge(data_edge_text, data_edge);
+      delete[] reference_edge_text;
+      delete[] data_edge_text;
+      __vpiScope* scope = vpip_peek_current_scope();
+      // Condition labels are quoted VVP strings (new[]); deferred VPI lookups
+      // take malloc-owned labels. An empty label denotes an unqualified role.
+      char* reference_condition_label = reference_condition && *reference_condition
+            ? strdup(reference_condition) : nullptr;
+      char* data_condition_label = data_condition && *data_condition
+            ? strdup(data_condition) : nullptr;
+      delete[] reference_condition;
+      delete[] data_condition;
+      vvp_time64_t recovery_ticks, removal_ticks;
+      if (!edges_valid || reference_condition_value > 2 || data_condition_value > 2
+          || !vpip_tchk_delay_to_ticks(recovery_limit, scope, recovery_ticks) ||
+          !vpip_tchk_delay_to_ticks(removal_limit, scope, removal_ticks)) {
+            yyerror("invalid RECREM edge or unrepresentable limits");
+            free(reference.text);
+            free(data.text);
+            free(notifier);
+            free(reference_condition_label);
+            free(data_condition_label);
+            return;
+      }
+
+      vvp_net_t* net = new vvp_net_t;
+      vvp_fun_tchk_recrem* fun = new vvp_fun_tchk_recrem(
+            reference_edge, data_edge, recovery_ticks, removal_ticks,
+            reference_condition_value == 0 ? 0 : 1,
+            data_condition_value == 0 ? 0 : 1);
+      net->fun = fun;
+      __vpiTchkRecRem* obj = new __vpiTchkRecRem(scope, file_idx, lineno, fun);
+      obj->reference_condition_mode_ = reference_condition_value;
+      obj->data_condition_mode_ = data_condition_value;
+      fun->vpi_tchk = obj;
+      input_connect(net, 0, strdup(reference.text));
+      input_connect(net, 1, strdup(data.text));
+      compile_vpi_lookup(&obj->reference_, reference.text);
+      compile_vpi_lookup(&obj->data_, data.text);
+      if (*notifier) compile_vpi_lookup(&obj->notifier_, notifier);
+      else free(notifier);
+      if (reference_condition_label)
+            compile_vpi_lookup(&obj->reference_condition_, reference_condition_label);
+      if (data_condition_label)
+            compile_vpi_lookup(&obj->data_condition_, data_condition_label);
+      vpip_attach_to_current_scope(obj);
+}
+
+
+void compile_tchk_setuphold(unsigned file_idx, unsigned lineno,
+                            char* reference_edge_text, struct symb_s reference,
+                            char* data_edge_text, struct symb_s data,
+                            double setup_limit, double hold_limit, char* notifier,
+                            char* reference_condition, uint64_t reference_condition_value,
+                            char* data_condition, uint64_t data_condition_value)
+{
+      int reference_edge = 0, data_edge = 0;
+      bool edges_valid = parse_tchk_event_edge(reference_edge_text, reference_edge)
+                      && parse_tchk_event_edge(data_edge_text, data_edge);
+      delete[] reference_edge_text;
+      delete[] data_edge_text;
+      __vpiScope* scope = vpip_peek_current_scope();
+      // Condition labels are quoted VVP strings (new[]); deferred VPI lookups
+      // take malloc-owned labels. An empty label denotes an unqualified role.
+      char* reference_condition_label = reference_condition && *reference_condition
+            ? strdup(reference_condition) : nullptr;
+      char* data_condition_label = data_condition && *data_condition
+            ? strdup(data_condition) : nullptr;
+      delete[] reference_condition;
+      delete[] data_condition;
+      vvp_time64_t setup_ticks, hold_ticks;
+      if (!edges_valid || reference_condition_value > 2 || data_condition_value > 2
+          || !vpip_tchk_delay_to_ticks(setup_limit, scope, setup_ticks) ||
+          !vpip_tchk_delay_to_ticks(hold_limit, scope, hold_ticks)) {
+            yyerror("invalid SETUPHOLD edge, condition mode or unrepresentable limit");
+            free(reference.text);
+            free(data.text);
+            free(notifier);
+            free(reference_condition_label);
+            free(data_condition_label);
+            return;
+      }
+
+      vvp_net_t* net = new vvp_net_t;
+      vvp_fun_tchk_setuphold* fun = new vvp_fun_tchk_setuphold(
+            reference_edge, data_edge, setup_ticks, hold_ticks,
+            reference_condition_value != 0, data_condition_value != 0);
+      net->fun = fun;
+      __vpiTchkSetupHold* obj = new __vpiTchkSetupHold(scope, file_idx, lineno, fun);
+      obj->reference_condition_mode_ = reference_condition_value;
+      obj->data_condition_mode_ = data_condition_value;
+      fun->vpi_tchk = obj;
+      input_connect(net, 0, strdup(reference.text));
+      input_connect(net, 1, strdup(data.text));
+      compile_vpi_lookup(&obj->reference_, reference.text);
+      compile_vpi_lookup(&obj->data_, data.text);
+      if (*notifier) compile_vpi_lookup(&obj->notifier_, notifier);
+      else free(notifier);
+      if (reference_condition_label)
+            compile_vpi_lookup(&obj->reference_condition_, reference_condition_label);
+      if (data_condition_label)
+            compile_vpi_lookup(&obj->data_condition_, data_condition_label);
+      vpip_attach_to_current_scope(obj);
 }

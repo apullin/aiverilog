@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2025 Stephen Williams (steve@icarus.com)
+ * Copyright (c) 1998-2026 Stephen Williams (steve@icarus.com)
  *
  *    This source code is free software; you can redistribute it
  *    and/or modify it in source code form under the terms of the GNU
@@ -501,6 +501,8 @@ void NetScope::emit_scope(struct target_t*tgt) const
 
       for (map<perm_string,netclass_t*>::const_iterator cur = classes_.begin()
 		 ; cur != classes_.end() ; ++cur) {
+	    if (cur->second->is_template())
+		  continue;
 	    cur->second->emit_scope(tgt);
 	    tgt->class_type(this, cur->second);
       }
@@ -532,6 +534,23 @@ void NetScope::emit_scope(struct target_t*tgt) const
 	    tgt->signal_paths(cur->second);
       }
 
+      for (const auto& check : widths_)
+	    tgt->width_check(check.get());
+      for (const auto& check : periods_)
+	    tgt->period_check(check.get());
+      for (const auto& check : setups_)
+            tgt->setup_check(check.get());
+      for (const auto& check : holds_)
+            tgt->hold_check(check.get());
+      for (const auto& check : recoveries_)
+            tgt->recovery_check(check.get());
+      for (const auto& check : removals_)
+            tgt->removal_check(check.get());
+      for (const auto& check : recrems_)
+            tgt->recrem_check(check.get());
+      for (const auto& check : setupholds_)
+            tgt->setuphold_check(check.get());
+
       if (type_ == MODULE) tgt->convert_module_ports(this);
 }
 
@@ -559,8 +578,10 @@ bool NetScope::emit_defs(struct target_t*tgt) const
 		  flag &= cur->second->emit_defs(tgt);
 	    }
 	    for (map<perm_string,netclass_t*>::const_iterator cur = classes_.begin()
-		       ; cur != classes_.end() ; ++ cur)
-		  flag &= cur->second->emit_defs(tgt);
+		       ; cur != classes_.end() ; ++ cur) {
+		  if (!cur->second->is_template())
+			flag &= cur->second->emit_defs(tgt);
+	    }
 	    break;
 
 	  case FUNC:

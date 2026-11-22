@@ -319,14 +319,25 @@ general syntax of a variable is::
 	<label> .var/s "name", <msb> <lsb>; Signed logic variable
 	<label> .var/2u "name", <msb> <lsb>; Unsigned bool/bit variable
 	<label> .var/2s "name", <msb> <lsb>; Signed bool/bit variable
-	<label> .var/real "name", <msb>, <lsb>; real variable
-	<label> .var/i "name", <msb>, <lsb>; vpiIntegerVar variable
+	<label> .var/real "name"; real variable
+	<label> .var/i "name", <msb> <lsb>; vpiIntegerVar variable
 	<label> .var/str "name"; vpiStringVar variable
+
+The ``, <msb> <lsb>`` range is what makes a variable a vector. A vector
+always has a range, even when it has a single element (``logic [0:0]`` is
+``0 0``). A scalar has no range, and its width is one::
+
+	<label> .var "name", 0 0;	A one-element vector (vpiVector)
+	<label> .var "name";		A scalar (vpiScalar)
+
+This applies to every ``.var`` form above, and to the ``.net`` forms. A real
+has neither a range nor a vector/scalar distinction.
 
 Enum variables may append a reference to an enumeration definition before
 the terminating semicolon::
 
         <label> .var "name", <msb> <lsb>, <enum-label>;
+        <label> .var "name", <enum-label>;
 
 This optional reference is also accepted by the ``/s``, ``/2u``, ``/2s``
 and ``/i`` forms. It identifies the enum typespec exposed through
@@ -368,17 +379,31 @@ it (unless it uses a force) and it is given a different VPI type
 code. The syntax of a .net statement is also similar to but not
 exactly the same as the .var statement::
 
-	<label> .net      "name", <msb>, <lsb>, <symbol>;
-	<label> .net/s    "name", <msb>, <lsb>, <symbol>;
-	<label> .net8     "name", <msb>, <lsb>, <symbol>;
-	<label> .net8/s   "name", <msb>, <lsb>, <symbol>;
-	<label> .net/real "name", <msb>, <lsb>, <symbol>;
+	<label> .net      "name", <msb> <lsb>, <symbol>;
+	<label> .net/s    "name", <msb> <lsb>, <symbol>;
+	<label> .net/2u   "name", <msb> <lsb>, <symbol>;
+	<label> .net/2s   "name", <msb> <lsb>, <symbol>;
+	<label> .net8     "name", <msb> <lsb>, <symbol>;
+	<label> .net8/s   "name", <msb> <lsb>, <symbol>;
+	<label> .net8/2u  "name", <msb> <lsb>, <symbol>;
+	<label> .net8/2s  "name", <msb> <lsb>, <symbol>;
+	<label> .net/real "name", <symbol>;
+
+As for a variable, the range is what makes a net a vector. A scalar net has
+no range::
+
+	<label> .net "name", <symbol>;
 
 
 Like a .var statement, the .net statement creates a VPI object with
 the basename and dimensions given as parameters. The symbol is a
 functor that feeds into the vector of the net, and the vpiHandle
 holds references to that functor.
+
+Words of a net array are declared with the array label and index in place
+of the name, with the same optional range::
+
+	<label> .net v<array> <index>, <msb> <lsb>, <symbol>;
 
 The input of a .net is replicated to its output. In this sense, it
 acts like a diode. The purpose of this node is to hold various VPI
@@ -471,6 +496,40 @@ Bare-name identities from older compiled files remain compatible. SDF scalar
 constants use the parser's existing normalized 0/1 syntax; no Boolean
 simplification or interchange of logical and case equality is performed.
 
+Scalar Timing-Check Statements
+------------------------------
+
+The compiler emits WIDTH and PERIOD declarations in the declaring module's
+recalled scope::
+
+        .tchk_width <file> <line>, "<edge>", <reference>, <limit>, <threshold>, <notifier>;
+        .tchk_period <file> <line>, "<edge>", <reference>, <limit>, <notifier>;
+
+``<edge>`` is ``posedge`` or ``negedge``. The reference and optional notifier
+are scalar signal labels; an omitted notifier is ``""``. File and line operands
+identify the HDL declaration. Limit and threshold are real constants in the
+module's time units, rounded to its precision and converted to simulator ticks.
+
+A conditional declaration appends a local scalar condition label and a
+numeric condition code before the semicolon::
+
+        .tchk_width <file> <line>, "<edge>", <reference>, <limit>, <threshold>, <notifier>, <condition>, <code>;
+        .tchk_period <file> <line>, "<edge>", <reference>, <limit>, <notifier>, <condition>, <code>;
+
+``<code>`` selects which values of the condition signal qualify a delivery:
+
+* ``0``: 0 only (bitwise complement or case equality to zero).
+* ``1``: 1 only (bare signal or case equality to one).
+* ``2``: 0, X or Z (logical equality to zero, or logical or case inequality to one).
+* ``3``: 1, X or Z (logical equality to one, or logical or case inequality to zero).
+
+With a known binary constant, an X or Z operand makes a logical comparison
+produce X and case inequality produce true. Both qualify the delivery.
+The condition is read at a physical
+reference delivery, after updating the previous physical reference value. It
+has no event input of its own. An unmatched condition leaves timing history
+unchanged. Omitting the suffix preserves the unconditional record behavior.
+
 Array Index Statements
 ----------------------
 
@@ -481,6 +540,23 @@ declared separately, this statement collects them together::
 
 the .var or .net statements after this array statement, that have the
 same "name" are collected, in order, as words.
+
+An array of variables holds its words inside the .array statement, so the
+statement also carries their type and range. The ``.array/4u``,
+``.array/s``, ``.array/2u`` and ``.array/2s`` forms follow the same rule as
+``.var``: the words are vectors if there is a word range, and scalars if
+there is none::
+
+	<label> .array/2u "name", <last> <first>, <msb> <lsb>;	Vector words
+	<label> .array/2u "name", <last> <first>;		Scalar words
+
+The ``.array/i`` form always has a word range, and the real, string and
+object forms have none. ``.array/4u`` is the unsigned 4-state form. The
+older plain ``.array`` with a word range is still accepted, but cannot give
+scalar words a form without one, since that would be the net array
+statement above. A word of a plain ``.array`` is a vector (``vpiVector``) if
+it is more than one bit wide, and a one-bit word does not report either
+``vpiVector`` or ``vpiScalar``.
 
 The syntax below is different, in that it creates an alias for an
 existing array. The dimensions and storage are taken from the .array
@@ -1186,7 +1262,7 @@ Each bit of a variable is created by a `.var` statement. For example::
 
 becomes::
 
-	a	.var "a", 0, 0;
+	a	.var "a";
 
 
 * named events

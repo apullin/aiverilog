@@ -425,6 +425,23 @@ static const char *local_flag_str( ivl_signal_t sig )
 }
 
 /*
+ * A signal declared with a packed range is a vector, even when the range
+ * has a single element, and the .var and .net statements give it a
+ * ", <msb> <lsb>" range. A scalar has no range at all, and neither does
+ * a real. Write the range text, or an empty string, into buf.
+ */
+static const char *range_str(ivl_signal_t sig, int msb, int lsb,
+			     char *buf, size_t buf_size)
+{
+      buf[0] = 0;
+      if (ivl_signal_data_type(sig) == IVL_VT_REAL)
+	    return buf;
+      if (ivl_signal_packed_dimensions(sig) > 0 || ivl_signal_width(sig) > 1)
+	    snprintf(buf, buf_size, ", %d %d", msb, lsb);
+      return buf;
+}
+
+/*
  * This function draws a reg/int/variable in the scope. This is a very
  * simple device to draw as there are no inputs to connect so no need
  * to scan the nexus. We do have to account for the possibility that
@@ -477,14 +494,9 @@ static void draw_reg_in_scope(ivl_signal_t sig)
       const char *datatype_flag = ivl_signal_integer(sig) ? "/i" :
 			       ivl_signal_signed(sig)? "/s" : "";
       const char *local_flag = local_flag_str(sig);
-      ivl_variable_type_t data_type = ivl_signal_data_type(sig);
-      const char *vector_flag =
-	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL) &&
-	    ivl_signal_packed_dimensions(sig) > 0 &&
-	    ivl_signal_width(sig) == 1? "$vector " : "";
       int vector_dims = 1;
 
-      switch (data_type) {
+      switch (ivl_signal_data_type(sig)) {
 	  case IVL_VT_BOOL:
 	    if (ivl_signal_signed(sig))
 		  datatype_flag = "/2s";
@@ -527,10 +539,17 @@ static void draw_reg_in_scope(ivl_signal_t sig)
 	    unsigned swapped = ivl_signal_array_addr_swapped(sig);
 	    int last = ivl_signal_array_base(sig)+word_count-1;
 	    int first = ivl_signal_array_base(sig);
-	    fprintf(vvp_out, "v%p .array%s \"%s\", %d %d, %d %d;\n",
+	      /* The words of a variable array are vectors if there is a
+		 word range. An unsigned 4-state array is .array/4u, since
+		 a plain .array without a word range is a net array. */
+	    char range[32];
+	    range_str(sig, msb, lsb, range, sizeof(range));
+	    if (datatype_flag[0] == 0)
+		  datatype_flag = "/4u";
+	    fprintf(vvp_out, "v%p .array%s \"%s\", %d %d%s;\n",
 		    sig, datatype_flag,
 		    vvp_mangle_name(ivl_signal_basename(sig)),
-		    swapped ? first: last, swapped ? last : first, msb, lsb);
+		    swapped ? first: last, swapped ? last : first, range);
 
       } else if (ivl_signal_data_type(sig) == IVL_VT_DARRAY) {
 	    ivl_type_t var_type = ivl_signal_net_type(sig);
@@ -561,12 +580,13 @@ static void draw_reg_in_scope(ivl_signal_t sig)
 		    ivl_signal_local(sig)? " Local signal" : "");
 
       } else {
-
 	    ivl_enumtype_t enumtype = ivl_type_enumtype(ivl_signal_net_type(sig));
 
-	    fprintf(vvp_out, "v%p_0 .var%s %s%s\"%s\", %d %d",
-		    sig, datatype_flag, vector_flag, local_flag,
-		    vvp_mangle_name(ivl_signal_basename(sig)), msb, lsb);
+	    char range[32];
+	    fprintf(vvp_out, "v%p_0 .var%s %s\"%s\"%s",
+		    sig, datatype_flag, local_flag,
+		    vvp_mangle_name(ivl_signal_basename(sig)),
+		    range_str(sig, msb, lsb, range, sizeof(range)));
 	    if (enumtype) fprintf(vvp_out, ", enum%p", enumtype);
 	    fprintf(vvp_out, ";%s\n",
 		    ivl_signal_local(sig)? " Local signal" : "" );
@@ -603,13 +623,11 @@ static void draw_net_in_scope(ivl_signal_t sig)
       ivl_variable_type_t data_type = ivl_signal_data_type(sig);
       const char*datatype_flag = ivl_signal_signed(sig)? "/s" : "";
       const char *local_flag = local_flag_str(sig);
-      const char *vector_flag =
-	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL) &&
-	    ivl_signal_packed_dimensions(sig) > 0 &&
-	    ivl_signal_width(sig) == 1? "$vector " : "";
       const char *variable_flag = ivl_signal_coerced_to_uwire(sig) &&
 	    (data_type == IVL_VT_LOGIC || data_type == IVL_VT_BOOL)
 	    ? "$var " : "";
+      char range[32];
+      range_str(sig, msb, lsb, range, sizeof(range));
 
       unsigned iword;
 
@@ -668,11 +686,10 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  if (dimensions > 0) {
 			/* If this is a word of an array, then use an
 			   array reference in place of the net name. */
-			fprintf(vvp_out, "v%p_%u .net%s%s %s%sv%p %u, %d %d, %s%s%s;"
+			fprintf(vvp_out, "v%p_%u .net%s%s %sv%p %u%s, %s%s%s;"
 				" %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, variable_flag,
-				vector_flag, sig,
-				iword, msb, lsb, driver, mask_sep, mask_arg,
+				sig, iword, vec8, datatype_flag, variable_flag, sig,
+				iword, range, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"" );
 
@@ -692,12 +709,11 @@ static void draw_net_in_scope(ivl_signal_t sig)
 			/* If this is an isolated word, it uses its
 			   own name. */
 			assert(word_count == 1);
-			fprintf(vvp_out, "v%p_%u .net%s%s %s%s%s\"%s\", %d %d, %s%s%s; "
+			fprintf(vvp_out, "v%p_%u .net%s%s %s%s\"%s\"%s, %s%s%s; "
 				" %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, variable_flag,
-				vector_flag, local_flag,
+				sig, iword, vec8, datatype_flag, variable_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
-				msb, lsb, driver, mask_sep, mask_arg,
+				range, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"" );
 		  }
@@ -735,10 +751,9 @@ static void draw_net_in_scope(ivl_signal_t sig)
 				      swapped ? last : first );
 			}
 
-			fprintf(vvp_out, "v%p_%u .net%s %s%sv%p %u, %d %d, "
+			fprintf(vvp_out, "v%p_%u .net%s %sv%p %u%s, "
 			        "v%p_%u; Alias to %s[%u]\n", sig, iword,
-			        datatype_flag, variable_flag, vector_flag, sig,
-				iword, msb, lsb,
+			        datatype_flag, variable_flag, sig, iword, range,
 			        nex_data->net, nex_data->net_word,
 			        ivl_signal_basename(nex_data->net),
 				nex_data->net_word);
@@ -762,12 +777,11 @@ static void draw_net_in_scope(ivl_signal_t sig)
 		  const char*mask_arg = variable_mask && !strength_aware_flag
 			? variable_mask : "";
 
-		  fprintf(vvp_out, "v%p_%u .net%s%s %s%s%s\"%s\", %d %d, %s%s%s; "
+		  fprintf(vvp_out, "v%p_%u .net%s%s %s%s\"%s\"%s, %s%s%s; "
 				" alias, %u drivers%s\n",
-				sig, iword, vec8, datatype_flag, variable_flag,
-				vector_flag, local_flag,
+				sig, iword, vec8, datatype_flag, variable_flag, local_flag,
 				vvp_mangle_name(ivl_signal_basename(sig)),
-				msb, lsb, driver, mask_sep, mask_arg,
+				range, driver, mask_sep, mask_arg,
 				nex_data->drivers_count,
 				strength_aware_flag?", strength-aware":"");
 	    }
@@ -920,14 +934,14 @@ static void draw_udp_in_scope(ivl_net_logic_t lptr)
 	 * to define the output delay net when needed, otherwise it will
 	 * not be cleaned up correctly (gives a valgrind warning). */
       if (need_delay_flag) {
-	    fprintf(vvp_out, "v%p_0 .net *\"_d%p\", 0 0, L_%p/d;\n", lptr,
+	    fprintf(vvp_out, "v%p_0 .net *\"_d%p\", L_%p/d;\n", lptr,
 	            lptr, lptr);
       }
 	/* The same situation exists if a modpath is used to connect the UDP
 	 * output to the true output signal. For this case the modpath is
 	 * the only thing connected to the UDP output. */
       if (udp_has_modpath_output(lptr)) {
-	    fprintf(vvp_out, "v%p_0 .net *\"_m%p\", 0 0, L_%p;\n", lptr,
+	    fprintf(vvp_out, "v%p_0 .net *\"_m%p\", L_%p;\n", lptr,
 	            lptr, lptr);
       }
 
@@ -2065,13 +2079,17 @@ static void draw_sfunc_output_def(ivl_lpm_t net, char type)
 
       switch (data_type_of_nexus(nex)) {
 	case IVL_VT_REAL:
-	    fprintf(vvp_out, "v%p_0 .net/real *\"_%c%p\", 0 0, L_%p%s;\n",
+	    fprintf(vvp_out, "v%p_0 .net/real *\"_%c%p\", L_%p%s;\n",
 	            net, type, net, net, suf);
 	    break;
 	case IVL_VT_LOGIC:
 	case IVL_VT_BOOL:
-	    fprintf(vvp_out, "v%p_0 .net *\"_%c%p\", %u 0, L_%p%s;\n",
-	            net, type, net, width_of_nexus(nex)-1, net, suf);
+	    if (width_of_nexus(nex) > 1)
+		  fprintf(vvp_out, "v%p_0 .net *\"_%c%p\", %u 0, L_%p%s;\n",
+		          net, type, net, width_of_nexus(nex)-1, net, suf);
+	    else
+		  fprintf(vvp_out, "v%p_0 .net *\"_%c%p\", L_%p%s;\n",
+		          net, type, net, net, suf);
 	    break;
 	default:
 	    assert(0);
@@ -2439,6 +2457,202 @@ static const char *vvp_port_info_type_str(ivl_signal_port_t ptype)
       }
 }
 
+/* Keep 0/1 as exact matches in VVP. The additional codes also admit X/Z.
+ * Case inequality then evaluates to true; logical comparisons evaluate to X. */
+static unsigned timing_condition_code(ivl_tchk_cond_t kind)
+{
+      switch (kind) {
+          case IVL_TCHK_COND_CASE_EQ0:
+          case IVL_TCHK_COND_BIT_NOT: return 0;
+          case IVL_TCHK_COND_BARE:
+          case IVL_TCHK_COND_CASE_EQ1: return 1;
+          case IVL_TCHK_COND_LOGIC_EQ0:
+          case IVL_TCHK_COND_CASE_NE1:
+          case IVL_TCHK_COND_LOGIC_NE1: return 2;
+          case IVL_TCHK_COND_LOGIC_EQ1:
+          case IVL_TCHK_COND_CASE_NE0:
+          case IVL_TCHK_COND_LOGIC_NE0: return 3;
+          default: assert(0); return 0;
+      }
+}
+
+/* The first field selects the runtime truth table. An optional second
+ * field names the declared expression for VPI/SDF matching. Older VVP
+ * records contain the truth table alone, which cannot identify a source
+ * expression: for example, ~EN and EN === 1'b0 both use table 0. */
+static void draw_pulse_condition(ivl_signal_t signal, ivl_tchk_cond_t kind)
+{
+      if (!signal) return;
+      fprintf(vvp_out, ", v%p_0, %u", signal, timing_condition_code(kind));
+      switch (kind) {
+          case IVL_TCHK_COND_CASE_EQ0: fprintf(vvp_out, ", 0"); break;
+          case IVL_TCHK_COND_CASE_EQ1: fprintf(vvp_out, ", 1"); break;
+          case IVL_TCHK_COND_BARE:     fprintf(vvp_out, ", 2"); break;
+          default: break;
+      }
+}
+
+/* Emit exactly one record for each elaborated declaration, after its signals. */
+static void draw_width_in_scope(ivl_width_t check)
+{
+      ivl_signal_t notifier = ivl_width_notifier(check);
+      fprintf(vvp_out, "    .tchk_width %u %u, \"%s\", v%p_0, %.17e, %.17e, ",
+              ivl_file_table_index(ivl_width_file(check)), ivl_width_lineno(check),
+              ivl_width_posedge(check) ? "posedge" : "negedge",
+              ivl_width_reference(check), ivl_width_limit(check),
+              ivl_width_threshold(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_pulse_condition(ivl_width_condition(check), ivl_width_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+static const char*two_event_edge(int edge)
+{
+      return edge == 1 ? "posedge" : edge == -1 ? "negedge" : "any";
+}
+
+static void draw_period_in_scope(ivl_period_t check)
+{
+      ivl_signal_t notifier = ivl_period_notifier(check);
+      fprintf(vvp_out, "    .tchk_period %u %u, \"%s\", v%p_0, %.17e, ",
+              ivl_file_table_index(ivl_period_file(check)), ivl_period_lineno(check),
+              ivl_period_posedge(check) ? "posedge" : "negedge",
+              ivl_period_reference(check), ivl_period_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_pulse_condition(ivl_period_condition(check), ivl_period_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+/* Qualifier labels are quoted so the extended records remain unambiguous
+ * with both present and omitted notifiers. An absent role uses an empty label.
+ * Modes 0/1 retain the case-equality value; mode 2 preserves a bare signal
+ * for standard VPI condition traversal without changing its runtime truth. */
+static void draw_two_event_conditions(ivl_signal_t reference,
+                                       ivl_tchk_cond_t reference_kind,
+                                       ivl_signal_t data,
+                                       ivl_tchk_cond_t data_kind)
+{
+      if (!reference && !data) return;
+      if (reference) fprintf(vvp_out, ", \"v%p_0\", %u", reference,
+                             reference_kind == IVL_TCHK_COND_BARE ? 2U :
+                             reference_kind == IVL_TCHK_COND_CASE_EQ0 ? 0U : 1U);
+      else fprintf(vvp_out, ", \"\", 1");
+      if (data) fprintf(vvp_out, ", \"v%p_0\", %u", data,
+                        data_kind == IVL_TCHK_COND_BARE ? 2U :
+                        data_kind == IVL_TCHK_COND_CASE_EQ0 ? 0U : 1U);
+      else fprintf(vvp_out, ", \"\", 1");
+}
+
+static void draw_setup_in_scope(ivl_setup_t check)
+{
+      ivl_signal_t notifier = ivl_setup_notifier(check);
+      fprintf(vvp_out, "    .tchk_setup %u %u, \"%s\", v%p_0, \"%s\", v%p_0, %.17e, ",
+              ivl_file_table_index(ivl_setup_file(check)), ivl_setup_lineno(check),
+              two_event_edge(ivl_setup_reference_edge(check)),
+              ivl_setup_reference(check),
+              two_event_edge(ivl_setup_data_edge(check)), ivl_setup_data(check),
+              ivl_setup_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_two_event_conditions(ivl_setup_reference_condition(check),
+                                ivl_setup_reference_condition_kind(check),
+                                ivl_setup_data_condition(check),
+                                ivl_setup_data_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+static void draw_hold_in_scope(ivl_hold_t check)
+{
+      ivl_signal_t notifier = ivl_hold_notifier(check);
+      fprintf(vvp_out, "    .tchk_hold %u %u, \"%s\", v%p_0, \"%s\", v%p_0, %.17e, ",
+              ivl_file_table_index(ivl_hold_file(check)), ivl_hold_lineno(check),
+              two_event_edge(ivl_hold_reference_edge(check)),
+              ivl_hold_reference(check),
+              two_event_edge(ivl_hold_data_edge(check)), ivl_hold_data(check),
+              ivl_hold_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_two_event_conditions(ivl_hold_reference_condition(check),
+                                ivl_hold_reference_condition_kind(check),
+                                ivl_hold_data_condition(check),
+                                ivl_hold_data_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+static void draw_recovery_in_scope(ivl_recovery_t check)
+{
+      ivl_signal_t notifier = ivl_recovery_notifier(check);
+      fprintf(vvp_out, "    .tchk_recovery %u %u, \"%s\", v%p_0, \"%s\", v%p_0, %.17e, ",
+              ivl_file_table_index(ivl_recovery_file(check)), ivl_recovery_lineno(check),
+              two_event_edge(ivl_recovery_reference_edge(check)),
+              ivl_recovery_reference(check),
+              two_event_edge(ivl_recovery_data_edge(check)), ivl_recovery_data(check),
+              ivl_recovery_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_two_event_conditions(ivl_recovery_reference_condition(check),
+                                ivl_recovery_reference_condition_kind(check),
+                                ivl_recovery_data_condition(check),
+                                ivl_recovery_data_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+static void draw_removal_in_scope(ivl_removal_t check)
+{
+      ivl_signal_t notifier = ivl_removal_notifier(check);
+      fprintf(vvp_out, "    .tchk_removal %u %u, \"%s\", v%p_0, \"%s\", v%p_0, %.17e, ",
+              ivl_file_table_index(ivl_removal_file(check)), ivl_removal_lineno(check),
+              two_event_edge(ivl_removal_reference_edge(check)),
+              ivl_removal_reference(check),
+              two_event_edge(ivl_removal_data_edge(check)), ivl_removal_data(check),
+              ivl_removal_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_two_event_conditions(ivl_removal_reference_condition(check),
+                                ivl_removal_reference_condition_kind(check),
+                                ivl_removal_data_condition(check),
+                                ivl_removal_data_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+static void draw_recrem_in_scope(ivl_recrem_t check)
+{
+      ivl_signal_t notifier = ivl_recrem_notifier(check);
+      fprintf(vvp_out, "    .tchk_recrem %u %u, \"%s\", v%p_0, \"%s\", v%p_0, %.17e, %.17e, ",
+              ivl_file_table_index(ivl_recrem_file(check)), ivl_recrem_lineno(check),
+              two_event_edge(ivl_recrem_reference_edge(check)),
+              ivl_recrem_reference(check),
+              two_event_edge(ivl_recrem_data_edge(check)), ivl_recrem_data(check),
+              ivl_recrem_recovery_limit(check), ivl_recrem_removal_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_two_event_conditions(ivl_recrem_reference_condition(check),
+                                ivl_recrem_reference_condition_kind(check),
+                                ivl_recrem_data_condition(check),
+                                ivl_recrem_data_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
+static void draw_setuphold_in_scope(ivl_setuphold_t check)
+{
+      ivl_signal_t notifier = ivl_setuphold_notifier(check);
+      fprintf(vvp_out, "    .tchk_setuphold %u %u, \"%s\", v%p_0, \"%s\", v%p_0, %.17e, %.17e, ",
+              ivl_file_table_index(ivl_setuphold_file(check)), ivl_setuphold_lineno(check),
+              two_event_edge(ivl_setuphold_reference_edge(check)),
+              ivl_setuphold_reference(check),
+              two_event_edge(ivl_setuphold_data_edge(check)), ivl_setuphold_data(check),
+              ivl_setuphold_setup_limit(check), ivl_setuphold_hold_limit(check));
+      if (notifier) fprintf(vvp_out, "v%p_0", notifier);
+      else fprintf(vvp_out, "\"\"");
+      draw_two_event_conditions(ivl_setuphold_reference_condition(check),
+                                ivl_setuphold_reference_condition_kind(check),
+                                ivl_setuphold_data_condition(check),
+                                ivl_setuphold_data_condition_kind(check));
+      fprintf(vvp_out, ";\n");
+}
+
 int draw_scope(ivl_scope_t net, ivl_scope_t parent)
 {
       unsigned idx;
@@ -2634,6 +2848,36 @@ int draw_scope(ivl_scope_t net, ivl_scope_t parent)
 		  draw_net_in_scope(sig);
 		  break;
 	    }
+      }
+
+      if (ivl_scope_widths(net)) {
+	    fprintf(vvp_out, "    .scope S_%p;\n", net);
+	    for (idx = 0; idx < ivl_scope_widths(net); idx += 1)
+		  draw_width_in_scope(ivl_scope_width(net, idx));
+      }
+
+      if (ivl_scope_periods(net)) {
+            fprintf(vvp_out, "    .scope S_%p;\n", net);
+            for (idx = 0; idx < ivl_scope_periods(net); idx += 1)
+                  draw_period_in_scope(ivl_scope_period(net, idx));
+      }
+
+      if (ivl_scope_setups(net) || ivl_scope_holds(net) ||
+          ivl_scope_recoveries(net) || ivl_scope_removals(net) ||
+          ivl_scope_recrems(net) || ivl_scope_setupholds(net)) {
+            fprintf(vvp_out, "    .scope S_%p;\n", net);
+            for (idx = 0; idx < ivl_scope_setups(net); idx += 1)
+                  draw_setup_in_scope(ivl_scope_setup(net, idx));
+            for (idx = 0; idx < ivl_scope_holds(net); idx += 1)
+                  draw_hold_in_scope(ivl_scope_hold(net, idx));
+            for (idx = 0; idx < ivl_scope_recoveries(net); idx += 1)
+                  draw_recovery_in_scope(ivl_scope_recovery(net, idx));
+            for (idx = 0; idx < ivl_scope_removals(net); idx += 1)
+                  draw_removal_in_scope(ivl_scope_removal(net, idx));
+            for (idx = 0; idx < ivl_scope_recrems(net); idx += 1)
+                  draw_recrem_in_scope(ivl_scope_recrem(net, idx));
+            for (idx = 0; idx < ivl_scope_setupholds(net); idx += 1)
+                  draw_setuphold_in_scope(ivl_scope_setuphold(net, idx));
       }
 
       for (idx = 0 ;  idx < ivl_scope_events(net) ;  idx += 1) {

@@ -384,10 +384,10 @@ extern char **compile_udp_table(char **table, char *row);
 
 extern void compile_var_array(char*label, char*name,
 			      int last, int first,
-			      int msb, int lsb, char signed_flag);
+			      int msb, int lsb, int word_vec, char signed_flag);
 extern void compile_var2_array(char*label, char*name,
 			      int last, int first,
-			      int msb, int lsb, bool signed_flag);
+			      int msb, int lsb, int word_vec, bool signed_flag);
 extern void compile_real_array(char*label, char*name,
 			       int last, int first);
 extern void compile_string_array(char*label, char*name,
@@ -515,9 +515,8 @@ extern void compile_ref_var(char*label);
  * vpiIntVar, etc.
  */
 extern void compile_variable(char*label, char*name,
-			     int msb, int lsb, int vpi_type_code,
-			     bool signed_flag, bool vector_flag,
-			     bool local_flag, char*enum_label);
+			     int msb, int lsb, bool vec_flag, int vpi_type_code,
+			     bool signed_flag, bool local_flag, char*enum_label);
 extern void compile_replace_signal_value(const class vvp_signal_value*old_sig,
 					 class vvp_signal_value*new_sig);
 
@@ -549,27 +548,70 @@ extern void compile_port_info( unsigned index, int vpi_port_type, unsigned width
  *   vpiIntVar -- 2-value logic
  *  -vpiLogic  -- 8-value (i.e. strength aware) logic
  */
-extern void compile_net(char*label, char*name, int msb, int lsb,
-			int vpi_type_code, bool signed_flag, bool vector_flag,
-			bool local_flag,
+extern void compile_net(char*label, char*name, int msb, int lsb, bool vec_flag,
+			int vpi_type_code, bool signed_flag, bool local_flag,
 			bool variable_flag,
 			unsigned argc, struct symb_s*argv);
 
-extern void compile_net_real(char*label, char*name,
-			     int msb, int lsb, bool local_flag,
+extern void compile_net_real(char*label, char*name, bool local_flag,
 			     unsigned argc, struct symb_s*argv);
 
 extern void compile_netw(char*label, char*array_label, unsigned long array_addr,
-			 int msb, int lsb, int vpi_type_code, bool signed_flag,
-			 bool vector_flag,
-			 bool variable_flag,
+			 int msb, int lsb, bool vec_flag, int vpi_type_code,
+			 bool signed_flag, bool variable_flag,
 			 unsigned argc, struct symb_s*argv);
 
 extern void compile_netw_real(char*label, char*array_symbol,
 			      unsigned long array_addr,
-			      int msb, int lsb,
 			      unsigned argc, struct symb_s*argv);
 
+
+// Standard HDL WIDTH declarations emit this explicit record.
+extern void compile_tchk_width(unsigned file_idx, unsigned lineno, char* edge,
+                                struct symb_s reference, double limit,
+                                double threshold, char* notifier,
+                                char* condition = nullptr,
+                                uint64_t condition_code = 1,
+                                uint64_t condition_form = 3);
+
+// PERIOD records carry one limit and no WIDTH threshold.
+extern void compile_tchk_period(unsigned file_idx, unsigned lineno, char* edge,
+                                 struct symb_s reference, double limit,
+                                 char* notifier, char* condition = nullptr,
+                                 uint64_t condition_code = 1,
+                                 uint64_t condition_form = 3);
+
+// RECREM records preserve control/reference and clock/data order.
+extern void compile_tchk_recrem(unsigned file_idx, unsigned lineno,
+                                   char* reference_edge_text, struct symb_s reference,
+                                   char* data_edge_text, struct symb_s data,
+                                   double recovery_limit, double removal_limit,
+                                   char* notifier,
+                                   char* reference_condition = nullptr,
+                                   uint64_t reference_condition_value = 1,
+                                   char* data_condition = nullptr,
+                                   uint64_t data_condition_value = 1);
+
+// SETUPHOLD records preserve reference/data and setup/hold order.
+extern void compile_tchk_setuphold(unsigned file_idx, unsigned lineno,
+                                   char* reference_edge_text, struct symb_s reference,
+                                   char* data_edge_text, struct symb_s data,
+                                   double setup_limit, double hold_limit,
+                                   char* notifier,
+                                   char* reference_condition = nullptr,
+                                   uint64_t reference_condition_value = 1,
+                                   char* data_condition = nullptr,
+                                   uint64_t data_condition_value = 1);
+
+// Standalone checks use normalized reference/data order.
+extern void compile_tchk_two_event(int kind, unsigned file_idx, unsigned lineno,
+                                    char* reference_edge, struct symb_s reference,
+                                    char* data_edge, struct symb_s data,
+                                    double limit, char* notifier,
+                                    char* reference_condition = nullptr,
+                                    uint64_t reference_condition_mode = 1,
+                                    char* data_condition = nullptr,
+                                    uint64_t data_condition_mode = 1);
 
 extern void compile_island(char*label, char*type);
 extern void compile_island_port(char*label, char*island, char*src);

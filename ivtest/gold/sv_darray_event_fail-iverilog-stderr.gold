@@ -1,0 +1,3 @@
+ivltests/sv_darray_event_fail.v:11: sorry: Dynamic array and queue element selects are not supported in this context.
+queue['sd1]
+2 error(s) during elaboration.

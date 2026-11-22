@@ -153,6 +153,7 @@ bool dll_target::make_assign_lvals_(const NetAssignBase*net)
       unsigned cnt = net->l_val_count();
 
       stmt_cur_->u_.assign_.lvals_ = cnt;
+      stmt_cur_->u_.assign_.lval_signed = net->l_val(0)->get_signed();
       stmt_cur_->u_.assign_.lval_  = new struct ivl_lval_s[cnt];
       stmt_cur_->u_.assign_.delay  = 0;
 
@@ -182,6 +183,7 @@ bool dll_target::make_single_lval_(const LineInfo*li, struct ivl_lval_s*cur, con
       }
 
       cur->width_ = asn->lwidth();
+      cur->data_type = asn->expr_type();
 
       if (asn->sig()) {
 	    cur->type_ = IVL_LVAL_REG;
@@ -667,11 +669,7 @@ bool dll_target::proc_disable(const NetDisable*net)
       stmt_cur_->u_.disable_.flow_control = net->flow_control();
       const NetScope* dis_scope = net->target();
 	/* A normal disable. */
-      if (dis_scope) {
-	    stmt_cur_->u_.disable_.scope = lookup_scope_(dis_scope);
-	    if (!net->flow_control())
-		  stmt_cur_->u_.disable_.scope->is_disable_target = 1;
-      }
+      if (dis_scope) stmt_cur_->u_.disable_.scope = lookup_scope_(dis_scope);
 	/* A SystemVerilog disable fork. */
       else stmt_cur_->u_.disable_.scope = 0;
       return true;

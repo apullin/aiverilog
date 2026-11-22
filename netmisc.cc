@@ -33,6 +33,9 @@
 
 using namespace std;
 
+const NetNet*dollar_queue_scope::queue_ = nullptr;
+int dollar_queue_scope::pidx_ = -1;
+
 NetNet* sub_net_from(Design*des, NetScope*scope, long val, NetNet*sig)
 {
       const netvector_t*zero_vec = new netvector_t(sig->data_type(),
@@ -752,6 +755,21 @@ NetEConst* make_const_val_s(long value)
       tmp.has_sign(true);
       NetEConst*res = new NetEConst(tmp);
       return res;
+}
+
+NetExpr* make_property_last_index(const LineInfo*li, NetNet*sig, size_t pidx)
+{
+      NetEProperty*prop = new NetEProperty(sig, pidx);
+      prop->set_line(*li);
+
+      NetESFunc*size = new NetESFunc("$size", &netvector_t::atom2s32, 1);
+      size->set_line(*li);
+      size->parm(0, prop);
+
+      NetEBAdd*last = new NetEBAdd('-', size, make_const_val_s(1),
+				   integer_width, true);
+      last->set_line(*li);
+      return last;
 }
 
 static NetNet* make_const_net(Design*des, NetScope*scope, verinum val)
@@ -1914,6 +1932,23 @@ const netclass_t* find_class_containing_scope(const LineInfo&loc, const NetScope
       ivl_assert(loc, found_in);
       return found_in;
 }
+NetExpr* class_scope_method_this(const LineInfo&li, Design*des,
+				 const NetScope*method,
+				 const pform_scoped_name_t&path)
+{
+      if (!method->is_static_method()) {
+	    cerr << li.get_fileline() << ": error: `" << path << "' is not a "
+		 << "static method, so it needs an object to be called."
+		 << endl;
+	    des->errors += 1;
+	    return 0;
+      }
+
+      NetENull*tmp = new NetENull;
+      tmp->set_line(li);
+      return tmp;
+}
+
 /*
  * Find the scope that contains this scope, that is the method for a
  * class scope. Look for the scope whose PARENT is the scope for a

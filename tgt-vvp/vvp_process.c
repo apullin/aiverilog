@@ -562,8 +562,7 @@ static int show_stmt_assign_nb(ivl_statement_t net)
 		   we need for the current lval. */
 	      if (lidx+1 < ivl_stmt_lvals(net))
 		    fprintf(vvp_out, "    %%split/vec4 %u;\n", bit_limit);
-	      if (ivl_lval_sig(lval) &&
-		  ivl_signal_data_type(ivl_lval_sig(lval)) == IVL_VT_BOOL &&
+	      if (ivl_lval_data_type(lval) == IVL_VT_BOOL &&
 		  ivl_expr_value(rval) != IVL_VT_BOOL) {
 		    fprintf(vvp_out, "    %%cast2;\n");
 	      }
@@ -603,17 +602,6 @@ static int show_stmt_block_named(ivl_statement_t net, ivl_scope_t scope)
       int rc;
       unsigned out_id, sub_id;
       ivl_scope_t subscope = ivl_stmt_block_scope(net);
-
-	/* A sequential block only needs a child thread when a disable
-	 * statement can target its scope. Keeping ordinary blocks in the
-	 * current thread also lets break and continue reach an enclosing
-	 * loop's control-flow labels. */
-      if (!ivl_scope_is_disable_target(subscope)) {
-	    fprintf(vvp_out, "    .scope S_%p;\n", subscope);
-	    rc = show_stmt_block(net, subscope);
-	    fprintf(vvp_out, "    .scope S_%p;\n", scope);
-	    return rc;
-      }
 
       out_id = transient_id++;
       sub_id = transient_id++;

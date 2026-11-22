@@ -30,6 +30,7 @@
 # include  <algorithm>
 # include  <typeinfo>
 # include  <climits>
+# include  <cmath>
 # include  <cstdlib>
 # include  <cstring>
 # include  <iostream>
@@ -1544,6 +1545,65 @@ static void convert_net(Design*des, const LineInfo *line,
       des->errors += 1;
 }
 
+static void apply_unconnected_drive(Design*des, const LineInfo&loc,
+				    NetNet*port, Module::UCDriveType drive)
+{
+      switch (drive) {
+	  case Module::UCD_PULL0:
+	    convert_net(des, &loc, port, NetNet::TRI0);
+	    break;
+	  case Module::UCD_PULL1:
+	    convert_net(des, &loc, port, NetNet::TRI1);
+	    break;
+	  case Module::UCD_NONE:
+	    break;
+      }
+}
+
+static void warn_dangling_input_port(const LineInfo&loc, const Module*rmod,
+				     unsigned idx, perm_string port_name)
+{
+      cerr << loc.get_fileline() << ": warning: "
+	   << "Instantiating module " << rmod->mod_name()
+	   << " with dangling input port "
+	   << (idx+1) << " (" << port_name;
+      switch (rmod->uc_drive) {
+	  case Module::UCD_PULL0:
+	    cerr << ") pulled low." << endl;
+	    break;
+	  case Module::UCD_PULL1:
+	    cerr << ") pulled high." << endl;
+	    break;
+	  case Module::UCD_NONE:
+	    cerr << ") floating." << endl;
+	    break;
+      }
+}
+
+static void coerce_port_direction(Design*des, NetScope*scope,
+				  NetNet*port, const PExpr*expr)
+{
+      if ((port->port_type() == NetNet::PINPUT) &&
+	  (port->type() != NetNet::REG) &&
+	  port->pin(0).nexus()->drivers_present() &&
+	  expr->is_collapsible_net(des, scope, port->port_type())) {
+	    port->port_type(NetNet::PINOUT);
+
+	    cerr << expr->get_fileline() << ": warning: input port "
+		 << port->name() << " is coerced to inout." << endl;
+      }
+
+      if ((port->port_type() == NetNet::POUTPUT) &&
+	  (port->type() != NetNet::REG) &&
+	  port->pin(0).nexus()->has_floating_input() &&
+	  expr->is_collapsible_net(des, scope, port->port_type())) {
+	    port->port_type(NetNet::PINOUT);
+
+	    cerr << expr->get_fileline() << ": warning: output port "
+		 << port->name() << " is coerced to inout." << endl;
+      }
+}
+
 static void isolate_and_connect(Design*des, NetScope*scope, const PGModule*mod,
 				NetNet*port, NetNet*sig, NetNet::PortType ptype, int idx = -1)
 {
@@ -1795,7 +1855,7 @@ static bool resolve_interface_actual_scope(const PExpr*actual,
       res = interface_actual_scope_t();
 
       const PEIdent*actual_ident = dynamic_cast<const PEIdent*>(actual);
-      if (!actual_ident || actual_ident->path().package ||
+      if (!actual_ident || actual_ident->path().is_scoped() ||
 	  actual_ident->path().name.size() != 1 ||
 	  actual_ident->path().name.front().index.size() > 1) {
 	    return false;
@@ -1869,7 +1929,7 @@ static bool resolve_interface_actual_array(const PExpr*actual,
       res = interface_actual_array_t();
 
       const PEIdent*actual_ident = dynamic_cast<const PEIdent*>(actual);
-      if (!actual_ident || actual_ident->path().package ||
+      if (!actual_ident || actual_ident->path().is_scoped() ||
 	  actual_ident->path().name.size() != 1 ||
 	  !actual_ident->path().name.front().index.empty())
 	    return false;
@@ -2119,7 +2179,6 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 	// unconnected port.
 
       for (unsigned idx = 0 ;  idx < pins.size() ;  idx += 1) {
-	    bool unconnected_port = false;
 	    bool using_default = false;
 
 	    perm_string port_name = rmod->get_port_name(idx);
@@ -2142,69 +2201,13 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 		  }
 	    }
 
-	      // Skip unconnected module ports.
-	    if (pins[idx] == 0) {
-
-		  if (pins_fromwc[idx]) {
-			cerr << get_fileline() << ": error: Wildcard named "
-			        "port connection (.*) did not find a matching "
-			        "identifier for port " << (idx+1) << " ("
-			     << port_name << ")." << endl;
-			des->errors += 1;
-			return;
-		  }
-
-		    // We need this information to support the
-		    // unconnected_drive directive and for a
-		    // unconnected input warning when asked for.
-		  vector<PEIdent*> mport = rmod->get_port(idx);
-		  if (mport.empty()) continue;
-
-		  perm_string pname = peek_tail_name(mport[0]->path().name);
-
-		  NetNet*tmp = instance[0]->find_signal(pname);
-
-		    // Handle the error case where there is no internal
-		    // signal connected to the port.
-		  if (!tmp) continue;
-		  ivl_assert(*this, tmp);
-
-		  if (tmp->port_type() == NetNet::PINPUT) {
-			  // If we have an unconnected input convert it
-			  // as needed if an unconnected_drive directive
-			  // was given. This only works for tri or wire!
-			switch (rmod->uc_drive) {
-			    case Module::UCD_PULL0:
-			      convert_net(des, this, tmp, NetNet::TRI0);
-			      break;
-			    case Module::UCD_PULL1:
-			      convert_net(des, this, tmp, NetNet::TRI1);
-			      break;
-			    case Module::UCD_NONE:
-			      break;
-			}
-
-			  // Print a warning for an unconnected input.
-			if (warn_portbinding) {
-			      cerr << get_fileline() << ": warning: "
-				   << "Instantiating module "
-				   << rmod->mod_name()
-				   << " with dangling input port "
-				   << (idx+1) << " (" << port_name;
-			      switch (rmod->uc_drive) {
-				  case Module::UCD_PULL0:
-				    cerr << ") pulled low." << endl;
-				    break;
-				  case Module::UCD_PULL1:
-				    cerr << ") pulled high." << endl;
-				    break;
-				  case Module::UCD_NONE:
-				    cerr << ") floating." << endl;
-				    break;
-			      }
-			}
-		  }
-		  unconnected_port = true;
+	    if (pins[idx] == nullptr && pins_fromwc[idx]) {
+		  cerr << get_fileline() << ": error: Wildcard named "
+		          "port connection (.*) did not find a matching "
+		          "identifier for port " << (idx+1) << " ("
+		       << port_name << ")." << endl;
+		  des->errors += 1;
+		  return;
 	    }
 
 	      // Inside the module, the port connects zero or more signals
@@ -2221,6 +2224,7 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 
 	      // Count the internal vector bits of the port.
 	    unsigned prts_vector_width = 0;
+	    bool subport_failed = false;
 
 
 	      // The input expression is normally elaborated in the calling
@@ -2247,7 +2251,7 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 			NetNet *netnet = pport->elaborate_subport(des, inst_scope);
 			prts[lbase + ldx] = netnet;
 			if (netnet == 0) {
-			      unconnected_port = true;
+			      subport_failed = true;
 			      continue;
 			}
 
@@ -2263,7 +2267,26 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 	      // If I find that the port is unconnected inside the
 	      // module, then there is nothing to connect. Skip the
 	      // argument.
-	    if ((prts_vector_width == 0) || unconnected_port) {
+	    if (prts_vector_width == 0 || subport_failed) {
+		  continue;
+	    }
+
+	    if (pins[idx] == nullptr) {
+		  bool has_input = false;
+		  for (auto*port : prts) {
+			if (port == nullptr ||
+			    port->port_type() != NetNet::PINPUT) {
+			      continue;
+			}
+			has_input = true;
+			apply_unconnected_drive(des, *this, port,
+						rmod->uc_drive);
+		  }
+
+		  if (has_input && warn_portbinding) {
+			warn_dangling_input_port(*this, rmod, idx,
+						 port_name);
+		  }
 		  continue;
 	    }
 
@@ -2272,26 +2295,9 @@ void PGModule::elaborate_mod_(Design*des, const Module*rmod, NetScope*scope) con
 	      // even multiple of the instance count.
 	    ivl_assert(*this, prts_vector_width % instance.size() == 0);
 
-	    if (!prts.empty() && (prts[0]->port_type() == NetNet::PINPUT)
-	        && (prts[0]->type() != NetNet::REG)
-	        && prts[0]->pin(0).nexus()->drivers_present()
-	        && pins[idx]->is_collapsible_net(des, scope,
-	                                         prts[0]->port_type())) {
-                  prts[0]->port_type(NetNet::PINOUT);
-
-		  cerr << pins[idx]->get_fileline() << ": warning: input port "
-		       << prts[0]->name() << " is coerced to inout." << endl;
-	    }
-
-	    if (!prts.empty() && (prts[0]->port_type() == NetNet::POUTPUT)
-	        && (prts[0]->type() != NetNet::REG)
-	        && prts[0]->pin(0).nexus()->has_floating_input()
-	        && pins[idx]->is_collapsible_net(des, scope,
-	                                         prts[0]->port_type())) {
-                  prts[0]->port_type(NetNet::PINOUT);
-
-		  cerr << pins[idx]->get_fileline() << ": warning: output port "
-		       << prts[0]->name() << " is coerced to inout." << endl;
+	    for (auto*port : prts) {
+		  if (port == nullptr) continue;
+		  coerce_port_direction(des, scope, port, pins[idx]);
 	    }
 
 	      // Elaborate the expression that connects to the
@@ -3328,6 +3334,21 @@ static NetExpr*elaborate_delay_expr(PExpr*expr, Design*des, NetScope*scope)
       return dex;
 }
 
+/*
+ * Is this l-value an element of a queue or dynamic array property of a
+ * class object?
+ */
+static bool is_darray_prop_element_(const NetAssign_*lv)
+{
+      if (!lv->word() || lv->get_property_idx() < 0)
+	    return false;
+      ivl_type_t ctype = lv->nest() ? lv->nest()->net_type()
+				    : lv->sig()->net_type();
+      const netclass_t*cls = dynamic_cast<const netclass_t*>(ctype);
+      return cls && dynamic_cast<const netdarray_t*>(
+			  cls->get_prop_type(lv->get_property_idx()));
+}
+
 NetProc* PAssign::elaborate_compressed_(Design*des, NetScope*scope) const
 {
       ivl_assert(*this, ! delay_);
@@ -3335,53 +3356,46 @@ NetProc* PAssign::elaborate_compressed_(Design*des, NetScope*scope) const
       ivl_assert(*this, ! event_);
 
       NetAssign_*lv = elaborate_lval(des, scope);
-      if (lv == 0) return 0;
+      if (!lv) return nullptr;
 
-	// Compressed assignments should behave identically to the
-	// equivalent uncompressed assignments. This means we need
-	// to take the type of the LHS into account when determining
-	// the type of the RHS expression.
-      const auto lval_info = get_lval_info(lv);
-      NetExpr*rv = 0;
-      switch (op_) {
-	  case 'l':
-	  case 'r':
-	  case 'R':
-	      // The right-hand operand of shift operations is
-	      // self-determined (IEEE 1800-2017 11.4.1, 11.6.1).
-	    rv = elaborate_rval_(des, scope, 0, IVL_VT_LOGIC, 0, false);
-	    break;
-	  default: {
-		bool force_unsigned = !lv->get_signed();
-		unsigned op_wid = lval_info.width;
-		ivl_variable_type_t use_type = lval_info.type;
-		if (use_type == IVL_VT_BOOL || use_type == IVL_VT_LOGIC) {
-		      PExpr::width_mode_t mode = PExpr::SIZED;
-		      rval()->test_width(des, scope, mode);
-		      if (type_is_vectorable(rval()->expr_type())) {
-			    if (rval()->expr_width() > op_wid)
-				  op_wid = rval()->expr_width();
-			    use_type = IVL_VT_LOGIC;
-		      }
-		}
-		rv = elaborate_rval_(des, scope, 0, use_type,
-				     op_wid, force_unsigned);
-		break;
-	  }
+      if (is_darray_prop_element_(lv)) {
+	    cerr << get_fileline() << ": sorry: Assignment operators on "
+		    "elements of queue/dynamic array properties are not "
+		    "supported." << endl;
+	    des->errors += 1;
+	    delete lv;
+	    return 0;
       }
-      if (rv == 0) return 0;
 
-	// The ivl_target API doesn't support signalling the type
-	// of a lval, so convert arithmetic shifts into logical
-	// shifts now if the lval is unsigned.
+      const auto lval_info = get_lval_info(lv);
+
+	// Unsigned arithmetic right shifts use the logical shift opcode.
       char op = op_;
-      if ((op == 'R') && !lv->get_signed())
-	    op = 'r';
-
-      NetAssign*cur = new NetAssign(lv, op, rv);
+      if (op == 'R' && !lv->get_signed()) op = 'r';
+      unique_ptr<NetAssign>cur(new NetAssign(lv, op, nullptr));
       cur->set_line(*this);
 
-      return cur;
+      bool is_shift = op_ == 'l' || op_ == 'r' || op_ == 'R';
+      auto expr = rval();
+      PExpr::width_mode_t mode = PExpr::SIZED;
+      expr->test_width(des, scope, mode);
+
+      ivl_variable_type_t rtype = expr->expr_type();
+      bool is_real = lval_info.type == IVL_VT_REAL || rtype == IVL_VT_REAL;
+
+	// Integral operands share a width and signedness. Shift counts and
+	// integral operands paired with a real operand are self-determined.
+      unsigned width = expr->expr_width();
+      if (!is_shift && !is_real) {
+	    width = max(width, lval_info.width);
+	    expr->cast_signed(lv->get_signed() && expr->has_sign());
+      }
+      NetExpr::Ptr rv(expr->elaborate_expr(des, scope, width, PExpr::NO_FLAGS));
+      if (!rv) return nullptr;
+      eval_expr(rv, width);
+
+      cur->set_rval(rv.release());
+      return cur.release();
 }
 
 /*
@@ -3418,6 +3432,12 @@ static NetProc* elaborate_uarray_slice_proc_assign(Design*des, NetScope*scope,
 						   bool is_nb, bool&intercepted)
 {
       intercepted = false;
+      const PEIdent*lid = dynamic_cast<const PEIdent*>(lpe);
+      const PEIdent*rid = dynamic_cast<const PEIdent*>(rpe);
+      if (!lid || (lid->path().back().index.empty() &&
+		   (!rid || rid->path().back().index.empty())))
+	    return nullptr;
+
       uarray_slice_info_t l_probe, r_probe;
       bool l_is_ua = inspect_uarray_slice_ident(des, scope, lpe, false, false, l_probe);
       bool r_is_ua = inspect_uarray_slice_ident(des, scope, rpe, false, false, r_probe);
@@ -3865,7 +3885,7 @@ NetProc* PAssignNB::elaborate(Design*des, NetScope*scope) const
 	// nonblocking assignments to elements of dynamically sized
 	// array variables. Assigning the whole array is fine.
       for (const NetAssign_*cur = lv ; cur ; cur = cur->more) {
-	    if (is_darray_element_(cur)) {
+	    if (is_darray_element_(cur) || is_darray_prop_element_(cur)) {
 		  cerr << get_fileline() << ": error: elements of dynamically sized arrays "
 			  "may not be assigned values using non-blocking "
 			  "assignments." << endl;
@@ -4090,6 +4110,18 @@ NetProc* PBlock::elaborate(Design*des, NetScope*scope) const
 	    scope->calls_sys_task(true);
 
       cur->set_line(*this);
+      if (nscope->is_auto() && !scope->is_auto()) {
+	    NetBlock*block = new NetBlock(NetBlock::SEQU, 0);
+	    NetAlloc*alloc = new NetAlloc(nscope);
+	    NetFree*free = new NetFree(nscope);
+	    alloc->set_line(*this);
+	    free->set_line(*this);
+	    block->set_line(*this);
+	    block->append(alloc);
+	    block->append(cur);
+	    block->append(free);
+	    return block;
+      }
       return cur;
 }
 
@@ -4626,6 +4658,17 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 			this, des, "in a task or function call"))
 		  return nullptr;
 
+	    if (path_.class_scope && search_results.is_scope()
+		&& search_results.scope->get_class_scope()) {
+		  NetScope*method = search_results.scope;
+		  NetExpr*this_expr = class_scope_method_this(*this, des, method,
+							      path_);
+		  if (!this_expr)
+			return nullptr;
+		  return elaborate_build_call_(des, scope, method, this_expr,
+					       true);
+	    }
+
 	    if (search_results.is_scope()) {
 		  if (search_results.scope->type() == NetScope::TASK)
 			task = search_results.scope;
@@ -4635,6 +4678,22 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 		    // A recursive function call resolves to the function return
 		    // variable. Its containing scope is the function being called.
 		  func_scope = search_results.scope;
+	    }
+
+	      // A static method has no object to call a method of.
+	    NetScope*callee = task ? task : func_scope;
+	    const NetScope*c_scope = scope->get_class_scope();
+	    const NetScope*caller = c_scope
+		  ? find_method_containing_scope(*this, scope) : nullptr;
+	    if (gn_system_verilog() && path_.size() == 1 && callee && caller
+		&& c_scope == callee->get_class_scope()
+		&& caller->is_static_method()) {
+		  NetExpr*this_expr = class_scope_method_this(*this, des, callee,
+							      path_);
+		  if (!this_expr)
+			return nullptr;
+		  return elaborate_build_call_(des, scope, callee, this_expr,
+					       true);
 	    }
       }
 
@@ -4719,6 +4778,7 @@ NetProc* PCallTask::elaborate_sys_task_method_(Design*des, NetScope*scope,
       sig->set_line(*this);
 
       unsigned nparms = parms_.size();
+      bool bad_parms = false;
 
       vector<NetExpr*>argv (1 + nparms);
       argv[0] = sig;
@@ -4730,18 +4790,23 @@ NetProc* PCallTask::elaborate_sys_task_method_(Design*des, NetScope*scope,
 			cerr << get_fileline() << ": error: queue delete() "
 			     << "method takes zero or one argument." << endl;
 			des->errors += 1;
+			bad_parms = true;
 		  }
 	    } else if (nparms > 0) {
 		  cerr << get_fileline() << ": error: darray delete() "
 		       << "method takes no arguments." << endl;
 		  des->errors += 1;
+		  bad_parms = true;
 	    }
       } else if (parm_names.size() != parms_.size()) {
 	    cerr << get_fileline() << ": error: " << method_name
 	         << "() method takes " << parm_names.size() << " arguments, got "
 		 << parms_.size() << "." << endl;
 	    des->errors++;
+	    bad_parms = true;
       }
+
+      if (bad_parms) return new NetBlock(NetBlock::SEQU, 0);
 
       auto args = map_named_args(des, parm_names, parms_);
       for (unsigned idx = 0 ; idx < nparms ; idx += 1) {
@@ -4772,6 +4837,7 @@ NetProc* PCallTask::elaborate_sys_task_property_method_(Design*des, NetScope*sco
       prop->set_line(*this);
 
       unsigned nparms = parms_.size();
+      bool bad_parms = false;
 
       vector<NetExpr*>argv (1 + nparms);
       argv[0] = prop;
@@ -4786,18 +4852,23 @@ NetProc* PCallTask::elaborate_sys_task_property_method_(Design*des, NetScope*sco
 			cerr << get_fileline() << ": error: queue delete() "
 			     << "method takes zero or one argument." << endl;
 			des->errors += 1;
+			bad_parms = true;
 		  }
 	    } else if (nparms > 0) {
 		  cerr << get_fileline() << ": error: darray delete() "
 		       << "method takes no arguments." << endl;
 		  des->errors += 1;
+		  bad_parms = true;
 	    }
       } else if (parm_names.size() != parms_.size()) {
 	    cerr << get_fileline() << ": error: " << method_name
 	         << "() method takes " << parm_names.size() << " arguments, got "
 		 << parms_.size() << "." << endl;
 	    des->errors++;
+	    bad_parms = true;
       }
+
+      if (bad_parms) return new NetBlock(NetBlock::SEQU, 0);
 
       auto args = map_named_args(des, parm_names, parms_);
       for (unsigned idx = 0 ; idx < nparms ; idx += 1) {
@@ -5055,10 +5126,22 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 			      const netdarray_t*use_darray = dynamic_cast<const netdarray_t*>(ptype);
 			      ivl_assert(*this, use_darray);
 
+			      NetNet*static_net = nullptr;
+			      if (cls->get_prop_qual(pidx).test_static()) {
+				    perm_string pname = lex_strings.make(cls->get_prop_name(pidx));
+				    static_net = cls->find_static_property(pname);
+				    ivl_assert(*this, static_net);
+			      }
+
 			      if (queue && method_name == "push_back") {
 				    static const std::vector<perm_string> parm_names = {
 					  perm_string::literal("item")
 				    };
+				    if (static_net)
+					  return elaborate_queue_method_(des, scope, static_net,
+									method_name,
+									"$ivl_queue_method$push_back",
+									parm_names);
 				    return elaborate_queue_property_method_(des, scope, net, pidx,
 									    method_name,
 									    "$ivl_queue_method$push_back",
@@ -5068,6 +5151,11 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 				    static const std::vector<perm_string> parm_names = {
 					  perm_string::literal("item")
 				    };
+				    if (static_net)
+					  return elaborate_queue_method_(des, scope, static_net,
+									method_name,
+									"$ivl_queue_method$push_front",
+									parm_names);
 				    return elaborate_queue_property_method_(des, scope, net, pidx,
 									    method_name,
 									    "$ivl_queue_method$push_front",
@@ -5078,6 +5166,11 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 					  perm_string::literal("index"),
 					  perm_string::literal("item")
 				    };
+				    if (static_net)
+					  return elaborate_queue_method_(des, scope, static_net,
+									method_name,
+									"$ivl_queue_method$insert",
+									parm_names);
 				    return elaborate_queue_property_method_(des, scope, net, pidx,
 									    method_name,
 									    "$ivl_queue_method$insert",
@@ -5095,26 +5188,44 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 				    const char*sf = method_name == "pop_front"
 					  ? "$ivl_queue_method$pop_front"
 					  : "$ivl_queue_method$pop_back";
+				    if (static_net)
+					  return elaborate_method_func_(scope, static_net,
+									use_darray->element_type(),
+									method_name, sf);
 				    return elaborate_method_property_func_(scope, net, pidx,
 									   use_darray->element_type(),
 									   method_name, sf);
 			      }
-			      if (!queue && method_name == "delete") {
+			      if (method_name == "delete") {
 				    static const std::vector<perm_string> parm_names = {
 					  perm_string::literal("index")
 				    };
+				    if (static_net)
+					  return elaborate_sys_task_method_(des, scope, static_net,
+									    method_name,
+									    "$ivl_darray_method$delete",
+									    parm_names);
 				    return elaborate_sys_task_property_method_(des, scope, net, pidx,
 									       method_name,
 									       "$ivl_darray_method$delete",
 									       parm_names);
 			      }
 			      if (method_name == "size") {
+				    if (static_net)
+					  return elaborate_method_func_(scope, static_net,
+									&netvector_t::atom2s32,
+									method_name, "$size");
 				    return elaborate_method_property_func_(scope, net, pidx,
 									   &netvector_t::atom2s32,
 									   method_name, "$size");
 			      }
 			      if (method_name == "reverse") {
 				    static const std::vector<perm_string> parm_names;
+				    if (static_net)
+					  return elaborate_sys_task_method_(des, scope, static_net,
+									    method_name,
+									    "$ivl_darray_method$reverse",
+									    parm_names);
 				    return elaborate_sys_task_property_method_(des, scope, net, pidx,
 									       method_name,
 									       "$ivl_darray_method$reverse",
@@ -5122,6 +5233,11 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 			      }
 			      if (method_name == "sort") {
 				    static const std::vector<perm_string> parm_names;
+				    if (static_net)
+					  return elaborate_sys_task_method_(des, scope, static_net,
+									    method_name,
+									    "$ivl_darray_method$sort",
+									    parm_names);
 				    return elaborate_sys_task_property_method_(des, scope, net, pidx,
 									       method_name,
 									       "$ivl_darray_method$sort",
@@ -5129,6 +5245,11 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 			      }
 			      if (method_name == "rsort") {
 				    static const std::vector<perm_string> parm_names;
+				    if (static_net)
+					  return elaborate_sys_task_method_(des, scope, static_net,
+									    method_name,
+									    "$ivl_darray_method$rsort",
+									    parm_names);
 				    return elaborate_sys_task_property_method_(des, scope, net, pidx,
 									       method_name,
 									       "$ivl_darray_method$rsort",
@@ -5136,6 +5257,11 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 			      }
 			      if (method_name == "shuffle") {
 				    static const std::vector<perm_string> parm_names;
+				    if (static_net)
+					  return elaborate_sys_task_method_(des, scope, static_net,
+									    method_name,
+									    "$ivl_darray_method$shuffle",
+									    parm_names);
 				    return elaborate_sys_task_property_method_(des, scope, net, pidx,
 									       method_name,
 									       "$ivl_darray_method$shuffle",
@@ -5155,8 +5281,19 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 				    des->errors += 1;
 				    return 0;
 			      }
-			      NetEProperty*use_this = new NetEProperty(net, pidx);
-			      use_this->set_line(*this);
+			      NetExpr*use_this;
+			      if (cls->get_prop_qual(pidx).test_static()) {
+				    perm_string pname = lex_strings.make(cls->get_prop_name(pidx));
+				    NetNet*static_net = cls->find_static_property(pname);
+				    ivl_assert(*this, static_net);
+				    NetESignal*sig = new NetESignal(static_net);
+				    sig->set_line(*this);
+				    use_this = sig;
+			      } else {
+				    NetEProperty*prop = new NetEProperty(net, pidx);
+				    prop->set_line(*this);
+				    use_this = prop;
+			      }
 			      return elaborate_build_call_(des, scope, task, use_this, false);
 			}
 		  }
@@ -5285,6 +5422,23 @@ NetProc* PCallTask::elaborate_method_(Design*des, NetScope*scope,
 
       if (const netclass_t*class_type = dynamic_cast<const netclass_t*>(sr.type)) {
 	    NetScope*task = class_type->method_from_name(method_name);
+	    if (task == 0 && method_name == "srandom") {
+		    // IEEE 1800 18.13.3: built-in srandom(int seed). Icarus
+		    // has no per-object random state, so accept the call
+		    // and ignore it.
+		  if (parms_.size() != 1) {
+			cerr << get_fileline() << ": error: "
+			     << "srandom() takes exactly one argument." << endl;
+			des->errors += 1;
+			return 0;
+		  }
+		  cerr << get_fileline() << ": warning: "
+		       << "srandom() is not supported; the call is ignored."
+		       << endl;
+		  NetBlock*nop = new NetBlock(NetBlock::SEQU, 0);
+		  nop->set_line(*this);
+		  return nop;
+	    }
 	    if (task == 0) {
 		    // If an implicit this was added it is not an error if we
 		    // don't find a method. It might actually be a call to a
@@ -5625,6 +5779,7 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	   expression that can be a target to a procedural
 	   assignment, including a memory word. */
 
+      list<NetAssign*> copy_out;
       for (unsigned int idx = off; idx < parm_count; idx++) {
 
 	    size_t parms_idx = idx - off;
@@ -5677,7 +5832,24 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 		  continue;
 	    }
 
-	    NetExpr*rv = new NetESignal(port);
+	      /* While the callee's context is the read context, the
+		 caller's automatic variables cannot be read, and that
+		 includes the object a store to a container element
+		 needs. So between an automatic caller and an automatic
+		 callee, copy the port to a temporary of the caller and do
+		 the copy-out to the l-value after the context is freed. */
+	    NetNet*src = port;
+	    if (task->is_auto() && scope->is_auto()) {
+		  src = new NetNet(scope, scope->local_symbol(), NetNet::REG,
+				   port->unpacked_dims(), port->net_type());
+		  src->set_line(*this);
+		  NetAssign*tmp_ass = new NetAssign(new NetAssign_(src),
+						    new NetESignal(port));
+		  tmp_ass->set_line(*this);
+		  block->append(tmp_ass);
+	    }
+
+	    NetExpr*rv = new NetESignal(src);
 
 	      /* Handle any implicit cast. */
 	    const auto lval_info = get_lval_info(lv);
@@ -5714,7 +5886,10 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    NetAssign*ass = new NetAssign(lv, rv);
 	    ass->set_line(*this);
 
-	    block->append(ass);
+	    if (src == port)
+		  block->append(ass);
+	    else
+		  copy_out.push_back(ass);
       }
 
         /* If this is an automatic task, generate a statement to free
@@ -5724,6 +5899,9 @@ NetProc* PCallTask::elaborate_build_call_(Design*des, NetScope*scope,
 	    fp->set_line(*this);
 	    block->append(fp);
       }
+
+      for (NetAssign*ass : copy_out)
+	    block->append(ass);
 
       return block;
 }
@@ -7608,7 +7786,7 @@ static std::string ordinary_path_condition_name(Design*des, NetScope*scope,
                                                bool comparison = false)
 {
       const PEIdent*id = dynamic_cast<const PEIdent*>(expr);
-      if (!id || id->path().package || id->path().name.size() != 1
+      if (!id || id->path().is_scoped() || id->path().name.size() != 1
           || !id->path().name.front().index.empty()) return {};
       NetNet*sig = des->find_signal(scope, id->path().name);
       if (!sig || sig->scope() != scope || sig->vector_width() != 1
@@ -7928,13 +8106,474 @@ static void connect_timing_check_delayed_sig(const LineInfo*li, Design*des,
       connect(sig->pin(0), sig_delayed->pin(0));
 }
 
+/* Timing-check arguments are constant physical times in this module's units.
+ * Keep them real until the runtime applies the module precision. */
+static bool timing_check_constant(Design*des, NetScope*scope, PExpr*expr,
+                                  const LineInfo&loc, const char*kind,
+                                  const char*which, double&value, bool combined = false)
+{
+      // Timing-check limits may use specparams. Require a constant without
+      // treating this timing context as a non-annotatable parameter use.
+      std::unique_ptr<NetExpr> elaborated(elab_and_eval(des, scope, expr, -1,
+                                                      true, true));
+      bool valid = false;
+      if (const auto*real = dynamic_cast<const NetECReal*>(elaborated.get())) {
+	    value = real->value().as_double();
+	    valid = true;
+      } else if (const auto*bits = dynamic_cast<const NetEConst*>(elaborated.get())) {
+	    if (bits->value().is_defined() && !bits->value().is_string()) {
+		  value = bits->value().as_double();
+		  valid = true;
+	    }
+      }
+      if (!valid || !std::isfinite(value) || (value < 0.0 && !combined)) {
+	    cerr << loc.get_fileline() << ": error: " << kind << " " << which
+		 << " must be a finite nonnegative constant." << endl;
+	    des->errors += 1;
+	    return false;
+      }
+      if (value < 0.0) {
+            cerr << loc.get_fileline() << ": sorry: negative " << kind << " "
+                 << which << " in " << scope_path(scope) << " is not supported; using zero." << endl;
+            value = 0.0;
+      }
+      // The nonnegative VVP real grammar has no sign. IEEE negative zero
+      // is the same timing value as zero, so emit its canonical form.
+      if (value == 0.0) value = 0.0;
+      return true;
+}
+
+static NetNet*timing_check_signal(Design*des, NetScope*scope,
+                                 const pform_name_t&name, const LineInfo&loc,
+                                 const char*kind, bool notifier,
+                                 const char*event_role = "reference")
+{
+      const char*role = notifier ? "notifier" : event_role;
+      if (name.size() != 1 || !name.front().index.empty()) {
+	    cerr << loc.get_fileline() << ": error: " << kind << " " << role
+		 << " must be an unselected local scalar signal." << endl;
+	    des->errors += 1;
+	    return nullptr;
+      }
+      NetNet*sig = scope->find_signal(name.front().name);
+      if (!sig || sig->vector_width() != 1 || sig->packed_dimensions() != 0
+	  || sig->unpacked_dimensions() != 0
+	  || (sig->data_type() != IVL_VT_LOGIC && sig->data_type() != IVL_VT_BOOL)
+	  || (notifier && sig->type() != NetNet::REG)) {
+	    cerr << loc.get_fileline() << ": error: " << kind << " " << role
+		 << (notifier ? " must be a local scalar variable."
+		              : " must be a local scalar logic or bit signal.") << endl;
+	    des->errors += 1;
+	    return nullptr;
+      }
+      return sig;
+}
+
+/* Preserve a small local qualifier directly, without adding a Boolean net or
+ * gating the physical timing signal. Check the parsed shape before expression
+ * optimization so unsupported expressions cannot become accidentally admitted. */
+static bool timing_check_condition(NetScope*scope, const PExpr*expr,
+                                    bool extended,
+                                    NetNet*&signal, ivl_tchk_cond_t&kind)
+{
+      signal = nullptr;
+      kind = IVL_TCHK_COND_NONE;
+      if (!expr) return true;
+      const PEIdent*id = dynamic_cast<const PEIdent*>(expr);
+      kind = IVL_TCHK_COND_BARE;
+      if (const PEUnary*unary = dynamic_cast<const PEUnary*>(expr)) {
+            if (!extended || unary->get_op() != '~') return false;
+            id = dynamic_cast<const PEIdent*>(unary->get_expr());
+            if (!id) return false;
+            kind = IVL_TCHK_COND_BIT_NOT;
+      } else if (!id) {
+            const PEBComp*comparison = dynamic_cast<const PEBComp*>(expr);
+            if (!comparison) return false;
+            id = dynamic_cast<const PEIdent*>(comparison->peek_left());
+            const PENumber*number =
+                  dynamic_cast<const PENumber*>(comparison->peek_right());
+            if (!id || !number) return false;
+            const verinum&value = number->value();
+            if (!value.has_len() || value.len() != 1 || value.has_sign()
+                || value.is_single() || value.is_string() || !value.is_defined())
+                  return false;
+            switch (comparison->peek_opcode()) {
+                case 'E':
+                  kind = value.is_zero() ? IVL_TCHK_COND_CASE_EQ0 : IVL_TCHK_COND_CASE_EQ1;
+                  break;
+                case 'N':
+                  if (!extended) return false;
+                  kind = value.is_zero() ? IVL_TCHK_COND_CASE_NE0 : IVL_TCHK_COND_CASE_NE1;
+                  break;
+                case 'e':
+                  if (!extended) return false;
+                  kind = value.is_zero() ? IVL_TCHK_COND_LOGIC_EQ0 : IVL_TCHK_COND_LOGIC_EQ1;
+                  break;
+                case 'n':
+                  if (!extended) return false;
+                  kind = value.is_zero() ? IVL_TCHK_COND_LOGIC_NE0 : IVL_TCHK_COND_LOGIC_NE1;
+                  break;
+                default:
+                  return false;
+            }
+      }
+      if (id->path().package || id->path().name.size() != 1
+          || !id->path().name.front().index.empty()) return false;
+      signal = scope->find_signal(id->path().name.front().name);
+      return signal && signal->scope() == scope && signal->vector_width() == 1
+          && signal->packed_dimensions() == 0 && signal->unpacked_dimensions() == 0
+          && (signal->data_type() == IVL_VT_LOGIC || signal->data_type() == IVL_VT_BOOL);
+}
+
+static bool pulse_timing_check_condition(Design*des, NetScope*scope,
+                                         const LineInfo&loc, const char*kind,
+                                         const PExpr*expr, NetNet*&signal,
+                                         ivl_tchk_cond_t&condition_kind)
+{
+      if (timing_check_condition(scope, expr, true, signal, condition_kind))
+            return true;
+
+      const PEUnary*unary = dynamic_cast<const PEUnary*>(expr);
+      if (unary && unary->get_op() == '!') {
+            cerr << unary->get_fileline() << ": sorry: " << kind
+                 << " condition uses unsupported logical '!'. Standard SystemVerilog"
+                 << " specify timing-check inversion uses '~'." << endl;
+      } else {
+            cerr << loc.get_fileline() << ": error: " << kind
+                 << " condition must be a local scalar signal, its bitwise complement,"
+                 << " or a comparison (===, !==, ==, !=) with 1'b0 or 1'b1." << endl;
+      }
+      des->errors += 1;
+      return false;
+}
+
+void PWidth::elaborate(Design*des, NetScope*scope) const
+{
+      if (!gn_specify_blocks_flag) return;
+      bool posedge = reference_->posedge;
+      bool negedge = reference_->negedge;
+      bool has_edge_list = !reference_->edges.empty();
+      if (has_edge_list && !reference_->condition) {
+            unsigned edges = 0;
+            for (PTimingCheck::EdgeType edge : reference_->edges)
+                  edges |= 1U << edge;
+            // IEEE 1800 section 31.5 defines these lists as the keywords.
+            const unsigned positive = (1U << PTimingCheck::EDGE_01)
+                                    | (1U << PTimingCheck::EDGE_0X)
+                                    | (1U << PTimingCheck::EDGE_X1);
+            const unsigned negative = (1U << PTimingCheck::EDGE_10)
+                                    | (1U << PTimingCheck::EDGE_1X)
+                                    | (1U << PTimingCheck::EDGE_X0);
+            posedge = edges == positive;
+            negedge = edges == negative;
+      }
+      if (posedge == negedge || (has_edge_list && reference_->condition)) {
+            cerr << get_fileline() << ": error: $width supports only"
+                 << (has_edge_list ? " unconditional" : "")
+                 << " posedge or negedge scalar reference events." << endl;
+            des->errors += 1;
+            return;
+      }
+      NetNet*condition;
+      ivl_tchk_cond_t condition_kind;
+      if (!pulse_timing_check_condition(des, scope, *this, "$width",
+                                        reference_->condition.get(),
+                                        condition, condition_kind))
+            return;
+      NetNet*reference = timing_check_signal(des, scope, reference_->name,
+                                            *this, "$width", false);
+      NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                      *this, "$width", true)
+                                  : nullptr;
+      if (!reference || (notifier_ && !notifier)) return;
+      double limit = 0.0, threshold = 0.0;
+      if (!timing_check_constant(des, scope, limit_.get(), *this,
+                                 "$width", "limit", limit)) return;
+      if (threshold_ && !timing_check_constant(des, scope, threshold_.get(), *this,
+                                              "$width", "threshold", threshold))
+            return;
+      std::unique_ptr<NetWidth> check(new NetWidth(scope, reference, notifier,
+                                          posedge, limit, threshold,
+                                         condition, condition_kind));
+      check->set_line(*this);
+      scope->add_width(std::move(check));
+}
+
+void PPeriod::elaborate(Design*des, NetScope*scope) const
+{
+      if (!gn_specify_blocks_flag) return;
+      if (reference_->posedge == reference_->negedge
+          || !reference_->edges.empty()) {
+            cerr << get_fileline() << ": error: $period supports only"
+                 << " posedge or negedge scalar reference events." << endl;
+            des->errors += 1;
+            return;
+      }
+      NetNet*condition;
+      ivl_tchk_cond_t condition_kind;
+      if (!pulse_timing_check_condition(des, scope, *this, "$period",
+                                        reference_->condition.get(),
+                                        condition, condition_kind))
+            return;
+      NetNet*reference = timing_check_signal(des, scope, reference_->name,
+                                            *this, "$period", false);
+      NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                      *this, "$period", true)
+                                  : nullptr;
+      if (!reference || (notifier_ && !notifier)) return;
+      double limit = 0.0;
+      if (!timing_check_constant(des, scope, limit_.get(), *this,
+                                 "$period", "limit", limit)) return;
+      std::unique_ptr<NetPeriod> check(new NetPeriod(scope, reference, notifier,
+                                                   reference_->posedge, limit,
+                                                   condition, condition_kind));
+      check->set_line(*this);
+      scope->add_period(std::move(check));
+}
+
+/* Two-event timing checks retain a qualifier independently for each event.
+ * Edge-descriptor lists remain unsupported. */
+static bool timing_check_event(Design*des, NetScope*scope, const LineInfo&loc,
+                                const PTimingCheck::event_t&event,
+                                const char*kind, const char*role, int&edge,
+                                NetNet*&condition,
+                                ivl_tchk_cond_t&condition_kind)
+{
+      if (!event.edges.empty() || (event.posedge && event.negedge)) {
+            cerr << loc.get_fileline() << ": error: " << kind << " " << role
+                 << " supports only scalar events with no edge,"
+                 << " posedge or negedge." << endl;
+            des->errors += 1;
+            return false;
+      }
+      if (!timing_check_condition(scope, event.condition.get(), false,
+                                  condition, condition_kind)) {
+            cerr << loc.get_fileline() << ": error: " << kind << " " << role
+                 << " condition must be a local scalar signal, or that signal"
+                 << " === 1'b0 or === 1'b1." << endl;
+            des->errors += 1;
+            return false;
+      }
+      edge = event.posedge ? 1 : event.negedge ? -1 : 0;
+      return true;
+}
+
+void PSetup::elaborate(Design*des, NetScope*scope) const
+{
+      if (!gn_specify_blocks_flag) return;
+      int reference_edge, data_edge;
+      NetNet*reference_condition, *data_condition;
+      ivl_tchk_cond_t reference_condition_kind, data_condition_kind;
+      if (!timing_check_event(des, scope, *this, *reference_, "$setup", "reference",
+                              reference_edge, reference_condition,
+                              reference_condition_kind) ||
+          !timing_check_event(des, scope, *this, *data_, "$setup", "data",
+                              data_edge, data_condition, data_condition_kind))
+            return;
+      NetNet*reference = timing_check_signal(des, scope, reference_->name,
+                                             *this, "$setup", false);
+      NetNet*data = timing_check_signal(des, scope, data_->name,
+                                        *this, "$setup", false, "data");
+      NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                       *this, "$setup", true)
+                                  : nullptr;
+      if (!reference || !data || (notifier_ && !notifier)) return;
+      double limit = 0.0;
+      if (!timing_check_constant(des, scope, limit_.get(), *this,
+                                 "$setup", "limit", limit)) return;
+      std::unique_ptr<NetSetup> check(new NetSetup(scope, reference, data,
+                                          notifier, reference_edge, data_edge,
+                                          limit, reference_condition,
+                                          reference_condition_kind,
+                                          data_condition, data_condition_kind));
+      check->set_line(*this);
+      scope->add_setup(std::move(check));
+}
+
+void PHold::elaborate(Design*des, NetScope*scope) const
+{
+      if (!gn_specify_blocks_flag) return;
+      int reference_edge, data_edge;
+      NetNet*reference_condition, *data_condition;
+      ivl_tchk_cond_t reference_condition_kind, data_condition_kind;
+      if (!timing_check_event(des, scope, *this, *reference_, "$hold", "reference",
+                              reference_edge, reference_condition,
+                              reference_condition_kind) ||
+          !timing_check_event(des, scope, *this, *data_, "$hold", "data",
+                              data_edge, data_condition, data_condition_kind))
+            return;
+      NetNet*reference = timing_check_signal(des, scope, reference_->name,
+                                             *this, "$hold", false);
+      NetNet*data = timing_check_signal(des, scope, data_->name,
+                                        *this, "$hold", false, "data");
+      NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                       *this, "$hold", true)
+                                  : nullptr;
+      if (!reference || !data || (notifier_ && !notifier)) return;
+      double limit = 0.0;
+      if (!timing_check_constant(des, scope, limit_.get(), *this,
+                                 "$hold", "limit", limit)) return;
+      std::unique_ptr<NetHold> check(new NetHold(scope, reference, data,
+                                          notifier, reference_edge, data_edge,
+                                          limit, reference_condition,
+                                          reference_condition_kind,
+                                          data_condition, data_condition_kind));
+      check->set_line(*this);
+      scope->add_hold(std::move(check));
+}
+
+void PRecovery::elaborate(Design*des, NetScope*scope) const
+{
+      if (!gn_specify_blocks_flag) return;
+      int reference_edge, data_edge;
+      NetNet*reference_condition, *data_condition;
+      ivl_tchk_cond_t reference_condition_kind, data_condition_kind;
+      if (!timing_check_event(des, scope, *this, *reference_, "$recovery", "reference",
+                              reference_edge, reference_condition,
+                              reference_condition_kind) ||
+          !timing_check_event(des, scope, *this, *data_, "$recovery", "data",
+                              data_edge, data_condition, data_condition_kind))
+            return;
+      NetNet*reference = timing_check_signal(des, scope, reference_->name,
+                                             *this, "$recovery", false);
+      NetNet*data = timing_check_signal(des, scope, data_->name,
+                                        *this, "$recovery", false, "data");
+      NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                       *this, "$recovery", true)
+                                  : nullptr;
+      if (!reference || !data || (notifier_ && !notifier)) return;
+      double limit = 0.0;
+      if (!timing_check_constant(des, scope, limit_.get(), *this,
+                                 "$recovery", "limit", limit)) return;
+      std::unique_ptr<NetRecovery> check(new NetRecovery(scope, reference, data,
+                                          notifier, reference_edge, data_edge,
+                                          limit, reference_condition,
+                                          reference_condition_kind,
+                                          data_condition, data_condition_kind));
+      check->set_line(*this);
+      scope->add_recovery(std::move(check));
+}
+
+void PRemoval::elaborate(Design*des, NetScope*scope) const
+{
+      if (!gn_specify_blocks_flag) return;
+      int reference_edge, data_edge;
+      NetNet*reference_condition, *data_condition;
+      ivl_tchk_cond_t reference_condition_kind, data_condition_kind;
+      if (!timing_check_event(des, scope, *this, *reference_, "$removal", "reference",
+                              reference_edge, reference_condition,
+                              reference_condition_kind) ||
+          !timing_check_event(des, scope, *this, *data_, "$removal", "data",
+                              data_edge, data_condition, data_condition_kind))
+            return;
+      NetNet*reference = timing_check_signal(des, scope, reference_->name,
+                                             *this, "$removal", false);
+      NetNet*data = timing_check_signal(des, scope, data_->name,
+                                        *this, "$removal", false, "data");
+      NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                       *this, "$removal", true)
+                                  : nullptr;
+      if (!reference || !data || (notifier_ && !notifier)) return;
+      double limit = 0.0;
+      if (!timing_check_constant(des, scope, limit_.get(), *this,
+                                 "$removal", "limit", limit)) return;
+      std::unique_ptr<NetRemoval> check(new NetRemoval(scope, reference, data,
+                                          notifier, reference_edge, data_edge,
+                                          limit, reference_condition,
+                                          reference_condition_kind,
+                                          data_condition, data_condition_kind));
+      check->set_line(*this);
+      scope->add_removal(std::move(check));
+}
+
+// Several timing declarations may request the same delayed copy (e.g. a
+// shared clock in SETUPHOLD and RECREM). Keep one driver on that terminal.
+class NetTimingCheckCopy : public NetBUFZ {
+public:
+      NetTimingCheckCopy(NetScope*scope, NetNet*source, NetNet*dest)
+      : NetBUFZ(scope, scope->local_symbol(), 1, false)
+      {
+            connect(pin(1), source->pin(0));
+            connect(pin(0), dest->pin(0));
+      }
+};
+
+static bool timing_check_copy(Design*des, NetScope*scope, NetNet*source,
+                              const pform_name_t*name, const LineInfo&loc,
+                              const char*kind)
+{
+      if (!name) return true;
+      NetNet*dest = timing_check_signal(des, scope, *name, loc, kind,
+                                       false, "delayed terminal");
+      if (!dest) return false;
+      if (dest->type() == NetNet::REG || dest == source) {
+            cerr << loc.get_fileline() << ": error: " << kind
+                 << " delayed terminal must be a distinct scalar net." << endl;
+            des->errors += 1;
+            return false;
+      }
+      for (const Link*pin = dest->pin(0).nexus()->first_nlink(); pin;
+           pin = pin->next_nlink()) {
+            const auto*copy = dynamic_cast<const NetTimingCheckCopy*>(pin->get_obj());
+            if (!copy || pin != &copy->pin(0)) continue;
+            if (copy->pin(1).is_linked(source->pin(0))) return true;
+            cerr << loc.get_fileline() << ": error: " << kind << " delayed terminal "
+                 << *name << " used for different source signals." << endl;
+            des->errors += 1;
+            return false;
+      }
+      auto*copy = new NetTimingCheckCopy(scope, source, dest);
+      copy->set_line(loc);
+      des->add_node(copy);
+      return true;
+}
+
 void PRecRem::elaborate(Design*des, NetScope*scope) const
 {
-      // At present, no timing checks are supported.
-      // Still, in order to get some models working
-      // assign the original reference and data signals to
-      // the delayed reference and data signals as per
-      // 15.5.4 Option behavior
+      if (gn_specify_blocks_flag) {
+            if (timestamp_cond_ || timecheck_cond_) {
+                  cerr << get_fileline() << ": error: $recrem timestamp/timecheck"
+                       << " conditions are not supported." << endl;
+                  des->errors += 1;
+                  return;
+            }
+            int reference_edge, data_edge;
+            NetNet*reference_condition, *data_condition;
+            ivl_tchk_cond_t reference_condition_kind, data_condition_kind;
+            if (!timing_check_event(des, scope, *this, *reference_event_, "$recrem",
+                                    "reference", reference_edge, reference_condition,
+                                    reference_condition_kind) ||
+                !timing_check_event(des, scope, *this, *data_event_, "$recrem",
+                                    "data", data_edge, data_condition,
+                                    data_condition_kind)) return;
+            NetNet*reference = timing_check_signal(des, scope, reference_event_->name,
+                                                   *this, "$recrem", false);
+            NetNet*data = timing_check_signal(des, scope, data_event_->name,
+                                              *this, "$recrem", false, "data");
+            NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                             *this, "$recrem", true)
+                                        : nullptr;
+            if (!reference || !data || (notifier_ && !notifier)) return;
+            double recovery_limit = 0.0, removal_limit = 0.0;
+            if (!timing_check_constant(des, scope, setup_limit_.get(), *this,
+                                       "$recrem", "recovery limit", recovery_limit, true) ||
+                !timing_check_constant(des, scope, hold_limit_.get(), *this,
+                                       "$recrem", "removal limit", removal_limit, true)) return;
+            if (!timing_check_copy(des, scope, reference, delayed_reference_.get(),
+                                   *this, "$recrem") ||
+                !timing_check_copy(des, scope, data, delayed_data_.get(),
+                                   *this, "$recrem")) return;
+            std::unique_ptr<NetRecRem> check(new NetRecRem(scope, reference,
+                  data, notifier, reference_edge, data_edge, recovery_limit, removal_limit,
+                  reference_condition, reference_condition_kind,
+                  data_condition, data_condition_kind));
+            check->set_line(*this);
+            scope->add_recrem(std::move(check));
+            return;
+      }
+
+      // Preserve the historical delayed-terminal copies when specify timing
+      // is disabled. They do not create a runtime timing check.
 
       if (delayed_reference_ != nullptr) {
 	    if (debug_elaborate) {
@@ -7961,11 +8600,50 @@ void PRecRem::elaborate(Design*des, NetScope*scope) const
 
 void PSetupHold::elaborate(Design*des, NetScope*scope) const
 {
-      // At present, no timing checks are supported.
-      // Still, in order to get some models working
-      // assign the original reference and data signals to
-      // the delayed reference and data signals as per
-      // 15.5.4 Option behavior
+      if (gn_specify_blocks_flag) {
+            if (timestamp_cond_ || timecheck_cond_) {
+                  cerr << get_fileline() << ": error: $setuphold timestamp/timecheck"
+                       << " conditions are not supported." << endl;
+                  des->errors += 1;
+                  return;
+            }
+            int reference_edge, data_edge;
+            NetNet*reference_condition, *data_condition;
+            ivl_tchk_cond_t reference_condition_kind, data_condition_kind;
+            if (!timing_check_event(des, scope, *this, *reference_event_, "$setuphold",
+                                    "reference", reference_edge, reference_condition,
+                                    reference_condition_kind) ||
+                !timing_check_event(des, scope, *this, *data_event_, "$setuphold",
+                                    "data", data_edge, data_condition,
+                                    data_condition_kind)) return;
+            NetNet*reference = timing_check_signal(des, scope, reference_event_->name,
+                                                   *this, "$setuphold", false);
+            NetNet*data = timing_check_signal(des, scope, data_event_->name,
+                                              *this, "$setuphold", false, "data");
+            NetNet*notifier = notifier_ ? timing_check_signal(des, scope, *notifier_,
+                                                             *this, "$setuphold", true)
+                                        : nullptr;
+            if (!reference || !data || (notifier_ && !notifier)) return;
+            double setup_limit = 0.0, hold_limit = 0.0;
+            if (!timing_check_constant(des, scope, setup_limit_.get(), *this,
+                                       "$setuphold", "setup limit", setup_limit, true) ||
+                !timing_check_constant(des, scope, hold_limit_.get(), *this,
+                                       "$setuphold", "hold limit", hold_limit, true)) return;
+            if (!timing_check_copy(des, scope, reference, delayed_reference_.get(),
+                                   *this, "$setuphold") ||
+                !timing_check_copy(des, scope, data, delayed_data_.get(),
+                                   *this, "$setuphold")) return;
+            std::unique_ptr<NetSetupHold> check(new NetSetupHold(scope, reference,
+                  data, notifier, reference_edge, data_edge, setup_limit, hold_limit,
+                  reference_condition, reference_condition_kind,
+                  data_condition, data_condition_kind));
+            check->set_line(*this);
+            scope->add_setuphold(std::move(check));
+            return;
+      }
+
+      // Preserve the historical delayed-terminal copies when specify timing
+      // is disabled. They do not create a runtime timing check.
 
       if (delayed_reference_ != nullptr) {
 	    if (debug_elaborate) {
@@ -8018,12 +8696,12 @@ static void elaborate_tasks(Design*des, NetScope*scope,
       }
 }
 
-static void elaborate_class(Design*des, netclass_t*use_class, PClass*pclass)
+static void elaborate_class(Design*des, netclass_t*use_class, PClass*p_class)
 {
-      use_class->elaborate(des, pclass);
+      use_class->elaborate(des, p_class);
 
       if (use_class->test_for_missing_initializers()) {
-	    cerr << pclass->get_fileline() << ": error: "
+	    cerr << p_class->get_fileline() << ": error: "
 		 << "Const properties of class " << use_class->get_name()
 		 << " are missing initialization." << endl;
 	    des->errors += 1;
@@ -8036,6 +8714,8 @@ static void elaborate_classes(Design*des, NetScope*scope,
       for (map<perm_string,PClass*>::const_iterator cur = classes.begin()
 		 ; cur != classes.end() ; ++ cur) {
 	    netclass_t*use_class = scope->find_class(des, cur->second->pscope_name());
+	    if (use_class->is_template())
+		  continue;
 	    elaborate_class(des, use_class, cur->second);
       }
 }
@@ -8265,7 +8945,7 @@ static void check_extern_types(Design*des, NetScope*class_scope,
 
       if (proto.ports) {
 	    for (const auto&port : *proto.ports) {
-		  NetNet*sig = method->find_signal(port.port->basename());
+		  const NetNet*sig = method->find_signal(port.port->basename());
 		  if (sig == 0)
 			continue;
 		  netranges_t unpacked;
@@ -8312,10 +8992,10 @@ static void check_extern_types(Design*des, NetScope*class_scope,
       }
 }
 
-void netclass_t::elaborate(Design*des, PClass*pclass)
+void netclass_t::elaborate(Design*des, PClass*p_class)
 {
-      if (! pclass->type->initialize_static.empty()) {
-	    const std::vector<Statement*>&stmt_list = pclass->type->initialize_static;
+      if (! p_class->type->initialize_static.empty()) {
+	    const std::vector<Statement*>&stmt_list = p_class->type->initialize_static;
 	    NetBlock*stmt = new NetBlock(NetBlock::SEQU, 0);
 	    for (size_t idx = 0 ; idx < stmt_list.size() ; idx += 1) {
 		  NetProc*tmp = stmt_list[idx]->elaborate(des, class_scope_);
@@ -8323,7 +9003,7 @@ void netclass_t::elaborate(Design*des, PClass*pclass)
 		  stmt->append(tmp);
 	    }
 	    NetProcTop*top = new NetProcTop(class_scope_, IVL_PR_INITIAL, stmt);
-	    top->set_line(*pclass);
+	    top->set_line(*p_class);
 	      // A specialization of a parameterized class is elaborated
 	      // after the rest of the design. Still initialize its static
 	      // properties before the other processes run.
@@ -8333,8 +9013,8 @@ void netclass_t::elaborate(Design*des, PClass*pclass)
 		  des->add_process(top);
       }
 
-      for (map<perm_string,PFunction*>::iterator cur = pclass->funcs.begin()
-		 ; cur != pclass->funcs.end() ; ++ cur) {
+      for (map<perm_string,PFunction*>::iterator cur = p_class->funcs.begin()
+		 ; cur != p_class->funcs.end() ; ++ cur) {
 	    if (debug_elaborate) {
 		  cerr << cur->second->get_fileline() << ": netclass_t::elaborate: "
 		       << "Elaborate class " << scope_path(class_scope_)
@@ -8346,8 +9026,8 @@ void netclass_t::elaborate(Design*des, PClass*pclass)
 	    cur->second->elaborate(des, scope);
       }
 
-      for (map<perm_string,PTask*>::iterator cur = pclass->tasks.begin()
-		 ; cur != pclass->tasks.end() ; ++ cur) {
+      for (map<perm_string,PTask*>::iterator cur = p_class->tasks.begin()
+		 ; cur != p_class->tasks.end() ; ++ cur) {
 	    if (debug_elaborate) {
 		  cerr << cur->second->get_fileline() << ": netclass_t::elaborate: "
 		       << "Elaborate class " << scope_path(class_scope_)
@@ -8359,18 +9039,18 @@ void netclass_t::elaborate(Design*des, PClass*pclass)
 	    cur->second->elaborate(des, scope);
       }
 
-      for (const auto&cur : pclass->externs)
-	    check_extern_types(des, class_scope_, pclass->pscope_name(),
+      for (const auto&cur : p_class->externs)
+	    check_extern_types(des, class_scope_, p_class->pscope_name(),
 			       cur.first, cur.second);
 
 	// Check that each override of a virtual method has the same
 	// signature as the virtual method that it overrides.
       std::vector<perm_string> names;
-      for (map<perm_string,PFunction*>::iterator cur = pclass->funcs.begin()
-		 ; cur != pclass->funcs.end() ; ++ cur)
+      for (map<perm_string,PFunction*>::iterator cur = p_class->funcs.begin()
+		 ; cur != p_class->funcs.end() ; ++ cur)
 	    names.push_back(cur->first);
-      for (map<perm_string,PTask*>::iterator cur = pclass->tasks.begin()
-		 ; cur != pclass->tasks.end() ; ++ cur)
+      for (map<perm_string,PTask*>::iterator cur = p_class->tasks.begin()
+		 ; cur != p_class->tasks.end() ; ++ cur)
 	    names.push_back(cur->first);
 
       for (perm_string name : names) {

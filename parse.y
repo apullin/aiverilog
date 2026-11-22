@@ -259,14 +259,10 @@ static data_type_t *pform_new_type_identifier(const struct vlltype &loc,
       return pform_new_type_identifier(loc, package, name);
 }
 
-  /* A class type with a parameter value assignment, e.g. C#(8). */
-static data_type_t *pform_new_type_identifier(const struct vlltype &loc,
-					     PPackage *package,
-					     char *text,
-					     parmvalue_t *params)
+static type_identifier_t *pform_set_type_params(data_type_t *type,
+					       parmvalue_t *params)
 {
-      auto tmp = static_cast<type_identifier_t*>(
-	    pform_new_type_identifier(loc, package, text));
+      auto tmp = static_cast<type_identifier_t*>(type);
       tmp->has_params = true;
       if (params && params->by_order) {
 	    tmp->params_by_order.splice(tmp->params_by_order.end(),
@@ -279,6 +275,50 @@ static data_type_t *pform_new_type_identifier(const struct vlltype &loc,
 	    delete params->by_name;
       }
       delete params;
+      return tmp;
+}
+
+  /* A class type with a parameter value assignment, e.g. C#(8). */
+static data_type_t *pform_new_type_identifier(const struct vlltype &loc,
+					     PPackage *package,
+					     const char *text,
+					     parmvalue_t *params)
+{
+      return pform_set_type_params(
+	    pform_new_type_identifier(loc, package, text), params);
+}
+
+  /* A name in a class scope, e.g. the type T in C#(8)::T. */
+static data_type_t *pform_new_scoped_type_identifier(const struct vlltype &loc,
+						    data_type_t *scope,
+						    char *text,
+						    parmvalue_t *params = nullptr)
+{
+      std::unique_ptr<char[]> owned_text(text);
+      pform_scoped_name_t path;
+      path.class_scope.reset(scope);
+      path.name.emplace_back(lex_strings.make(text));
+
+      auto identifier = new PEIdent(path);
+      FILE_NAME(identifier, loc);
+      auto tmp = new type_identifier_t(identifier);
+      FILE_NAME(tmp, loc);
+      if (params)
+	    return pform_set_type_params(tmp, params);
+      return tmp;
+}
+
+  /* A name in a class scope used as an expression, e.g. C#(8)::N. */
+static PExpr *pform_class_scope_ident(const struct vlltype &loc,
+				      data_type_t *scope,
+				      pform_name_t *name)
+{
+      pform_scoped_name_t path;
+      path.class_scope.reset(scope);
+      path.name = *name;
+      delete name;
+      auto tmp = new PEIdent(path);
+      FILE_NAME(tmp, loc);
       return tmp;
 }
 
@@ -520,6 +560,10 @@ static decl_assignment_t *pform_make_var_decl(const YYLTYPE&loc, char *id,
       decl->lexical_pos(lexical_pos);
       FILE_NAME(decl, loc);
       decl->name = { lex_strings.make(id), lexical_pos };
+      if (var_lifetime == LexicalScope::AUTOMATIC) {
+	    if (auto block = dynamic_cast<PBlock*>(pform_peek_scope()))
+		  block->automatic_variables.insert(decl->name.first);
+      }
       if (udims) {
 	    decl->index = *udims;
 	    delete udims;
@@ -948,8 +992,10 @@ static PBlock *pform_finish_block(const YYLTYPE&block_loc,
 	    if (block_type != PBlock::BL_SEQ)
 		  block->set_join_type(block_type);
       } else {
+	    auto lifetime = block->default_lifetime;
 	    delete block;
 	    block = new PBlock(block_type);
+	    block->default_lifetime = lifetime;
 	    FILE_NAME(block, block_loc);
       }
 
@@ -1211,6 +1257,7 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 
       PSpecPath* specpath;
       PTimingCheck::event_t* timing_check_event;
+      std::vector<PTimingCheck::EdgeType>* timing_check_edges;
       PTimingCheck::optional_args_t* spec_optional_args;
 
       LexicalScope::lifetime_t lifetime;
@@ -1232,7 +1279,7 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 %token K_PSTAR K_STARP K_DOTSTAR
 %token K_LOR K_LAND K_NAND K_NOR K_NXOR K_TRIGGER K_NB_TRIGGER K_LEQUIV
 %token K_SCOPE_RES
-%token K_edge_descriptor
+%token <int_val> K_edge_descriptor
 
 %token K_CONSTRAINT_IMPL
 
@@ -1382,6 +1429,8 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 %type <index_components> index_components_opt index_components
 %type <pform_name> spec_notifier_opt spec_notifier
 %type <timing_check_event> spec_reference_event
+%type <timing_check_edges> edge_descriptor_list
+%destructor { delete $$; } <timing_check_edges>
 %type <spec_optional_args> setuphold_opt_args recrem_opt_args setuphold_recrem_opt_notifier
 %type <spec_optional_args> setuphold_recrem_opt_timestamp_cond setuphold_recrem_opt_timecheck_cond
 %type <spec_optional_args> setuphold_recrem_opt_delayed_reference setuphold_recrem_opt_delayed_data
@@ -2065,6 +2114,10 @@ ps_type_identifier /* IEEE1800-2017: A.9.3 */
       { lex_in_package_scope(0);
 	$$ = pform_new_type_identifier(@2, $1, $2, $3);
       }
+  | class_scope IDENTIFIER
+      { $$ = pform_new_scoped_type_identifier(@2, $1, $2); }
+  | class_scope IDENTIFIER parameter_value_assignment
+      { $$ = pform_new_scoped_type_identifier(@2, $1, $2, $3); }
   ;
 
 ps_type_identifier_dim /* IEEE1800-2017: A.9.3 */
@@ -2084,6 +2137,14 @@ ps_type_identifier_dim /* IEEE1800-2017: A.9.3 */
   | package_scope IDENTIFIER parameter_value_assignment dimensions_opt
       { lex_in_package_scope(nullptr);
 	auto tmp = pform_new_type_identifier(@2, $1, $2, $3);
+	$$ = pform_make_parray_type(@4, tmp, $4);
+      }
+  | class_scope IDENTIFIER dimensions_opt
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2);
+	$$ = pform_make_parray_type(@3, tmp, $3);
+      }
+  | class_scope IDENTIFIER parameter_value_assignment dimensions_opt
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2, $3);
 	$$ = pform_make_parray_type(@4, tmp, $4);
       }
   ;
@@ -2840,6 +2901,17 @@ package_variable_decl_assignments_with_type
 	$$.decl_assignments = $5;
 	$$.type = pform_make_parray_type(@4, tmp, $4);
       }
+  | class_scope IDENTIFIER dimensions_opt list_of_variable_decl_assignments
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2);
+	$$.decl_assignments = $4;
+	$$.type = pform_make_parray_type(@3, tmp, $3);
+      }
+  | class_scope IDENTIFIER parameter_value_assignment dimensions_opt
+    list_of_variable_decl_assignments
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2, $3);
+	$$.decl_assignments = $5;
+	$$.type = pform_make_parray_type(@4, tmp, $4);
+      }
   ;
 
 initializer_opt
@@ -2908,10 +2980,12 @@ method_qualifier_opt
 	      yyerror(@1, "error: A virtual class method cannot be static.");
 	$$ = $1;
 	pform_set_method_virtual($1.test_virtual());
+	pform_set_method_static($1.test_static());
       }
   |
       { $$ = property_qualifier_t::make_none();
 	pform_set_method_virtual(false);
+	pform_set_method_static(false);
       }
   ;
 
@@ -3505,6 +3579,17 @@ data_type_or_implicit_plus_id_dim
 	tmp = pform_make_parray_type(@4, tmp, $4);
 	set_type_id_range($$, tmp, $5, @5, $6);
       }
+  | class_scope IDENTIFIER dimensions_opt IDENTIFIER dimensions_opt
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2);
+	tmp = pform_make_parray_type(@3, tmp, $3);
+	set_type_id_range($$, tmp, $4, @4, $5);
+      }
+  | class_scope IDENTIFIER parameter_value_assignment dimensions_opt
+    IDENTIFIER dimensions_opt
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2, $3);
+	tmp = pform_make_parray_type(@4, tmp, $4);
+	set_type_id_range($$, tmp, $5, @5, $6);
+      }
   ;
 
   // Parameter port lists can omit the `parameter` keyword, but the optional
@@ -3530,6 +3615,17 @@ data_type_or_parameter_id_dim
 	tmp = pform_make_parray_type(@3, tmp, $3);
 	set_type_id_range($$, tmp, $4, @4, $5);
       }
+  | class_scope IDENTIFIER dimensions_opt IDENTIFIER dimensions_opt
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2);
+	tmp = pform_make_parray_type(@3, tmp, $3);
+	set_type_id_range($$, tmp, $4, @4, $5);
+      }
+  | class_scope IDENTIFIER parameter_value_assignment dimensions_opt
+    IDENTIFIER dimensions_opt
+      { auto tmp = pform_new_scoped_type_identifier(@2, $1, $2, $3);
+	tmp = pform_make_parray_type(@4, tmp, $4);
+	set_type_id_range($$, tmp, $5, @5, $6);
+      }
   ;
 
   // Function name in a function_declaration. Besides the plain form this also
@@ -3548,6 +3644,13 @@ method_data_type_or_implicit_or_void_plus_id
 	tmp = pform_make_parray_type(@2, tmp, $2);
 	set_type_id_range($$, tmp, $5, @5, nullptr);
 	$$.scope_id = $3;
+      }
+  | IDENTIFIER parameter_value_assignment dimensions_opt
+    IDENTIFIER K_SCOPE_RES IDENTIFIER
+      { auto tmp = pform_new_type_identifier(@1, nullptr, $1, $2);
+	tmp = pform_make_parray_type(@3, tmp, $3);
+	set_type_id_range($$, tmp, $6, @6, nullptr);
+	$$.scope_id = $4;
       }
   | atomic_type IDENTIFIER K_SCOPE_RES IDENTIFIER
       { set_type_id_range($$, $1, $4, @4, nullptr);
@@ -3779,20 +3882,18 @@ value_range /* IEEE1800-2017: A.8.3 */
       { PEInside::item_t it;
 	it.lo = $2;
 	it.hi = $4;
-	it.is_range = true;
-	$$ = it;
-      }
-  | '[' '$' ':' expression ']'
-      { PEInside::item_t it;
-	it.lo = nullptr;
-	it.hi = $4;
-	it.is_range = true;
-	$$ = it;
-      }
-  | '[' expression ':' '$' ']'
-      { PEInside::item_t it;
-	it.lo = $2;
-	it.hi = nullptr;
+	if (dynamic_cast<PEQueueDimension*>(it.lo) &&
+	    dynamic_cast<PEQueueDimension*>(it.hi)) {
+	      yyerror(@1, "error: Cannot specify [$:$] in inside range.");
+	}
+	if (dynamic_cast<PEQueueDimension*>(it.lo)) {
+	      delete it.lo;
+	      it.lo = nullptr;
+	}
+	if (dynamic_cast<PEQueueDimension*>(it.hi)) {
+	      delete it.hi;
+	      it.hi = nullptr;
+	}
 	it.is_range = true;
 	$$ = it;
       }
@@ -3800,21 +3901,25 @@ value_range /* IEEE1800-2017: A.8.3 */
 
 index_component
   : '[' expression ']'
-      { $$ = make_index_component(@$, index_component_t::SEL_BIT, $2);
-      }
-  | '[' '$' ']'
-      { $$ = make_index_component(@$, index_component_t::SEL_BIT_LAST);
+      { if (dynamic_cast<PEQueueDimension*>($2)) {
+	      delete $2;
+	      $$ = make_index_component(@$, index_component_t::SEL_BIT_LAST);
+	} else {
+	      $$ = make_index_component(@$, index_component_t::SEL_BIT, $2);
+	}
       }
   | '[' expression ':' expression ']'
-      { $$ = make_index_component(@$, index_component_t::SEL_PART, $2, $4);
+      { if (dynamic_cast<PEQueueDimension*>($2)) {
+	      delete $2;
+	      $$ = make_index_component(@$,
+				       index_component_t::SEL_QUEUE_BOUND,
+				       nullptr, $4);
+	} else {
+	      $$ = make_index_component(@$, index_component_t::SEL_PART, $2, $4);
+	}
       }
   | '[' ']'
       { $$ = make_index_component(@$, index_component_t::SEL_NONE);
-      }
-  | '[' '$' ':' expression ']'
-      { $$ = make_index_component(@$,
-				 index_component_t::SEL_QUEUE_BOUND,
-				 nullptr, $4);
       }
   | '[' expression K_PO_POS expression ']'
       { $$ = make_index_component(@$, index_component_t::SEL_IDX_UP, $2, $4);
@@ -3834,8 +3939,11 @@ variable_lifetime
 	      }
 	} else if (pform_requires_sv(@1, "Overriding default variable lifetime") &&
 		   $1 != scope->default_lifetime) {
-	      yyerror(@1, "sorry: Overriding the default variable "
-			  "lifetime is not yet supported.");
+	      const auto block = dynamic_cast<PBlock*>(scope);
+	      if ($1 != LexicalScope::AUTOMATIC || !block || current_function ||
+		  block->bl_type() != PBlock::BL_SEQ)
+		    yyerror(@1, "sorry: Overriding the default variable "
+				"lifetime is not yet supported.");
 	}
 	var_lifetime = $1;
       }
@@ -5196,6 +5304,8 @@ expr_primary
 	$$ = pform_package_ident(@2, $1, $2);
 	delete $2;
       }
+  | class_scope hierarchy_identifier
+      { $$ = pform_class_scope_ident(@2, $1, $2); }
 
   /* An identifier followed by an expression list in parentheses is a
      function call. If a system identifier, then a system function
@@ -5223,6 +5333,15 @@ expr_primary
 	FILE_NAME(tmp, @2);
 	delete $2;
 	delete $4;
+	$$ = tmp;
+      }
+  | class_scope hierarchy_identifier argument_list_parens
+      { pform_scoped_name_t call_path(nullptr, *$2);
+	call_path.class_scope.reset($1);
+	auto tmp = new PECallFunction(call_path, *$3);
+	FILE_NAME(tmp, @2);
+	delete $2;
+	delete $3;
 	$$ = tmp;
       }
   | K_this
@@ -5483,12 +5602,40 @@ expr_primary
   | assignment_pattern
       { $$ = $1; }
 
+  /* A typed assignment pattern, IEEE1800-2017 10.9: the type is a type
+     name or a type parameter, which the elaborator tells apart from an
+     expression, as it does for a cast. */
+  | expr_primary_or_typename assignment_pattern
+      { auto tmp = static_cast<PEAssignPattern*>($2);
+	const auto tn = dynamic_cast<PETypename*>($1);
+	if (!pform_requires_sv(@1, "Typed assignment pattern")) {
+	      delete $1;
+	} else if (tn && !dynamic_cast<const atom_type_t*>(tn->get_type()) &&
+		   !dynamic_cast<const type_identifier_t*>(tn->get_type())) {
+	      yyerror(@1, "error: Only a type name, an integer atom type, a type "
+			  "parameter or a type reference is allowed as the type "
+			  "of an assignment pattern.");
+	      delete $1;
+	} else {
+	      tmp->set_type($1);
+	}
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+
   /* SystemVerilog supports streaming concatenation */
   | streaming_concatenation
       { $$ = $1; }
 
   | K_null
       { PENull*tmp = new PENull;
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+
+  /* The "$" in a queue index is the index of the last element. */
+  | '$'
+      { PEQueueDimension*tmp = new PEQueueDimension;
 	FILE_NAME(tmp, @1);
 	$$ = tmp;
       }
@@ -5948,6 +6095,9 @@ lpvalue
 	$$ = tmp;
 	delete $1;
       }
+
+  | class_scope hierarchy_identifier
+      { $$ = pform_class_scope_ident(@2, $1, $2); }
 
   | '{' expression_list_proper '}'
       { PEConcat*tmp = new PEConcat(*$2);
@@ -7373,13 +7523,9 @@ specify_item
   | K_Shold '(' spec_reference_event ',' spec_reference_event
     ',' delay_value spec_notifier_opt ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // spec_reference_event
-	delete $7; // delay_value
-	delete $8; // spec_notifier_opt
+	PHold*check = new PHold($3, $5, $7, $8);
+	FILE_NAME(check, @1);
+	pform_module_timing_check(check);
       }
   | K_Snochange '(' spec_reference_event ',' spec_reference_event
 	  ',' delay_value ',' delay_value spec_notifier_opt ')' ';'
@@ -7396,36 +7542,20 @@ specify_item
   | K_Speriod '(' spec_reference_event ',' delay_value
     spec_notifier_opt ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // delay_value
-	delete $6; // spec_notifier_opt
+	PPeriod*period = new PPeriod($3, $5, $6);
+	FILE_NAME(period, @1);
+	pform_module_timing_check(period);
       }
   | K_Srecovery '(' spec_reference_event ',' spec_reference_event
     ',' delay_value spec_notifier_opt ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // spec_reference_event
-	delete $7; // delay_value
-	delete $8; // spec_notifier_opt
+	PRecovery*check = new PRecovery($3, $5, $7, $8);
+	FILE_NAME(check, @1);
+	pform_module_timing_check(check);
       }
   | K_Srecrem '(' spec_reference_event ',' spec_reference_event
     ',' expr_mintypmax ',' expr_mintypmax recrem_opt_args ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      cerr << @3 << ": warning: Timing checks are not supported. ";
-	      if ($10->delayed_reference != nullptr || $10->delayed_data != nullptr) {
-		    cerr << "Delayed reference and data signals become copies of the"
-			 << " original reference and data signals.";
-	      }
-	      cerr << endl;
-	}
-
 	PRecRem*recrem = pform_make_recrem(@1, $3, $5, $7, $9, $10);
 	pform_module_timing_check(recrem);
 
@@ -7434,37 +7564,20 @@ specify_item
   | K_Sremoval '(' spec_reference_event ',' spec_reference_event
     ',' delay_value spec_notifier_opt ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // spec_reference_event
-	delete $7; // delay_value
-	delete $8; // spec_notifier_opt
+	PRemoval*check = new PRemoval($3, $5, $7, $8);
+	FILE_NAME(check, @1);
+	pform_module_timing_check(check);
       }
   | K_Ssetup '(' spec_reference_event ',' spec_reference_event
     ',' delay_value spec_notifier_opt ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // spec_reference_event
-	delete $7; // delay_value
-	delete $8; // spec_notifier_opt
+	PSetup*check = new PSetup($5, $3, $7, $8);
+	FILE_NAME(check, @1);
+	pform_module_timing_check(check);
       }
   | K_Ssetuphold '(' spec_reference_event ',' spec_reference_event
     ',' expr_mintypmax ',' expr_mintypmax setuphold_opt_args ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      cerr << @3 << ": warning: Timing checks are not supported. ";
-	      if ($10->delayed_reference != nullptr || $10->delayed_data != nullptr) {
-		    cerr << "Delayed reference and data signals become copies of the"
-			 << " original reference and data signals.";
-	      }
-	      cerr << endl;
-	}
-
 	PSetupHold*setuphold = pform_make_setuphold(@1, $3, $5, $7, $9, $10);
 	pform_module_timing_check(setuphold);
 
@@ -7500,21 +7613,15 @@ specify_item
   | K_Swidth '(' spec_reference_event ',' delay_value ',' expression
     spec_notifier_opt ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // delay_value
-	delete $7; // expression
-	delete $8;
+	PWidth*width = new PWidth($3, $5, $7, $8);
+	FILE_NAME(width, @1);
+	pform_module_timing_check(width);
       }
   | K_Swidth '(' spec_reference_event ',' delay_value ')' ';'
       {
-	if (gn_specify_blocks_flag) {
-	      yywarn(@3, "warning: Timing checks are not supported.");
-	}
-	delete $3; // spec_reference_event
-	delete $5; // delay_value
+	PWidth*width = new PWidth($3, $5, nullptr, nullptr);
+	FILE_NAME(width, @1);
+	pform_module_timing_check(width);
       }
   | K_pulsestyle_onevent specify_path_identifiers ';'
       {
@@ -7797,7 +7904,8 @@ spec_reference_event
 	event->name = *$5;
 	event->posedge = false;
 	event->negedge = false;
-	// TODO add edge descriptors
+	event->edges.swap(*$3);
+	delete $3;
 	event->condition = nullptr;
 	delete $5;
 	$$ = event;
@@ -7807,20 +7915,25 @@ spec_reference_event
 	event->name = *$5;
 	event->posedge = false;
 	event->negedge = false;
-	// TODO add edge descriptors
+	event->edges.swap(*$3);
+	delete $3;
 	event->condition = std::unique_ptr<PExpr>($7);
 	delete $5;
 	$$ = event;
       }
   ;
 
-  /* The edge_descriptor is detected by the lexor as the various
-     2-letter edge sequences that are supported here. For now, we
-     don't care what they are, because we do not yet support specify
-     edge events. */
+  /* Preserve edge descriptors so unsupported timing events remain
+     distinguishable from unqualified any-change events. */
 edge_descriptor_list
   : edge_descriptor_list ',' K_edge_descriptor
+      { $1->push_back(static_cast<PTimingCheck::EdgeType>($3));
+        $$ = $1;
+      }
   | K_edge_descriptor
+      { $$ = new std::vector<PTimingCheck::EdgeType>(
+                  1, static_cast<PTimingCheck::EdgeType>($1));
+      }
   ;
 
 setuphold_opt_args
@@ -8037,6 +8150,15 @@ subroutine_call
 	FILE_NAME(tmp, @2);
 	delete $2;
 	delete $4;
+	$$ = tmp;
+      }
+  | class_scope hierarchy_identifier argument_list_parens_opt
+      { pform_scoped_name_t call_path(nullptr, *$2);
+	call_path.class_scope.reset($1);
+	auto tmp = new PCallTask(call_path, *$3);
+	FILE_NAME(tmp, @2);
+	delete $2;
+	delete $3;
 	$$ = tmp;
       }
   | class_hierarchy_identifier argument_list_parens_opt

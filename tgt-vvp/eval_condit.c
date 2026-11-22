@@ -261,9 +261,11 @@ static int draw_compare_class(ivl_expr_t expr)
       if (ivl_expr_type(le)==IVL_EX_NULL && ivl_expr_type(re)==IVL_EX_NULL) {
 	    switch (ivl_expr_opcode(expr)) {
 		case 'e': /* == */
+		case 'E': /* === */
 		  fprintf(vvp_out, "    %%flag_set/imm 4, 1;\n");
 		  break;
 		case 'n': /* != */
+		case 'N': /* !== */
 		  fprintf(vvp_out, "    %%flag_set/imm 4, 0;\n");
 		  break;
 		default:
@@ -288,7 +290,8 @@ static int draw_compare_class(ivl_expr_t expr)
 		  fprintf(vvp_out, "    %%test_nul/a v%p, %d;\n", sig, word_ix);
 		  clr_word(word_ix);
 	    }
-	    if (ivl_expr_opcode(expr) == 'n')
+	    if ((ivl_expr_opcode(expr) == 'n') ||
+	        (ivl_expr_opcode(expr) == 'N'))
 		  fprintf(vvp_out, "    %%flag_inv 4;\n");
 	    return 4;
       }
@@ -309,17 +312,31 @@ static int draw_compare_class(ivl_expr_t expr)
 	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
 	    fprintf(vvp_out, "    %%test_nul/prop %u, %d;\n", pidx, idx);
 	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
-	    if (ivl_expr_opcode(expr) == 'n')
+	    if ((ivl_expr_opcode(expr) == 'n') ||
+	        (ivl_expr_opcode(expr) == 'N'))
 		  fprintf(vvp_out, "    %%flag_inv 4;\n");
 
 	    if (idx != 0) clr_word(idx);
 	    return 4;
       }
 
-      fprintf(stderr, "SORRY: Compare class handles not implemented\n");
-      fprintf(vvp_out, " ; XXXX compare class handles. re-type=%d, le-type=%d\n",
-	      ivl_expr_type(re), ivl_expr_type(le));
-      vvp_errors += 1;
+	/* General case: evaluate the operand(s) onto the object stack. */
+      vvp_errors += draw_eval_object(le);
+
+      if (ivl_expr_type(re)==IVL_EX_NULL) {
+	      /* Handle (e.g. a function call result) compared to null. */
+	    fprintf(vvp_out, "    %%test_nul/obj;\n");
+	    fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+      } else {
+	      /* Handle compared to handle: compare object identity. */
+	    vvp_errors += draw_eval_object(re);
+	    fprintf(vvp_out, "    %%cmp/obj;\n");
+	    fprintf(vvp_out, "    %%pop/obj 2, 0;\n");
+      }
+
+      if ((ivl_expr_opcode(expr) == 'n') ||
+          (ivl_expr_opcode(expr) == 'N'))
+	    fprintf(vvp_out, "    %%flag_inv 4;\n");
       return 4;
 }
 

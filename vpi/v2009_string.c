@@ -184,14 +184,14 @@ static PLI_INT32 atoi_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       assert(arg);
       vpi_free_object(argv);
 
-      int res = 0;
+      PLI_UINT32 res = 0;
 
       value.format = vpiStringVal;
       vpi_get_value(arg, &value);
       const char*bufp = value.value.str;
       while (bufp && *bufp) {
-	    if (isdigit((int)*bufp)) {
-		  res = (res * 10) + (*bufp - '0');
+	    if (isdigit((unsigned char)*bufp)) {
+		  res = (res * 10u) + (PLI_UINT32)(*bufp - '0');
 		  bufp += 1;
 	    } else if (*bufp == '_') {
 		  bufp += 1;
@@ -201,7 +201,163 @@ static PLI_INT32 atoi_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
       }
 
       value.format = vpiIntVal;
-      value.value.integer = res;
+      value.value.integer = (PLI_INT32)res;
+
+      vpi_put_value(callh, &value, 0, vpiNoDelay);
+
+      return 0;
+}
+
+static PLI_INT32 atohex_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
+{
+      vpiHandle callh = vpi_handle(vpiSysTfCall, 0);
+      vpiHandle argv;
+      vpiHandle arg;
+      s_vpi_value value;
+
+      (void)name; /* Parameter not used */
+
+      argv = vpi_iterate(vpiArgument, callh);
+      assert(argv);
+      arg = vpi_scan(argv);
+      assert(arg);
+      vpi_free_object(argv);
+
+      PLI_UINT32 res = 0;
+
+      value.format = vpiStringVal;
+      vpi_get_value(arg, &value);
+      const char*bufp = value.value.str;
+      while (bufp && *bufp) {
+	    switch (*bufp) {
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
+		  res = (res * 16u) + (PLI_UINT32)(*bufp - '0');
+		  bufp += 1;
+		  break;
+		case 'a': case 'A':
+		case 'b': case 'B':
+		case 'c': case 'C':
+		case 'd': case 'D':
+		case 'e': case 'E':
+		case 'f': case 'F':
+		  res = (res * 16u) + (PLI_UINT32)(toupper((unsigned char)*bufp) - 'A' + 10);
+		  bufp += 1;
+		  break;
+		case '_':
+		  bufp += 1;
+		  break;
+		default:
+		  bufp = 0;
+		  break;
+	    }
+      }
+
+      value.format = vpiIntVal;
+      value.value.integer = (PLI_INT32)res;
+
+      vpi_put_value(callh, &value, 0, vpiNoDelay);
+
+      return 0;
+}
+
+static PLI_INT32 atooct_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
+{
+      vpiHandle callh = vpi_handle(vpiSysTfCall, 0);
+      vpiHandle argv;
+      vpiHandle arg;
+      s_vpi_value value;
+
+      (void)name; /* Parameter not used */
+
+      argv = vpi_iterate(vpiArgument, callh);
+      assert(argv);
+      arg = vpi_scan(argv);
+      assert(arg);
+      vpi_free_object(argv);
+
+      PLI_UINT32 res = 0;
+
+      value.format = vpiStringVal;
+      vpi_get_value(arg, &value);
+      const char*bufp = value.value.str;
+      while (bufp && *bufp) {
+	    switch (*bufp) {
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		  res = (res * 8u) + (PLI_UINT32)(*bufp - '0');
+		  bufp += 1;
+		  break;
+		case '_':
+		  bufp += 1;
+		  break;
+		default:
+		  bufp = 0;
+		  break;
+	    }
+      }
+
+      value.format = vpiIntVal;
+      value.value.integer = (PLI_INT32)res;
+
+      vpi_put_value(callh, &value, 0, vpiNoDelay);
+
+      return 0;
+}
+
+static PLI_INT32 atobin_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
+{
+      vpiHandle callh = vpi_handle(vpiSysTfCall, 0);
+      vpiHandle argv;
+      vpiHandle arg;
+      s_vpi_value value;
+
+      (void)name; /* Parameter not used */
+
+      argv = vpi_iterate(vpiArgument, callh);
+      assert(argv);
+      arg = vpi_scan(argv);
+      assert(arg);
+      vpi_free_object(argv);
+
+      PLI_UINT32 res = 0;
+
+      value.format = vpiStringVal;
+      vpi_get_value(arg, &value);
+      const char*bufp = value.value.str;
+      while (bufp && *bufp) {
+	    switch (*bufp) {
+		case '0':
+		case '1':
+		  res = (res * 2u) + (PLI_UINT32)(*bufp - '0');
+		  bufp += 1;
+		  break;
+		case '_':
+		  bufp += 1;
+		  break;
+		default:
+		  bufp = 0;
+		  break;
+	    }
+      }
+
+      value.format = vpiIntVal;
+      value.value.integer = (PLI_INT32)res;
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
@@ -232,67 +388,6 @@ static PLI_INT32 atoreal_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
 
       value.format = vpiRealVal;
       value.value.real = res;
-
-      vpi_put_value(callh, &value, 0, vpiNoDelay);
-
-      return 0;
-}
-
-static PLI_INT32 atohex_calltf(ICARUS_VPI_CONST PLI_BYTE8*name)
-{
-      vpiHandle callh = vpi_handle(vpiSysTfCall, 0);
-      vpiHandle argv;
-      vpiHandle arg;
-      s_vpi_value value;
-
-      (void)name; /* Parameter not used */
-
-      argv = vpi_iterate(vpiArgument, callh);
-      assert(argv);
-      arg = vpi_scan(argv);
-      assert(arg);
-      vpi_free_object(argv);
-
-      int res = 0;
-
-      value.format = vpiStringVal;
-      vpi_get_value(arg, &value);
-      const char*bufp = value.value.str;
-      while (bufp && *bufp) {
-	    switch (*bufp) {
-		case '0':
-		case '1':
-		case '2':
-		case '3':
-		case '4':
-		case '5':
-		case '6':
-		case '7':
-		case '8':
-		case '9':
-		  res = (res * 16) + (*bufp - '0');
-		  bufp += 1;
-		  break;
-		case 'a': case 'A':
-		case 'b': case 'B':
-		case 'c': case 'C':
-		case 'd': case 'D':
-		case 'e': case 'E':
-		case 'f': case 'F':
-		  res = (res * 16) + (toupper((int)*bufp) - 'A' + 10);
-		  bufp += 1;
-		  break;
-		case '_':
-		  bufp += 1;
-		  break;
-		default:
-		  bufp = 0;
-		  break;
-	    }
-      }
-
-      value.format = vpiIntVal;
-      value.value.integer = res;
 
       vpi_put_value(callh, &value, 0, vpiNoDelay);
 
@@ -500,36 +595,6 @@ void v2009_string_register(void)
       vpip_make_systf_system_defined(res);
 
       tf_data.type      = vpiSysFunc;
-      tf_data.sysfunctype = vpiIntFunc;
-      tf_data.tfname    = "$ivl_string_method$atoi";
-      tf_data.calltf    = atoi_calltf;
-      tf_data.compiletf = one_arg_compiletf;
-      tf_data.sizetf    = 0;
-      tf_data.user_data = "$ivl_string_method$atoi";
-      res = vpi_register_systf(&tf_data);
-      vpip_make_systf_system_defined(res);
-
-      tf_data.type      = vpiSysFunc;
-      tf_data.sysfunctype = vpiRealFunc;
-      tf_data.tfname    = "$ivl_string_method$atoreal";
-      tf_data.calltf    = atoreal_calltf;
-      tf_data.compiletf = one_arg_compiletf;
-      tf_data.sizetf    = 0;
-      tf_data.user_data = "$ivl_string_method$atoreal";
-      res = vpi_register_systf(&tf_data);
-      vpip_make_systf_system_defined(res);
-
-      tf_data.type      = vpiSysFunc;
-      tf_data.sysfunctype = vpiIntFunc;
-      tf_data.tfname    = "$ivl_string_method$atohex";
-      tf_data.calltf    = atohex_calltf;
-      tf_data.compiletf = one_arg_compiletf;
-      tf_data.sizetf    = 0;
-      tf_data.user_data = "$ivl_string_method$atohex";
-      res = vpi_register_systf(&tf_data);
-      vpip_make_systf_system_defined(res);
-
-      tf_data.type      = vpiSysFunc;
       tf_data.sysfunctype = vpiStringFunc;
       tf_data.tfname    = "$ivl_string_method$toupper";
       tf_data.calltf    = toupperlower_calltf;
@@ -566,6 +631,56 @@ void v2009_string_register(void)
       tf_data.compiletf = two_str_arg_compiletf;
       tf_data.sizetf    = 0;
       tf_data.user_data = "$ivl_string_method$icompare";
+      res = vpi_register_systf(&tf_data);
+      vpip_make_systf_system_defined(res);
+
+      tf_data.type      = vpiSysFunc;
+      tf_data.sysfunctype = vpiIntFunc;
+      tf_data.tfname    = "$ivl_string_method$atoi";
+      tf_data.calltf    = atoi_calltf;
+      tf_data.compiletf = one_arg_compiletf;
+      tf_data.sizetf    = 0;
+      tf_data.user_data = "$ivl_string_method$atoi";
+      res = vpi_register_systf(&tf_data);
+      vpip_make_systf_system_defined(res);
+
+      tf_data.type      = vpiSysFunc;
+      tf_data.sysfunctype = vpiIntFunc;
+      tf_data.tfname    = "$ivl_string_method$atohex";
+      tf_data.calltf    = atohex_calltf;
+      tf_data.compiletf = one_arg_compiletf;
+      tf_data.sizetf    = 0;
+      tf_data.user_data = "$ivl_string_method$atohex";
+      res = vpi_register_systf(&tf_data);
+      vpip_make_systf_system_defined(res);
+
+      tf_data.type      = vpiSysFunc;
+      tf_data.sysfunctype = vpiIntFunc;
+      tf_data.tfname    = "$ivl_string_method$atooct";
+      tf_data.calltf    = atooct_calltf;
+      tf_data.compiletf = one_arg_compiletf;
+      tf_data.sizetf    = 0;
+      tf_data.user_data = "$ivl_string_method$atooct";
+      res = vpi_register_systf(&tf_data);
+      vpip_make_systf_system_defined(res);
+
+      tf_data.type      = vpiSysFunc;
+      tf_data.sysfunctype = vpiIntFunc;
+      tf_data.tfname    = "$ivl_string_method$atobin";
+      tf_data.calltf    = atobin_calltf;
+      tf_data.compiletf = one_arg_compiletf;
+      tf_data.sizetf    = 0;
+      tf_data.user_data = "$ivl_string_method$atobin";
+      res = vpi_register_systf(&tf_data);
+      vpip_make_systf_system_defined(res);
+
+      tf_data.type      = vpiSysFunc;
+      tf_data.sysfunctype = vpiRealFunc;
+      tf_data.tfname    = "$ivl_string_method$atoreal";
+      tf_data.calltf    = atoreal_calltf;
+      tf_data.compiletf = one_arg_compiletf;
+      tf_data.sizetf    = 0;
+      tf_data.user_data = "$ivl_string_method$atoreal";
       res = vpi_register_systf(&tf_data);
       vpip_make_systf_system_defined(res);
 

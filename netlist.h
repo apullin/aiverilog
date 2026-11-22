@@ -963,6 +963,157 @@ using NetERef = NetNetRef<&NetNet::incr_eref, &NetNet::decr_eref>;
  */
 using NetLRef = NetNetRef<&NetNet::incr_lref, &NetNet::decr_lref>;
 
+/* One elaborated WIDTH declaration, with signal references kept alive. */
+class NetWidth : public LineInfo {
+    public:
+      NetWidth(NetScope*scope, NetNet*reference, NetNet*notifier,
+               bool posedge, double limit, double threshold,
+               NetNet*condition, ivl_tchk_cond_t condition_kind)
+      : scope_(scope), reference_(reference), notifier_(notifier),
+        condition_(condition), condition_kind_(condition_kind),
+        posedge_(posedge), limit_(limit), threshold_(threshold) { }
+
+      NetScope*scope() const { return scope_; }
+      NetNet*reference() const { return reference_.get(); }
+      NetNet*notifier() const { return notifier_.get(); }
+      NetNet*condition() const { return condition_.get(); }
+      ivl_tchk_cond_t condition_kind() const { return condition_kind_; }
+      bool posedge() const { return posedge_; }
+      double limit() const { return limit_; }
+      double threshold() const { return threshold_; }
+
+    private:
+      NetScope*scope_;
+      NetERef reference_;
+      NetLRef notifier_;
+      NetERef condition_;
+      ivl_tchk_cond_t condition_kind_;
+      bool posedge_;
+      double limit_, threshold_;
+};
+
+/* One elaborated PERIOD declaration, with signal references kept alive. */
+class NetPeriod : public LineInfo {
+    public:
+      NetPeriod(NetScope*scope, NetNet*reference, NetNet*notifier,
+                bool posedge, double limit,
+                NetNet*condition, ivl_tchk_cond_t condition_kind)
+      : scope_(scope), reference_(reference), notifier_(notifier),
+        condition_(condition), condition_kind_(condition_kind),
+        posedge_(posedge), limit_(limit) { }
+
+      NetScope*scope() const { return scope_; }
+      NetNet*reference() const { return reference_.get(); }
+      NetNet*notifier() const { return notifier_.get(); }
+      NetNet*condition() const { return condition_.get(); }
+      ivl_tchk_cond_t condition_kind() const { return condition_kind_; }
+      bool posedge() const { return posedge_; }
+      double limit() const { return limit_; }
+
+    private:
+      NetScope*scope_;
+      NetERef reference_;
+      NetLRef notifier_;
+      NetERef condition_;
+      ivl_tchk_cond_t condition_kind_;
+      bool posedge_;
+      double limit_;
+};
+
+/* Standalone two-event checks keep both terminals, qualifiers and notifier alive.
+ * Edge values are -1 (negedge), 0 (any change), or 1 (posedge). */
+class NetTwoEventCheck : public LineInfo {
+    public:
+      NetTwoEventCheck(NetScope*scope, NetNet*reference, NetNet*data,
+                       NetNet*notifier, int reference_edge, int data_edge,
+                       double limit, NetNet*reference_condition,
+                       ivl_tchk_cond_t reference_condition_kind,
+                       NetNet*data_condition, ivl_tchk_cond_t data_condition_kind)
+      : scope_(scope), reference_(reference), data_(data), notifier_(notifier),
+        reference_condition_(reference_condition), data_condition_(data_condition),
+        reference_condition_kind_(reference_condition_kind),
+        data_condition_kind_(data_condition_kind),
+        reference_edge_(reference_edge), data_edge_(data_edge), limit_(limit) { }
+
+      NetScope*scope() const { return scope_; }
+      NetNet*reference() const { return reference_.get(); }
+      NetNet*data() const { return data_.get(); }
+      NetNet*notifier() const { return notifier_.get(); }
+      NetNet*reference_condition() const { return reference_condition_.get(); }
+      NetNet*data_condition() const { return data_condition_.get(); }
+      ivl_tchk_cond_t reference_condition_kind() const
+      { return reference_condition_kind_; }
+      ivl_tchk_cond_t data_condition_kind() const { return data_condition_kind_; }
+      int reference_edge() const { return reference_edge_; }
+      int data_edge() const { return data_edge_; }
+      double limit() const { return limit_; }
+
+    private:
+      NetScope*scope_;
+      NetERef reference_, data_;
+      NetLRef notifier_;
+      NetERef reference_condition_, data_condition_;
+      ivl_tchk_cond_t reference_condition_kind_, data_condition_kind_;
+      int reference_edge_, data_edge_;
+      double limit_;
+};
+
+class NetSetup : public NetTwoEventCheck {
+    public:
+      using NetTwoEventCheck::NetTwoEventCheck;
+};
+
+class NetHold : public NetTwoEventCheck {
+    public:
+      using NetTwoEventCheck::NetTwoEventCheck;
+};
+
+class NetRecovery : public NetTwoEventCheck {
+    public:
+      using NetTwoEventCheck::NetTwoEventCheck;
+};
+
+class NetRemoval : public NetTwoEventCheck {
+    public:
+      using NetTwoEventCheck::NetTwoEventCheck;
+};
+
+/* A combined check owns one notifier and two ordered limits. */
+class NetRecRem : public NetTwoEventCheck {
+    public:
+      NetRecRem(NetScope*scope, NetNet*reference, NetNet*data,
+                   NetNet*notifier, int reference_edge, int data_edge,
+                   double recovery_limit, double removal_limit,
+                   NetNet*reference_condition, ivl_tchk_cond_t reference_condition_kind,
+                   NetNet*data_condition, ivl_tchk_cond_t data_condition_kind)
+      : NetTwoEventCheck(scope, reference, data, notifier, reference_edge,
+                         data_edge, recovery_limit, reference_condition,
+                         reference_condition_kind, data_condition,
+                         data_condition_kind), removal_limit_(removal_limit) { }
+      double recovery_limit() const { return limit(); }
+      double removal_limit() const { return removal_limit_; }
+    private:
+      double removal_limit_;
+};
+
+/* A combined check owns one notifier and two ordered limits. */
+class NetSetupHold : public NetTwoEventCheck {
+    public:
+      NetSetupHold(NetScope*scope, NetNet*reference, NetNet*data,
+                   NetNet*notifier, int reference_edge, int data_edge,
+                   double setup_limit, double hold_limit,
+                   NetNet*reference_condition, ivl_tchk_cond_t reference_condition_kind,
+                   NetNet*data_condition, ivl_tchk_cond_t data_condition_kind)
+      : NetTwoEventCheck(scope, reference, data, notifier, reference_edge,
+                         data_edge, setup_limit, reference_condition,
+                         reference_condition_kind, data_condition,
+                         data_condition_kind), hold_limit_(hold_limit) { }
+      double setup_limit() const { return limit(); }
+      double hold_limit() const { return hold_limit_; }
+    private:
+      double hold_limit_;
+};
+
 /*
  * This object type is used for holding local variable values when
  * evaluating constant user functions.
@@ -1138,6 +1289,23 @@ class NetScope : public Definitions, public Attrib {
 	/* These methods set or access events that live in this
 	   scope. */
 
+      void add_width(std::unique_ptr<NetWidth> check)
+      { widths_.push_back(std::move(check)); }
+      void add_period(std::unique_ptr<NetPeriod> check)
+      { periods_.push_back(std::move(check)); }
+      void add_setup(std::unique_ptr<NetSetup> check)
+      { setups_.push_back(std::move(check)); }
+      void add_hold(std::unique_ptr<NetHold> check)
+      { holds_.push_back(std::move(check)); }
+      void add_recovery(std::unique_ptr<NetRecovery> check)
+      { recoveries_.push_back(std::move(check)); }
+      void add_removal(std::unique_ptr<NetRemoval> check)
+      { removals_.push_back(std::move(check)); }
+      void add_recrem(std::unique_ptr<NetRecRem> check)
+      { recrems_.push_back(std::move(check)); }
+      void add_setuphold(std::unique_ptr<NetSetupHold> check)
+      { setupholds_.push_back(std::move(check)); }
+
       void add_event(NetEvent*);
       void rem_event(NetEvent*);
       NetEvent*find_event(perm_string name);
@@ -1282,6 +1450,11 @@ class NetScope : public Definitions, public Attrib {
 	   netclass_t::virtual_root() to also account for inheritance. */
       void is_virtual(bool is_virtual__) { is_virtual_ = is_virtual__; };
       bool is_virtual() const { return is_virtual_; };
+
+	/* Was the method declared with the "static" qualifier. A static
+	   method has no object, so it is called through the class. */
+      void is_static_method(bool is_static__) { is_static_method_ = is_static__; };
+      bool is_static_method() const { return is_static_method_; };
 
 	/* Is the module a cell (is in a `celldefine) */
       void is_cell(bool is_cell__) { is_cell_ = is_cell__; };
@@ -1491,6 +1664,14 @@ class NetScope : public Definitions, public Attrib {
       std::map<perm_string,unsigned int> gate_names_;
 
       NetEvent *events_;
+      std::vector<std::unique_ptr<NetWidth> > widths_;
+      std::vector<std::unique_ptr<NetPeriod> > periods_;
+      std::vector<std::unique_ptr<NetSetup> > setups_;
+      std::vector<std::unique_ptr<NetHold> > holds_;
+      std::vector<std::unique_ptr<NetRecovery> > recoveries_;
+      std::vector<std::unique_ptr<NetRemoval> > removals_;
+      std::vector<std::unique_ptr<NetRecRem> > recrems_;
+      std::vector<std::unique_ptr<NetSetupHold> > setupholds_;
 
       std::map<perm_string,LineInfo*> genvars_;
 
@@ -1520,7 +1701,7 @@ class NetScope : public Definitions, public Attrib {
       std::map<perm_string,std::map<long,interface_port_alias_t> > interface_port_alias_arrays_;
 
       unsigned lcounter_;
-      bool need_const_func_, is_const_func_, is_auto_, is_virtual_, is_cell_, calls_stask_;
+      bool need_const_func_, is_const_func_, is_auto_, is_virtual_, is_static_method_, is_cell_, calls_stask_;
 
       /* Final procedures sets this to notify statements that
 	 they are part of a final procedure. */
@@ -3066,6 +3247,9 @@ class NetAssign_ {
 	// The part select has a specific type and the width of the select will
 	// be that of the type.
       void set_part(NetExpr *loff, ivl_type_t data_type);
+	// Set an unsigned part select with the supplied base type and width.
+	// The offset expression calculates a canonical bit address.
+      void set_part(NetExpr*loff, ivl_type_t data_type, unsigned wid);
 	// Set the member or property name if the signal type is a
 	// class.
       void set_property(const perm_string&name, unsigned int idx);
@@ -3204,7 +3388,7 @@ class NetAssign : public NetAssignBase {
 
     private:
       void eval_func_lval_op_real_(const LineInfo&loc, verireal&lv, const verireal&rv) const;
-      void eval_func_lval_op_(const LineInfo&loc, verinum&lv, const verinum&rv) const;
+      void eval_func_lval_op_(const LineInfo&loc, verinum&lv, const NetExpr*rv) const;
       bool eval_func_lval_(const LineInfo&loc, std::map<perm_string,LocalVar>&ctx,
 			   const NetAssign_*lval, NetExpr*rval_result) const;
 

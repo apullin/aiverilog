@@ -71,6 +71,24 @@ Icarus extensions that cannot be translated:
 * Most Verilog-A constructs.
 
 
+Timing checks
+-------------
+
+With ``-gspecify``, the target emits scalar ``$width`` checks
+with their selected edge, elaborated limit and threshold, and optional
+notifier. Values remain in the containing module's time units, and the
+module timescale is preserved. A module containing only timing checks still
+receives a ``specify`` block. The translated file must also be compiled with
+``-gspecify`` to execute the checks.
+
+Scalar ``$period`` checks are emitted in the same way, with
+their selected edge, elaborated limit, and optional notifier.
+
+For either check the translator preserves the local scalar qualifier after
+``&&&``, including its identifier, comparison operator and constant. An SDF
+WIDTH or PERIOD event with an explicit bare or case-equality condition can
+therefore select the corresponding declaration after recompilation with VVP.
+
 Known Issues and Limitations
 ----------------------------
 
