@@ -348,6 +348,8 @@ extern void functor_ref_lookup(vvp_net_t**ref, char*lab);
 extern vpiHandle vpip_make_prop_queue_ref(char* class_label,
                                           unsigned prop_idx,
                                           unsigned is_queue_flag);
+extern vpiHandle vpip_make_prop_string_ref(char* class_label,
+                                           unsigned prop_idx);
 
 /*
  * This function schedules a lookup of the labeled instruction. The

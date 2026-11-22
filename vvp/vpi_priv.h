@@ -89,6 +89,7 @@ extern const char* direction_as_string(int dir);
 #   define _vpi_at_A   5
 #   define _vpi_at_APV 6
 #   define _vpi_at_PQ  7
+#   define _vpi_at_PS  8
 #endif
 
 
@@ -1098,6 +1099,8 @@ class __vpiPropQueueRef : public __vpiHandle {
 extern vpiHandle vpip_make_prop_queue_ref(char* class_label,
                                           unsigned prop_idx,
                                           unsigned is_queue_flag);
+extern vpiHandle vpip_make_prop_string_ref(char* class_label,
+                                           unsigned prop_idx);
 extern vvp_darray* vpip_vpi_darray_from_handle(vpiHandle ref);
 
 class __vpiCobjectVar : public __vpiBaseVar {

@@ -1548,6 +1548,7 @@ scanf_string_format		vvp_tests/scanf_string_format.json
 scanf_trailing_percent_fail	vvp_tests/scanf_trailing_percent_fail.json
 scanf_width_overflow		vvp_tests/scanf_width_overflow.json
 switch_instance_shadow_fail	vvp_tests/switch_instance_shadow_fail.json
+swrite_class_prop		vvp_tests/swrite_class_prop.json
 task_escaped_name		vvp_tests/task_escaped_name.json
 task_no_ports_argument_fail	vvp_tests/task_no_ports_argument_fail.json
 task_no_ports_empty_arguments_fail	vvp_tests/task_no_ports_empty_arguments_fail.json

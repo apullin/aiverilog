@@ -922,6 +922,13 @@ void vpi_call_delete(vpiHandle item)
 			break;
 		  }
 		  break;
+		case vpiStringVar:
+		  switch (vpi_get(_vpiFromThr, obj->args[arg])) {
+		      case _vpi_at_PS:
+			string_delete(obj->args[arg]);
+			break;
+		  }
+		  break;
 		case vpiMemoryWord:
 		  switch (vpi_get(_vpiFromThr, obj->args[arg])) {
 		      case _vpi_at_A:

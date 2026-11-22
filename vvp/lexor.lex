@@ -291,6 +291,7 @@ width_real ([0-9]+[.][0-9]*|[0-9]*[.][0-9]+)([eE][+-]?[0-9]+)?|[0-9]+[eE][+-]?[0
 "&A" { return K_A; }
 "&APV" { return K_APV; }
 "&PQ" { return K_PQ; }
+"&PS" { return K_PS; }
 "&PV" { return K_PV; }
 
 "%"[.$_/a-zA-Z0-9]+ {
