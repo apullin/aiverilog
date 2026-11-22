@@ -17,6 +17,7 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+# include  "PClass.h"
 # include  "PExpr.h"
 # include  "PScope.h"
 # include  "pform_types.h"
@@ -472,11 +473,15 @@ ivl_type_t type_identifier_t::elaborate_type_raw(Design *des,
       if (type) {
 	    auto class_type = dynamic_cast<const netclass_t*>(type);
 	    if (class_type && class_type->is_template()) {
-		  cerr << get_fileline() << ": error: Class `"
-		       << *identifier_ << "` has parameters without a default "
-		       << "value, so it needs a parameter value assignment."
-		       << endl;
-		  des->errors += 1;
+		  if (class_type->pclass()->has_required_params()) {
+			cerr << get_fileline() << ": error: Class `"
+			     << *identifier_ << "` has parameters without a default "
+			     << "value, so it needs a parameter value assignment."
+			     << endl;
+			des->errors += 1;
+			return type;
+		  }
+		  return class_type->specialize(des, scope, *this, {}, {});
 	    }
 	    return type;
       }
