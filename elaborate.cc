@@ -4702,7 +4702,11 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 	    if (gn_system_verilog()) {
 		    // This could be a method attached to a signal
 		    // or defined in this object?
-		  bool try_implicit_this = scope->get_class_scope() && path_.size() == 1;
+		  const NetScope*c_scope = scope->get_class_scope();
+		  const NetScope*caller = c_scope
+			? find_method_containing_scope(*this, scope) : nullptr;
+		  bool try_implicit_this = c_scope && path_.size() == 1
+			&& caller && !caller->is_static_method();
 		  NetProc *tmp = elaborate_method_(des, scope, try_implicit_this);
 		  if (tmp) return tmp;
 		    // Or it could be a function call ignoring the return?

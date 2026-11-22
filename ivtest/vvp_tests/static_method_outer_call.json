@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "static_method_outer_call.v",
+    "iverilog-args" : [ "-g2012" ]
+}
