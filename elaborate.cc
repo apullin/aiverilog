@@ -3615,6 +3615,82 @@ NetProc* PAssign::elaborate(Design*des, NetScope*scope) const
 {
       ivl_assert(*this, scope);
 
+      if (const PECallMember* cm = dynamic_cast<const PECallMember*>(lval())) {
+	    NetExpr* obj_expr = cm->peek_prefix()->elaborate_expr(des, scope, -1, 0);
+	    if (!obj_expr)
+		  return nullptr;
+	    const pform_name_t& tail = cm->peek_tail();
+	    auto it = tail.begin();
+	    for (size_t idx = 0; idx + 1 < tail.size(); ++it, ++idx) {
+		  const netclass_t* icls = dynamic_cast<const netclass_t*>(obj_expr->net_type());
+		  if (!icls)
+			break;
+		  int pidx = icls->property_idx_from_name(it->name);
+		  if (pidx < 0)
+			break;
+		  ivl_type_t ptype = icls->get_prop_type(pidx);
+		  if (!it->index.empty()) {
+			if (auto arr = dynamic_cast<const netarray_t*>(ptype))
+			      ptype = arr->element_type();
+		  }
+		  if (!dynamic_cast<const netclass_t*>(ptype))
+			break;
+		  NetExpr* cidx = nullptr;
+		  if (!it->index.empty()) {
+			cidx = elab_and_eval(des, scope, it->index.front().msb, -1, false);
+			if (!cidx) {
+			      delete obj_expr;
+			      return nullptr;
+			}
+		  }
+		  NetEProperty* prop = new NetEProperty(obj_expr, pidx, cidx);
+		  prop->set_line(*this);
+		  obj_expr = prop;
+	    }
+	    const netclass_t* cls = dynamic_cast<const netclass_t*>(obj_expr->net_type());
+	    if (!cls) {
+		  cerr << get_fileline() << ": error: Assignment target prefix "
+		       << "must be an expression of class type." << endl;
+		  des->errors += 1;
+		  delete obj_expr;
+		  return nullptr;
+	    }
+	    perm_string tmp_name = scope->local_symbol();
+	    NetNet* tmp_sig = new NetNet(scope, tmp_name, NetNet::REG, cls);
+	    tmp_sig->local_flag(true);
+	    tmp_sig->set_line(*this);
+
+	    NetBlock* blk = new NetBlock(NetBlock::SEQU, 0);
+	    blk->set_line(*this);
+
+	    NetAssign* init_asgn = new NetAssign(new NetAssign_(tmp_sig), obj_expr);
+	    init_asgn->set_line(*this);
+	    blk->append(init_asgn);
+
+	    pform_name_t sub_path;
+	    sub_path.push_back(name_component_t(tmp_name));
+	    for ( ; it != tail.end(); ++it)
+		  sub_path.push_back(*it);
+	    PEIdent* sub_lval = new PEIdent(sub_path, lexical_pos());
+	    sub_lval->set_line(*this);
+
+	    NetProc* sub_proc = nullptr;
+	    if (op_ != 0) {
+		  PAssign sub_asgn(sub_lval, op_, rval());
+		  sub_asgn.set_line(*this);
+		  sub_proc = sub_asgn.elaborate(des, scope);
+		  sub_asgn.clear_rval_();
+	    } else {
+		  PAssign sub_asgn(sub_lval, rval());
+		  sub_asgn.set_line(*this);
+		  sub_proc = sub_asgn.elaborate(des, scope);
+		  sub_asgn.clear_rval_();
+	    }
+	    if (sub_proc)
+		  blk->append(sub_proc);
+	    return blk;
+      }
+
 	/* If this is a compressed assignment, then handle the
 	   elaboration in a specialized function. */
       if (op_ != 0)
@@ -4647,6 +4723,72 @@ NetProc* PCallTask::elaborate_sys(Design*des, NetScope*scope) const
 NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 {
       ivl_assert(*this, scope);
+
+      if (chain_prefix_) {
+	    NetExpr* obj_expr = chain_prefix_->elaborate_expr(des, scope, -1, 0);
+	    if (!obj_expr)
+		  return nullptr;
+	    auto it = path_.name.begin();
+	    for (size_t idx = 0; idx + 1 < path_.name.size(); ++it, ++idx) {
+		  const netclass_t* icls = dynamic_cast<const netclass_t*>(obj_expr->net_type());
+		  if (!icls)
+			break;
+		  int pidx = icls->property_idx_from_name(it->name);
+		  if (pidx < 0)
+			break;
+		  ivl_type_t ptype = icls->get_prop_type(pidx);
+		  if (!it->index.empty()) {
+			if (auto arr = dynamic_cast<const netarray_t*>(ptype))
+			      ptype = arr->element_type();
+		  }
+		  if (!dynamic_cast<const netclass_t*>(ptype))
+			break;
+		  NetExpr* cidx = nullptr;
+		  if (!it->index.empty()) {
+			cidx = elab_and_eval(des, scope, it->index.front().msb, -1, false);
+			if (!cidx) {
+			      delete obj_expr;
+			      return nullptr;
+			}
+		  }
+		  NetEProperty* prop = new NetEProperty(obj_expr, pidx, cidx);
+		  prop->set_line(*this);
+		  obj_expr = prop;
+	    }
+	    const netclass_t* cls = dynamic_cast<const netclass_t*>(obj_expr->net_type());
+	    if (!cls) {
+		  cerr << get_fileline() << ": error: The prefix of a chained "
+		       << "call must be an expression of class type." << endl;
+		  des->errors += 1;
+		  delete obj_expr;
+		  return nullptr;
+	    }
+	    perm_string tmp_name = scope->local_symbol();
+	    NetNet* tmp_sig = new NetNet(scope, tmp_name, NetNet::REG, cls);
+	    tmp_sig->local_flag(true);
+	    tmp_sig->set_line(*this);
+
+	    NetBlock* blk = new NetBlock(NetBlock::SEQU, 0);
+	    blk->set_line(*this);
+
+	    NetAssign* init_asgn = new NetAssign(new NetAssign_(tmp_sig), obj_expr);
+	    init_asgn->set_line(*this);
+	    blk->append(init_asgn);
+
+	    pform_name_t sub_path;
+	    sub_path.push_back(name_component_t(tmp_name));
+	    for ( ; it != path_.name.end(); ++it)
+		  sub_path.push_back(*it);
+	    PCallTask sub_call(sub_path, parms_);
+	    sub_call.set_line(*this);
+	    if (void_cast_)
+		  sub_call.void_cast();
+
+	    NetProc* sub_proc = sub_call.elaborate(des, scope);
+	    if (sub_proc)
+		  blk->append(sub_proc);
+	    return blk;
+      }
 
       symbol_search_results search_results;
       NetScope *task = nullptr;

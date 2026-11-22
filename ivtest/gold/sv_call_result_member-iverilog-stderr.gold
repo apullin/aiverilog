@@ -1,0 +1,1 @@
+ivltests/sv_call_result_member.v:71: warning: User function 'val' is being called as a task.

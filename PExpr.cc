@@ -728,3 +728,31 @@ PEVoid::PEVoid()
 PEVoid::~PEVoid()
 {
 }
+
+PECallMember::PECallMember(PExpr* prefix, const pform_name_t& tail)
+: prefix_(prefix), tail_(tail)
+{
+}
+
+PECallMember::~PECallMember()
+{
+      delete prefix_;
+}
+
+void PECallMember::dump(ostream&out) const
+{
+      if (prefix_)
+	    prefix_->dump(out);
+      out << "." << tail_;
+}
+
+void PECallMember::declare_implicit_nets(LexicalScope*scope, NetNet::Type type)
+{
+      if (prefix_)
+	    prefix_->declare_implicit_nets(scope, type);
+}
+
+bool PECallMember::has_aa_term(Design*des, NetScope*scope) const
+{
+      return prefix_ ? prefix_->has_aa_term(des, scope) : false;
+}

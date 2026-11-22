@@ -300,6 +300,12 @@ static int eval_object_null(ivl_expr_t ex)
 void draw_load_property_object(ivl_expr_t expr)
 {
       ivl_signal_t sig = ivl_expr_signal(expr);
+      if (sig == 0) {
+	    ivl_expr_t obj_ex = ivl_expr_oper2(expr);
+	    assert(obj_ex);
+	    draw_eval_object(obj_ex);
+	    return;
+      }
       if (ivl_signal_dimensions(sig) == 0) {
 	    fprintf(vvp_out, "    %%load/obj v%p_0;\n", sig);
 	    return;

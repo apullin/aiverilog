@@ -171,6 +171,11 @@ PCallTask::PCallTask(const pform_name_t &n, const list<named_pexpr_t> &p)
 {
 }
 
+PCallTask::PCallTask(const pform_name_t &n, const vector<named_pexpr_t> &p)
+: path_(n), parms_(p)
+{
+}
+
 PCallTask::PCallTask(const pform_scoped_name_t &n,
 		     const list<named_pexpr_t> &p)
 : path_(n), parms_(p.begin(), p.end())
@@ -183,8 +188,29 @@ PCallTask::PCallTask(perm_string n, const list<named_pexpr_t> &p)
       path_.name.push_back(name_component_t(n));
 }
 
+PCallTask::PCallTask(PExpr* chain_prefix, const pform_name_t &method,
+		     const list<named_pexpr_t> &p)
+: path_(method), parms_(p.begin(), p.end()), chain_prefix_(chain_prefix)
+{
+}
+
 PCallTask::~PCallTask()
 {
+      delete chain_prefix_;
+}
+
+PExpr* PCallTask::take_call_expr()
+{
+      PECallFunction* res;
+      if (chain_prefix_) {
+	    res = new PECallFunction(chain_prefix_, path_.name, parms_);
+	    chain_prefix_ = nullptr;
+      } else {
+	    res = new PECallFunction(path_, parms_);
+      }
+      res->set_line(*this);
+      res->lexical_pos(lexical_pos());
+      return res;
 }
 
 const pform_name_t& PCallTask::path() const

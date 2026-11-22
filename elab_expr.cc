@@ -402,8 +402,28 @@ static void show_cast_type(ostream&out, ivl_variable_type_t type,
  * (the value before the final ".method(args)").
  */
 static const netclass_t* resolve_call_chain_prefix_class(Design*des, NetScope*scope,
-							 PECallFunction* link)
+							 const PExpr* prefix_expr)
 {
+      if (prefix_expr == 0) return 0;
+
+      if (const PECallMember* cm = dynamic_cast<const PECallMember*>(prefix_expr)) {
+	    const netclass_t* cur_class = resolve_call_chain_prefix_class(
+		  des, scope, cm->peek_prefix());
+	    for (const auto& comp : cm->peek_tail()) {
+		  if (cur_class == 0) return 0;
+		  int pidx = cur_class->property_idx_from_name(comp.name);
+		  if (pidx < 0) return 0;
+		  ivl_type_t ptype = cur_class->get_prop_type(pidx);
+		  if (!comp.index.empty()) {
+			if (auto arr = dynamic_cast<const netarray_t*>(ptype))
+			      ptype = arr->element_type();
+		  }
+		  cur_class = dynamic_cast<const netclass_t*>(ptype);
+	    }
+	    return cur_class;
+      }
+
+      const PECallFunction* link = dynamic_cast<const PECallFunction*>(prefix_expr);
       if (link == 0) return 0;
 
       if (link->peek_chain_prefix() == 0) {
@@ -421,8 +441,22 @@ static const netclass_t* resolve_call_chain_prefix_class(Design*des, NetScope*sc
 	    if (!sr.is_scope() && sr.net && sr.net->data_type() == IVL_VT_CLASS
 		&& !sr.path_tail.empty()) {
 		  const netclass_t* cur_class = dynamic_cast<const netclass_t*>(sr.type);
-		  for (auto it = sr.path_tail.begin(); it != sr.path_tail.end(); ++it) {
+		  auto it = sr.path_tail.begin();
+		  for (size_t idx = 0; it != sr.path_tail.end(); ++it, ++idx) {
 			if (cur_class == 0) return 0;
+			bool is_last = (idx + 1 == sr.path_tail.size());
+			if (!is_last) {
+			      int pidx = cur_class->property_idx_from_name(it->name);
+			      if (pidx >= 0) {
+				    ivl_type_t ptype = cur_class->get_prop_type(pidx);
+				    if (!it->index.empty()) {
+					  if (auto arr = dynamic_cast<const netarray_t*>(ptype))
+						ptype = arr->element_type();
+				    }
+				    cur_class = dynamic_cast<const netclass_t*>(ptype);
+				    continue;
+			      }
+			}
 			NetScope* meth = cur_class->method_from_name(it->name);
 			if (meth == 0) return 0;
 			const NetNet* res = meth->find_signal(meth->basename());
@@ -434,11 +468,23 @@ static const netclass_t* resolve_call_chain_prefix_class(Design*des, NetScope*sc
 	    return 0;
       }
 
-      PECallFunction* inner = dynamic_cast<PECallFunction*>(
-	    const_cast<PExpr*>(link->peek_chain_prefix()));
-      if (inner == 0) return 0;
+      const netclass_t* recv_class = resolve_call_chain_prefix_class(
+	    des, scope, link->peek_chain_prefix());
+      if (recv_class == 0) return 0;
 
-      const netclass_t* recv_class = resolve_call_chain_prefix_class(des, scope, inner);
+      const pform_name_t& mpath = link->peek_path().name;
+      auto it = mpath.begin();
+      for (size_t idx = 0; idx + 1 < mpath.size(); ++it, ++idx) {
+	    if (recv_class == 0) return 0;
+	    int pidx = recv_class->property_idx_from_name(it->name);
+	    if (pidx < 0) return 0;
+	    ivl_type_t ptype = recv_class->get_prop_type(pidx);
+	    if (!it->index.empty()) {
+		  if (auto arr = dynamic_cast<const netarray_t*>(ptype))
+			ptype = arr->element_type();
+	    }
+	    recv_class = dynamic_cast<const netclass_t*>(ptype);
+      }
       if (recv_class == 0) return 0;
 
       perm_string mname = peek_tail_name(link->peek_path());
@@ -3422,11 +3468,23 @@ unsigned PECallFunction::test_width_chain_(Design*des, NetScope*scope,
 					   width_mode_t&)
 {
       expr_width_ = 0;
-      PECallFunction* inner_pf = dynamic_cast<PECallFunction*>(chain_prefix_);
-      if (inner_pf == 0) return 0;
+      if (chain_prefix_ == 0) return 0;
 
-      const netclass_t* cls = resolve_call_chain_prefix_class(des, scope, inner_pf);
+      const netclass_t* cls = resolve_call_chain_prefix_class(des, scope, chain_prefix_);
       if (cls == 0) return 0;
+
+      auto it = path_.name.begin();
+      for (size_t idx = 0; idx + 1 < path_.name.size(); ++it, ++idx) {
+	    int pidx = cls->property_idx_from_name(it->name);
+	    if (pidx < 0) return 0;
+	    ivl_type_t ptype = cls->get_prop_type(pidx);
+	    if (!it->index.empty()) {
+		  if (auto arr = dynamic_cast<const netarray_t*>(ptype))
+			ptype = arr->element_type();
+	    }
+	    cls = dynamic_cast<const netclass_t*>(ptype);
+	    if (cls == 0) return 0;
+      }
 
       perm_string mname = peek_tail_name(path_);
       NetScope* mscope = cls->method_from_name(mname);
@@ -5650,6 +5708,37 @@ NetExpr* PECallFunction::elaborate_expr_chain_(Design*des, NetScope*scope,
 	    des->errors += 1;
 	    delete inner;
 	    return 0;
+      }
+
+      auto it = path_.name.begin();
+      for (size_t idx = 0; idx + 1 < path_.name.size(); ++it, ++idx) {
+	    int pidx = cls->property_idx_from_name(it->name);
+	    if (pidx < 0) {
+		  cerr << get_fileline() << ": error: Class " << cls->get_name()
+		       << " has no property named `" << it->name << "'." << endl;
+		  des->errors += 1;
+		  delete inner;
+		  return 0;
+	    }
+	    NetExpr* canon_idx = nullptr;
+	    if (!it->index.empty()) {
+		  canon_idx = elab_and_eval(des, scope, it->index.front().msb, -1, false);
+		  if (!canon_idx) {
+			delete inner;
+			return 0;
+		  }
+	    }
+	    NetEProperty* prop = new NetEProperty(inner, pidx, canon_idx);
+	    prop->set_line(*this);
+	    inner = prop;
+	    cls = dynamic_cast<const netclass_t*>(inner->net_type());
+	    if (cls == 0) {
+		  cerr << get_fileline() << ": error: Property `" << it->name
+		       << "' in chained call is not a class handle." << endl;
+		  des->errors += 1;
+		  delete inner;
+		  return 0;
+	    }
       }
 
       perm_string method_name = peek_tail_name(path_);
@@ -11858,6 +11947,209 @@ NetExpr* PEUnary::elaborate_expr_bits_(NetExpr*operand, unsigned expr_wid) const
 NetExpr* PEVoid::elaborate_expr(Design*, NetScope*, unsigned, unsigned) const
 {
       return 0;
+}
+
+unsigned PECallMember::test_width(Design*des, NetScope*scope, width_mode_t&)
+{
+      expr_width_ = 0;
+      const netclass_t* cls = resolve_call_chain_prefix_class(des, scope, prefix_);
+      if (cls == 0) return 0;
+
+      ivl_type_t cur_type = cls;
+      for (const auto& comp : tail_) {
+	    const netclass_t* cur_cls = dynamic_cast<const netclass_t*>(cur_type);
+	    if (!cur_cls) return 0;
+	    int pidx = cur_cls->property_idx_from_name(comp.name);
+	    if (pidx < 0) return 0;
+	    cur_type = cur_cls->get_prop_type(pidx);
+	    if (!comp.index.empty()) {
+		  size_t consumed = 0;
+		  if (auto uarr = dynamic_cast<const netuarray_t*>(cur_type)) {
+			consumed = uarr->static_dimensions().size();
+			if (consumed <= comp.index.size())
+			      cur_type = uarr->element_type();
+		  } else if (auto darr = dynamic_cast<const netarray_t*>(cur_type)) {
+			consumed = 1;
+			cur_type = darr->element_type();
+		  }
+		  if (consumed < comp.index.size()) {
+			const index_component_t& tail_idx = comp.index.back();
+			if (tail_idx.sel == index_component_t::SEL_BIT) {
+			      expr_type_ = cur_type->base_type();
+			      expr_width_ = 1;
+			      min_width_ = 1;
+			      signed_flag_ = false;
+			      return 1;
+			}
+			long off = 0;
+			unsigned long wid = 0;
+			if (calculate_part(this, des, scope, tail_idx, off, wid)) {
+			      expr_type_ = cur_type->base_type();
+			      expr_width_ = wid;
+			      min_width_ = wid;
+			      signed_flag_ = false;
+			      return wid;
+			}
+		  }
+	    }
+      }
+
+      if (!cur_type) return 0;
+      expr_type_ = cur_type->base_type();
+      expr_width_ = cur_type->packed_width();
+      min_width_ = expr_width_;
+      signed_flag_ = cur_type->get_signed();
+      return expr_width_;
+}
+
+NetExpr* PECallMember::elaborate_expr(Design*des, NetScope*scope,
+				      ivl_type_t type, unsigned flags) const
+{
+      unsigned width = type ? type->packed_width() : 1;
+      if (const netdarray_t* darray = dynamic_cast<const netdarray_t*>(type))
+	    width = darray->element_type()->packed_width();
+      return elaborate_expr(des, scope, width ? width : 1, flags);
+}
+
+NetExpr* PECallMember::elaborate_expr(Design*des, NetScope*scope,
+				      unsigned expr_wid, unsigned flags) const
+{
+      NetExpr* result = elaborate_expr_(des, scope, flags);
+      if (!result || !type_is_vectorable(result->expr_type()))
+	    return result;
+      return pad_to_width(result, expr_wid, result->has_sign(), *this);
+}
+
+NetExpr* PECallMember::elaborate_expr_(Design*des, NetScope*scope,
+				       unsigned flags) const
+{
+      flags &= ~SYS_TASK_ARG;
+      ivl_assert(*this, prefix_);
+
+      NetExpr* cur_expr = prefix_->elaborate_expr(des, scope, -1, flags);
+      if (!cur_expr) return nullptr;
+
+      for (const auto& comp : tail_) {
+	    const netclass_t* cls = dynamic_cast<const netclass_t*>(cur_expr->net_type());
+	    if (!cls) {
+		  cerr << get_fileline() << ": error: Member select `"
+		       << comp.name << "' requires an expression of class type."
+		       << endl;
+		  des->errors += 1;
+		  delete cur_expr;
+		  return nullptr;
+	    }
+	    int pidx = cls->property_idx_from_name(comp.name);
+	    if (pidx < 0) {
+		  cerr << get_fileline() << ": error: Class " << cls->get_name()
+		       << " has no property named `" << comp.name << "'." << endl;
+		  des->errors += 1;
+		  delete cur_expr;
+		  return nullptr;
+	    }
+
+	    ivl_type_t ptype = cls->get_prop_type(pidx);
+	    list<index_component_t> rem_idx = comp.index;
+	    NetExpr* canon_idx = nullptr;
+
+	    if (!rem_idx.empty()) {
+		  if (const netuarray_t* uarr = dynamic_cast<const netuarray_t*>(ptype)) {
+			const netranges_t& dims = uarr->static_dimensions();
+			if (rem_idx.size() >= dims.size()) {
+			      list<index_component_t> u_idx;
+			      for (size_t i = 0; i < dims.size(); ++i) {
+				    u_idx.push_back(rem_idx.front());
+				    rem_idx.pop_front();
+			      }
+			      canon_idx = make_canonical_index(
+				    des, scope, this, u_idx, uarr, false);
+			      if (!canon_idx) {
+				    delete cur_expr;
+				    return nullptr;
+			      }
+			}
+		  } else if (dynamic_cast<const netdarray_t*>(ptype)) {
+			index_component_t d_idx = rem_idx.front();
+			rem_idx.pop_front();
+			canon_idx = elab_and_eval(des, scope, d_idx.msb, -1, false);
+			if (!canon_idx) {
+			      delete cur_expr;
+			      return nullptr;
+			}
+		  }
+	    }
+
+	    NetEProperty* prop = new NetEProperty(cur_expr, pidx, canon_idx);
+	    prop->set_line(*this);
+	    cur_expr = prop;
+
+	    if (!rem_idx.empty()) {
+		  const netvector_t* vtype = dynamic_cast<const netvector_t*>(cur_expr->net_type());
+		  list<long> prefix_indices;
+		  if (!evaluate_index_prefix(des, scope, prefix_indices, rem_idx)) {
+			delete cur_expr;
+			return nullptr;
+		  }
+		  const index_component_t& idx = rem_idx.back();
+		  if (idx.sel == index_component_t::SEL_BIT) {
+			NetExpr* bit = elab_and_eval(des, scope, idx.msb, -1, false);
+			if (!bit) {
+			      delete cur_expr;
+			      return nullptr;
+			}
+			if (vtype && vtype->packed_dims().size() == 1) {
+			      const netrange_t& rng = vtype->packed_dims().back();
+			      if (rng.get_msb() >= rng.get_lsb()) {
+				    if (rng.get_lsb() != 0) {
+					  NetEConst* c = new NetEConst(verinum(-rng.get_lsb()));
+					  c->set_line(*this);
+					  unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+					  bit = new NetEBAdd('+', pad_to_width(bit, w, *this),
+							     pad_to_width(c, w, *this), w, true);
+					  bit->set_line(*this);
+					  eval_expr(bit);
+				    }
+			      } else {
+				    NetEConst* c = new NetEConst(verinum(rng.get_lsb()));
+				    c->set_line(*this);
+				    unsigned w = max(bit->expr_width(), c->expr_width()) + 1;
+				    bit = new NetEBAdd('-', pad_to_width(c, w, *this),
+						       pad_to_width(bit, w, *this), w, true);
+				    bit->set_line(*this);
+				    eval_expr(bit);
+			      }
+			}
+			NetESelect* sel = new NetESelect(cur_expr, bit, 1);
+			sel->set_line(*this);
+			cur_expr = sel;
+		  } else if (vtype) {
+			long tail_off = 0;
+			unsigned long tail_wid = 0;
+			if (!calculate_part(this, des, scope, idx, tail_off, tail_wid)) {
+			      delete cur_expr;
+			      return nullptr;
+			}
+			long loff = 0;
+			unsigned long lwid = 0;
+			if (!prefix_to_slice(vtype->packed_dims(), prefix_indices,
+					     tail_off, loff, lwid)) {
+			      delete cur_expr;
+			      NetExpr* oob = (vtype->base_type() == IVL_VT_BOOL)
+				    ? make_const_0(lwid * tail_wid)
+				    : make_const_x(lwid * tail_wid);
+			      oob->set_line(*this);
+			      cur_expr = oob;
+			} else {
+			      NetESelect* sel = new NetESelect(cur_expr, make_const_val(loff),
+							       lwid * tail_wid);
+			      sel->set_line(*this);
+			      cur_expr = sel;
+			}
+		  }
+	    }
+      }
+
+      return cur_expr;
 }
 
 NetNet* Design::find_discipline_reference(ivl_discipline_t dis, NetScope*scope)

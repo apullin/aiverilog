@@ -407,6 +407,22 @@ NetEProperty::NetEProperty(NetNet*net, size_t pidx, NetExpr*idx,
       }
 }
 
+NetEProperty::NetEProperty(NetExpr*obj_expr, size_t pidx, NetExpr*idx)
+: net_(nullptr), pidx_(pidx), index_(idx), array_idx_(obj_expr)
+{
+      const netclass_t*use_type = dynamic_cast<const netclass_t*>(obj_expr->net_type());
+      ivl_assert(*this, use_type);
+
+      ivl_type_t prop_type = use_type->get_prop_type(pidx_);
+      if (idx) {
+	    auto array_type = dynamic_cast<const netarray_t*>(prop_type);
+	    ivl_assert(*this, array_type);
+	    set_net_type(array_type->element_type());
+      } else {
+	    set_net_type(prop_type);
+      }
+}
+
 NetEProperty::~NetEProperty() = default;
 
 NetESelect::NetESelect(NetExpr*exp, NetExpr*base, unsigned wid,

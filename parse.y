@@ -1440,6 +1440,7 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 
 %type <expr>  assignment_pattern expression expression_opt expr_mintypmax
 %type <expr>  expr_primary_or_typename expr_primary call_chain_expr type_value
+%type <expr>  chained_member_target
 %type <expr>  class_new dynamic_array_new
 %type <expr>  net_decl_initializer_opt var_decl_initializer_opt initializer_opt
 %type <expr>  inc_or_dec_expression inside_expression lpvalue
@@ -1510,7 +1511,7 @@ Module::port_t *module_declare_interface_port(const YYLTYPE&loc, char *type,
 
 %type <statement> analog_statement
 
-%type <subroutine_call> subroutine_call
+%type <subroutine_call> subroutine_call subroutine_call_parens
 
 %type <join_keyword> join_keyword
 
@@ -5195,6 +5196,29 @@ call_chain_expr
 	delete $3;
 	$$ = tmp;
       }
+  | class_hierarchy_identifier argument_list_parens
+      { PECallFunction*tmp = pform_make_call_function(@1, *$1, *$2);
+	delete $1;
+	delete $2;
+	$$ = tmp;
+      }
+  | package_scope hierarchy_identifier { lex_in_package_scope(0); } argument_list_parens
+      { pform_scoped_name_t call_path($1, *$2);
+	auto tmp = new PECallFunction(call_path, *$4);
+	FILE_NAME(tmp, @2);
+	delete $2;
+	delete $4;
+	$$ = tmp;
+      }
+  | class_scope hierarchy_identifier argument_list_parens
+      { pform_scoped_name_t call_path(nullptr, *$2);
+	call_path.class_scope.reset($1);
+	auto tmp = new PECallFunction(call_path, *$3);
+	FILE_NAME(tmp, @2);
+	delete $2;
+	delete $3;
+	$$ = tmp;
+      }
   | call_chain_expr '.' hierarchy_identifier attribute_list_opt argument_list_parens
       { PECallFunction*tmp = pform_make_chained_call_function(@2, $1, *$3, *$5);
 	delete $3;
@@ -5285,6 +5309,13 @@ expr_primary
      so `id (` is not reduced as PEIdent + error. */
   | call_chain_expr
       { $$ = $1; }
+  | call_chain_expr '.' hierarchy_identifier attribute_list_opt
+      { PECallMember*tmp = new PECallMember($1, *$3);
+	FILE_NAME(tmp, @2);
+	delete $3;
+	delete $4;
+	$$ = tmp;
+      }
   /* SV: q.find with (item == 1) — iterator names item, index */
   | hierarchy_identifier K_with '(' expression ')'
       { std::vector<named_pexpr_t> empty;
@@ -5311,12 +5342,6 @@ expr_primary
      function call. If a system identifier, then a system function
      call. It can also be a call to a class method (function). */
 
-  | class_hierarchy_identifier argument_list_parens
-      { PECallFunction*tmp = pform_make_call_function(@1, *$1, *$2);
-	delete $1;
-	delete $2;
-	$$ = tmp;
-      }
   | SYSTEM_IDENTIFIER argument_list_parens
       { perm_string tn = lex_strings.make($1);
 	PECallFunction *tmp = new PECallFunction(tn, *$2);
@@ -5325,23 +5350,6 @@ expr_primary
 	FILE_NAME(tmp, @1);
 	delete[]$1;
 	delete $2;
-	$$ = tmp;
-      }
-  | package_scope hierarchy_identifier { lex_in_package_scope(0); } argument_list_parens
-      { pform_scoped_name_t call_path($1, *$2);
-	auto tmp = new PECallFunction(call_path, *$4);
-	FILE_NAME(tmp, @2);
-	delete $2;
-	delete $4;
-	$$ = tmp;
-      }
-  | class_scope hierarchy_identifier argument_list_parens
-      { pform_scoped_name_t call_path(nullptr, *$2);
-	call_path.class_scope.reset($1);
-	auto tmp = new PECallFunction(call_path, *$3);
-	FILE_NAME(tmp, @2);
-	delete $2;
-	delete $3;
 	$$ = tmp;
       }
   | K_this
@@ -8142,15 +8150,15 @@ spec_notifier
       { $$ = $2; }
   ;
 
-subroutine_call
-  : hierarchy_identifier argument_list_parens_opt
+subroutine_call_parens
+  : hierarchy_identifier argument_list_parens
       { PCallTask*tmp = pform_make_call_task(@1, *$1, *$2);
 	delete $1;
 	delete $2;
 	$$ = tmp;
       }
   | package_scope hierarchy_identifier { lex_in_package_scope(nullptr); }
-    argument_list_parens_opt
+    argument_list_parens
       { pform_scoped_name_t call_path($1, *$2);
 	auto tmp = new PCallTask(call_path, *$4);
 	FILE_NAME(tmp, @2);
@@ -8158,7 +8166,7 @@ subroutine_call
 	delete $4;
 	$$ = tmp;
       }
-  | class_scope hierarchy_identifier argument_list_parens_opt
+  | class_scope hierarchy_identifier argument_list_parens
       { pform_scoped_name_t call_path(nullptr, *$2);
 	call_path.class_scope.reset($1);
 	auto tmp = new PCallTask(call_path, *$3);
@@ -8167,11 +8175,57 @@ subroutine_call
 	delete $3;
 	$$ = tmp;
       }
-  | class_hierarchy_identifier argument_list_parens_opt
+  | class_hierarchy_identifier argument_list_parens
       { PCallTask*tmp = new PCallTask(*$1, *$2);
 	FILE_NAME(tmp, @1);
 	delete $1;
 	delete $2;
+	$$ = tmp;
+      }
+  | chained_member_target argument_list_parens
+      { PECallMember*cm = static_cast<PECallMember*>($1);
+	pform_name_t tail = cm->peek_tail();
+	PExpr*prefix = cm->release_prefix();
+	delete cm;
+	PCallTask*tmp = new PCallTask(prefix, tail, *$2);
+	FILE_NAME(tmp, @1);
+	delete $2;
+	$$ = tmp;
+      }
+  ;
+
+subroutine_call
+  : subroutine_call_parens
+      { $$ = $1; }
+  | hierarchy_identifier
+      { std::list<named_pexpr_t> pt;
+	PCallTask*tmp = pform_make_call_task(@1, *$1, pt);
+	delete $1;
+	$$ = tmp;
+      }
+  | package_scope hierarchy_identifier
+      { lex_in_package_scope(nullptr);
+	std::list<named_pexpr_t> pt;
+	pform_scoped_name_t call_path($1, *$2);
+	auto tmp = new PCallTask(call_path, pt);
+	FILE_NAME(tmp, @2);
+	delete $2;
+	$$ = tmp;
+      }
+  | class_scope hierarchy_identifier
+      { std::list<named_pexpr_t> pt;
+	pform_scoped_name_t call_path(nullptr, *$2);
+	call_path.class_scope.reset($1);
+	auto tmp = new PCallTask(call_path, pt);
+	FILE_NAME(tmp, @2);
+	delete $2;
+	$$ = tmp;
+      }
+  | class_hierarchy_identifier
+      { std::list<named_pexpr_t> pt;
+	PCallTask*tmp = new PCallTask(*$1, pt);
+	FILE_NAME(tmp, @1);
+	delete $1;
 	$$ = tmp;
       }
   | SYSTEM_IDENTIFIER argument_list_parens_opt
@@ -8186,6 +8240,27 @@ subroutine_call
 	std::list<named_pexpr_t> pt;
 	PCallTask*tmp = pform_make_call_task(@1, *$1, pt);
 	delete $1;
+	$$ = tmp;
+      }
+  | chained_member_target
+      { std::list<named_pexpr_t> pt;
+	PECallMember*cm = static_cast<PECallMember*>($1);
+	pform_name_t tail = cm->peek_tail();
+	PExpr*prefix = cm->release_prefix();
+	delete cm;
+	PCallTask*tmp = new PCallTask(prefix, tail, pt);
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+  ;
+
+chained_member_target
+  : subroutine_call_parens '.' hierarchy_identifier
+      { PExpr*prefix = $1->take_call_expr();
+	delete $1;
+	PECallMember*tmp = new PECallMember(prefix, *$3);
+	FILE_NAME(tmp, @2);
+	delete $3;
 	$$ = tmp;
       }
   ;
@@ -8511,6 +8586,42 @@ non_block_statement_item
       { PAssign*tmp = new PAssign($1,$3);
 	FILE_NAME(tmp, @1);
 	$$ = tmp;
+      }
+
+  | chained_member_target '=' expression ';'
+      { PAssign*tmp = new PAssign($1, $3);
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+
+  | chained_member_target '=' class_new ';'
+      { PAssign*tmp = new PAssign($1, $3);
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+
+  | chained_member_target '=' dynamic_array_new ';'
+      { PAssign*tmp = new PAssign($1, $3);
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+
+  | chained_member_target compressed_operator expression ';'
+      { PAssign*tmp = new PAssign($1, $2, $3);
+	FILE_NAME(tmp, @1);
+	$$ = tmp;
+      }
+
+  | chained_member_target K_INCR ';'
+      { PEUnary*u = new PEUnary('i', $1);
+	FILE_NAME(u, @1);
+	$$ = pform_compressed_assign_from_inc_dec(@1, u);
+      }
+
+  | chained_member_target K_DECR ';'
+      { PEUnary*u = new PEUnary('d', $1);
+	FILE_NAME(u, @1);
+	$$ = pform_compressed_assign_from_inc_dec(@1, u);
       }
 
   | K_wait '(' expression ')' statement_or_null

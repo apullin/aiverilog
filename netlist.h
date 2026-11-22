@@ -5028,6 +5028,7 @@ class NetEProperty : public NetExpr {
     public:
       NetEProperty(NetNet*n, size_t pidx_, NetExpr*canon_index =0,
 		   NetExpr*array_idx =0);
+      NetEProperty(NetExpr*obj_expr, size_t pidx_, NetExpr*canon_index =0);
       ~NetEProperty() override;
 
       inline const NetNet* get_sig() const { return net_.get(); }
