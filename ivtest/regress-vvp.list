@@ -1555,6 +1555,7 @@ task_return_fail1		vvp_tests/task_return_fail1.json
 task_return_fail2		vvp_tests/task_return_fail2.json
 test_va_math			vvp_tests/test_va_math.json
 test_vams_math			vvp_tests/test_vams_math.json
+tf_default_unbased_unsized	vvp_tests/tf_default_unbased_unsized.json
 timeformat_invalid_range	vvp_tests/timeformat_invalid_range.json
 timeformat_neg_width		vvp_tests/timeformat_neg_width.json
 timing_check_delayed_signals	vvp_tests/timing_check_delayed_signals.json
