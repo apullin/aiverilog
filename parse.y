@@ -1864,6 +1864,8 @@ class_item /* IEEE1800-2005: A.1.8 */
 
   | parameter_declaration
 
+  | package_import_declaration
+
     /* Empty class item */
   | ';'
 

@@ -503,6 +503,7 @@ static netclass_t* elaborate_scope_class_start(Design*des, NetScope*scope,
       set_scope_timescale(des, cls_scope, p_class);
 
       cls_scope->add_typedefs(&p_class->typedefs);
+      cls_scope->add_imports(&p_class->explicit_imports);
 
       collect_scope_parameters(des, cls_scope, p_class->parameters);
 
