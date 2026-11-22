@@ -105,7 +105,10 @@ static void get_vec_from_lval_slice(ivl_lval_t lval, struct vec_slice_info*slice
 	    slice->x_flag = allocate_flag();
 	    draw_eval_expr_into_integer(ivl_lval_part_off(lval), slice->part_idx_reg);
 	    fprintf(vvp_out, "    %%flag_mov %u, 4;\n", slice->x_flag);
-	    fprintf(vvp_out, "    %%load/str v%p_0;\n", sig);
+	    if (signal_is_return_value(sig))
+		  fprintf(vvp_out, "    %%retload/str 0;\n");
+	    else
+		  fprintf(vvp_out, "    %%load/str v%p_0;\n", sig);
 	    fprintf(vvp_out, "    %%substr/vec4 %d, %u;\n", slice->part_idx_reg, wid);
 	    fprintf(vvp_out, "    %%pop/str 1;\n");
 	    return;
@@ -375,9 +378,13 @@ static void put_vec_to_lval_slice(ivl_lval_t lval, const struct vec_slice_info*s
 	    }
 	    store_vec4_to_dynamic_array(sig, wid);
       } else if (ivl_signal_data_type(sig) == IVL_VT_STRING) {
-	      /* TODO: Support character assignments to string function
-	         return values. */
-	    fprintf(vvp_out, "    %%putc/str/vec4 v%p_0, %d;\n", sig, part_idx);
+	    if (signal_is_return_value(sig)) {
+		  fprintf(vvp_out, "    %%retload/str 0;\n");
+		  fprintf(vvp_out, "    %%setc/str/vec4 %d;\n", part_idx);
+		  fprintf(vvp_out, "    %%ret/str 0;\n");
+	    } else {
+		  fprintf(vvp_out, "    %%putc/str/vec4 v%p_0, %d;\n", sig, part_idx);
+	    }
       } else if (is_array) {
 	    fprintf(vvp_out, "    %%store/vec4a v%p, %d, %d;\n", sig, word_idx, part_idx);
       } else if (signal_is_return_value(sig)) {

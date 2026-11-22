@@ -358,6 +358,7 @@ static const struct opcode_table_s opcode_table[] = {
       { "%set/dar/obj/str", of_SET_DAR_OBJ_STR, 1,{OA_NUMBER,OA_NONE,OA_NONE} },
       { "%set/dar/obj/vec4",of_SET_DAR_OBJ_VEC4,1,{OA_NUMBER,OA_NONE,OA_NONE} },
       { "%set/vec4",        of_SET_VEC4,        2,{OA_NUMBER,OA_BIT1,OA_NONE} },
+      { "%setc/str/vec4",   of_SETC_STR_VEC4,   1,{OA_NUMBER,OA_NONE,OA_NONE} },
       { "%shiftl",   of_SHIFTL,   1, {OA_NUMBER, OA_NONE,   OA_NONE} },
       { "%shiftli",  of_SHIFTLI,  1, {OA_NUMBER, OA_NONE,   OA_NONE} },
       { "%shiftr",   of_SHIFTR,   1, {OA_NUMBER, OA_NONE,   OA_NONE} },

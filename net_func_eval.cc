@@ -363,40 +363,66 @@ bool NetAssign::eval_func_lval_(const LineInfo&loc,
 		  return true;
 	    }
 
-	    if (old_lval == 0) {
-		  if (lval->sig()->data_type() == IVL_VT_BOOL)
-			old_lval = make_const_0(lval->sig()->vector_width());
-		  else
-			old_lval = make_const_x(lval->sig()->vector_width());
-	    }
+	    if (lval->sig()->data_type() == IVL_VT_STRING) {
+		  string s = old_lval ? dynamic_cast<NetEConst*>(old_lval)->value().as_string()
+				      : string("");
+		  if (base >= 0 && (size_t)base < s.size()) {
+			verinum ch_v(verinum::V0, 8);
+			if (op_) {
+			      unsigned char cur = static_cast<unsigned char>(s[base]);
+			      for (unsigned b = 0 ; b < 8 ; b += 1)
+				    ch_v.set(b, ((cur >> b) & 1) ? verinum::V1 : verinum::V0);
+			      eval_func_lval_op_(loc, ch_v, rval_result);
+			      ch_v.cast_to_int2();
+			} else {
+			      const auto*rval_const = dynamic_cast<NetEConst*>(rval_result);
+			      ivl_assert(loc, rval_const);
+			      ch_v = cast_to_width(rval_const->value(), 8);
+			      ch_v.cast_to_int2();
+			}
+			unsigned char new_ch = static_cast<unsigned char>(ch_v.as_ulong() & 0xffU);
+			if (new_ch != 0)
+			      s[base] = static_cast<char>(new_ch);
+		  }
+		  delete base_result;
+		  delete rval_result;
+		  rval_result = new NetEConst(verinum(s));
+	    } else {
+		  if (old_lval == 0) {
+			if (lval->sig()->data_type() == IVL_VT_BOOL)
+			      old_lval = make_const_0(lval->sig()->vector_width());
+			else
+			      old_lval = make_const_x(lval->sig()->vector_width());
+		  }
 
-	    const NetEConst*lval_const = dynamic_cast<NetEConst*>(old_lval);
-	    ivl_assert(loc, lval_const);
-	    verinum lval_v = lval_const->value();
-	    verinum lpart(verinum::Vx, lval->lwidth());
-	    if (op_) {
+		  const NetEConst*lval_const = dynamic_cast<NetEConst*>(old_lval);
+		  ivl_assert(loc, lval_const);
+		  verinum lval_v = lval_const->value();
+		  verinum lpart(verinum::Vx, lval->lwidth());
+		  if (op_) {
+			for (unsigned idx = 0 ; idx < lpart.len() ; idx += 1) {
+			      long ldx = base + idx;
+			      if (ldx >= 0 && (unsigned long)ldx < lval_v.len())
+				    lpart.set(idx, lval_v[ldx]);
+			}
+			eval_func_lval_op_(loc, lpart, rval_result);
+			if (lval->expr_type() == IVL_VT_BOOL) lpart.cast_to_int2();
+		  } else {
+			const auto*rval_const = dynamic_cast<NetEConst*>(rval_result);
+			ivl_assert(loc, rval_const);
+			lpart = cast_to_width(rval_const->value(), lval->lwidth());
+			if (lval->expr_type() == IVL_VT_BOOL) lpart.cast_to_int2();
+		  }
 		  for (unsigned idx = 0 ; idx < lpart.len() ; idx += 1) {
 			long ldx = base + idx;
 			if (ldx >= 0 && (unsigned long)ldx < lval_v.len())
-			      lpart.set(idx, lval_v[ldx]);
+			      lval_v.set(idx+base, lpart[idx]);
 		  }
-		  eval_func_lval_op_(loc, lpart, rval_result);
-		  if (lval->expr_type() == IVL_VT_BOOL) lpart.cast_to_int2();
-	    } else {
-		  const auto*rval_const = dynamic_cast<NetEConst*>(rval_result);
-		  ivl_assert(loc, rval_const);
-		  lpart = cast_to_width(rval_const->value(), lval->lwidth());
-		  if (lval->expr_type() == IVL_VT_BOOL) lpart.cast_to_int2();
-	    }
-	    for (unsigned idx = 0 ; idx < lpart.len() ; idx += 1) {
-		  long ldx = base + idx;
-		  if (ldx >= 0 && (unsigned long)ldx < lval_v.len())
-			lval_v.set(idx+base, lpart[idx]);
-	    }
 
-	    delete base_result;
-	    delete rval_result;
-	    rval_result = new NetEConst(lval_v);
+		  delete base_result;
+		  delete rval_result;
+		  rval_result = new NetEConst(lval_v);
+	    }
       } else {
 	    if (op_ == 0) {
 		  rval_result = fix_assign_value(lval->sig(), rval_result);
