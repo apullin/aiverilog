@@ -4683,10 +4683,19 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 	      // A static method has no object to call a method of.
 	    NetScope*callee = task ? task : func_scope;
 	    const NetScope*c_scope = scope->get_class_scope();
+	    const NetScope*callee_cscope = callee ? callee->get_class_scope() : nullptr;
+	    bool callee_in_hierarchy = false;
+	    if (c_scope && callee_cscope) {
+		  for (const netclass_t*cls = c_scope->class_def();
+		       cls && !callee_in_hierarchy; cls = cls->get_super()) {
+			if (cls->class_scope() == callee_cscope)
+			      callee_in_hierarchy = true;
+		  }
+	    }
 	    const NetScope*caller = c_scope
 		  ? find_method_containing_scope(*this, scope) : nullptr;
 	    if (gn_system_verilog() && path_.size() == 1 && callee && caller
-		&& c_scope == callee->get_class_scope()
+		&& callee_in_hierarchy
 		&& caller->is_static_method()) {
 		  NetExpr*this_expr = class_scope_method_this(*this, des, callee,
 							      path_);
@@ -4737,7 +4746,16 @@ NetProc* PCallTask::elaborate_usr(Design*des, NetScope*scope) const
 	 * implicit this added.  */
       if (gn_system_verilog() && (path_.size() == 1)) {
 	    const NetScope *c_scope = scope->get_class_scope();
-	    if (c_scope && (c_scope == task->get_class_scope())) {
+	    const NetScope *task_cscope = task->get_class_scope();
+	    bool in_hierarchy = false;
+	    if (c_scope && task_cscope) {
+		  for (const netclass_t *cls = c_scope->class_def();
+		       cls && !in_hierarchy; cls = cls->get_super()) {
+			if (cls->class_scope() == task_cscope)
+			      in_hierarchy = true;
+		  }
+	    }
+	    if (in_hierarchy) {
 		  NetProc *tmp = elaborate_method_(des, scope, true);
 		  ivl_assert(*this, tmp);
 		  return tmp;

@@ -289,6 +289,28 @@ static bool symbol_search_child_scope(
 	    }
       }
 
+      if (scope->type() == NetScope::CLASS) {
+	    const netclass_t *clsnet = scope->class_def();
+	    for (const netclass_t *sup = clsnet ? clsnet->get_super() : nullptr;
+		 sup; sup = sup->get_super()) {
+		  NetScope *sup_scope = const_cast<NetScope*>(sup->class_scope());
+		  if (sup_scope && sup_scope->child_byname(path_tail.name)) {
+			bool flag = false;
+			hname_t path_item = eval_path_component(
+			      des, start_scope, path_tail, flag);
+			if (!flag) {
+			      if (NetScope *child = sup_scope->child(path_item)) {
+				    pform_name_t path_head = path;
+				    path_head.push_back(path_tail);
+				    res->scope = child;
+				    res->path_head = path_head;
+				    return true;
+			      }
+			}
+		  }
+	    }
+      }
+
       if (path_tail.index.empty()) {
 	    if (const NetScope::interface_port_alias_t *alias =
 		scope->find_interface_port_alias(path_tail.name)) {

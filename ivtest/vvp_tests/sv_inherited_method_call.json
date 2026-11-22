@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "sv_inherited_method_call.v",
+    "iverilog-args" : [ "-g2012" ]
+}

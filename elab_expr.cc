@@ -5258,7 +5258,16 @@ NetExpr* PECallFunction::elaborate_expr_(Design*des, NetScope*scope,
       // implicit "this", and treat this item as a class method.
       if (gn_system_verilog() && (path_.size() == 1)) {
            const NetScope *c_scope = scope->get_class_scope();
-           if (c_scope && (c_scope == dscope->get_class_scope())) {
+           const NetScope *d_cscope = dscope->get_class_scope();
+           bool in_class_hierarchy = false;
+           if (c_scope && d_cscope) {
+                 for (const netclass_t *cls = c_scope->class_def();
+                      cls && !in_class_hierarchy; cls = cls->get_super()) {
+                       if (cls->class_scope() == d_cscope)
+                             in_class_hierarchy = true;
+                 }
+           }
+           if (in_class_hierarchy) {
 		 if (debug_elaborate) {
 		       cerr << get_fileline() << ": PECallFunction::elaborate_expr: "
 			    << "Found a class method calling another method." << endl;
