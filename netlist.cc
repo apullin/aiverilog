@@ -2526,8 +2526,10 @@ ivl_variable_type_t NetETernary::expr_type() const
 {
       ivl_assert(*this, true_val_);
       ivl_assert(*this, false_val_);
-      ivl_variable_type_t tru = true_val_->expr_type();
-      ivl_variable_type_t fal = false_val_->expr_type();
+      ivl_variable_type_t tru = dynamic_cast<const NetENull*>(true_val_.get())
+	    ? IVL_VT_CLASS : true_val_->expr_type();
+      ivl_variable_type_t fal = dynamic_cast<const NetENull*>(false_val_.get())
+	    ? IVL_VT_CLASS : false_val_->expr_type();
       ivl_variable_type_t sel = cond_->expr_type();
       if (tru == IVL_VT_LOGIC && fal == IVL_VT_BOOL)
 	    return IVL_VT_LOGIC;

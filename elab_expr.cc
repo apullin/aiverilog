@@ -11494,10 +11494,14 @@ NetExpr*PETernary::elaborate_expr(Design*des, NetScope*scope,
 	    return 0;
       }
 
-      if (! NetETernary::test_operand_compat(tru->expr_type(), fal->expr_type())) {
+      const bool tru_null = dynamic_cast<const NetENull*>(tru) != nullptr;
+      const bool fal_null = dynamic_cast<const NetENull*>(fal) != nullptr;
+      const ivl_variable_type_t tru_vt = tru_null ? IVL_VT_CLASS : tru->expr_type();
+      const ivl_variable_type_t fal_vt = fal_null ? IVL_VT_CLASS : fal->expr_type();
+      if (! NetETernary::test_operand_compat(tru_vt, fal_vt)) {
 	    cerr << get_fileline() << ": error: Data types "
-		 << tru->expr_type() << " and "
-		 << fal->expr_type() << " of ternary"
+		 << tru_vt << " and "
+		 << fal_vt << " of ternary"
 		 << " do not match." << endl;
 	    des->errors += 1;
 	    return 0;
