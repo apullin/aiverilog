@@ -7506,10 +7506,17 @@ NetProc* PReturn::elaborate(Design*des, NetScope*scope) const
 
       ivl_assert(*this, target->type() == NetScope::FUNC);
 
-      if (target->func_def()->is_void()) {
+      const bool is_ctor = target->parent() &&
+	    target->parent()->type() == NetScope::CLASS &&
+	    (target->basename() == "new" || target->basename() == "new@");
+
+      if (target->func_def()->is_void() || is_ctor) {
 	    if (expr_) {
 		  cerr << get_fileline() << ": error: "
-		       << "A value can't be returned from a void function." << endl;
+		       << (is_ctor
+			   ? "A value cannot be returned from a class constructor."
+			   : "A value can't be returned from a void function.")
+		       << endl;
 		  des->errors += 1;
 		  return 0;
 	    }
