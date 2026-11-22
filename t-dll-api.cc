@@ -2510,12 +2510,6 @@ extern "C" unsigned ivl_scope_is_cell(ivl_scope_t net)
       return net->is_cell;
 }
 
-extern "C" unsigned ivl_scope_is_disable_target(ivl_scope_t net)
-{
-      assert(net);
-      return net->is_disable_target;
-}
-
 extern "C" unsigned ivl_scope_lineno(ivl_scope_t net)
 {
       assert(net);

@@ -1902,9 +1902,6 @@ extern ivl_scope_t  ivl_period_scope(ivl_period_t check);
  * ivl_scope_is_cell
  *    Is the module defined to be a cell?
  *
- * ivl_scope_is_disable_target
- *    Can a normal disable statement target this scope?
- *
  * ivl_scope_var
  * ivl_scope_vars
  *    REMOVED
@@ -2104,7 +2101,6 @@ extern const char* ivl_scope_file(ivl_scope_t net);
 extern unsigned ivl_scope_is_auto(ivl_scope_t net);
 extern ivl_scope_t ivl_scope_virtual_root(ivl_scope_t net);
 extern unsigned ivl_scope_is_cell(ivl_scope_t net);
-extern unsigned ivl_scope_is_disable_target(ivl_scope_t net);
 extern unsigned ivl_scope_lineno(ivl_scope_t net);
 extern unsigned     ivl_scope_logs(ivl_scope_t net);
 extern ivl_net_logic_t ivl_scope_log(ivl_scope_t net, unsigned idx);

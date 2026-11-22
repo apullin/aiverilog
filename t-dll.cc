@@ -43,7 +43,6 @@ ivl_scope_s::ivl_scope_s()
 {
       func_signed = false;
       func_width = 0;
-      is_disable_target = 0;
 }
 
 /*
