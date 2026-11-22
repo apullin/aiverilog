@@ -1161,6 +1161,13 @@ NetNet* NetESelect::synthesize(Design *des, NetScope*scope, NetExpr*root)
 
       if (expr_->expr_type() == IVL_VT_DARRAY) {
 	    NetESignal*darray_expr = dynamic_cast<NetESignal*>(expr_.get());
+	    if (darray_expr && darray_expr->sig()->data_type() == IVL_VT_QUEUE) {
+		  cerr << get_fileline() << ": sorry: Dynamic array and queue "
+		       << "element selects are not supported in this context."
+		       << endl;
+		  des->errors += 1;
+		  return 0;
+	    }
 	    const netdarray_t*darray_type = darray_expr
 	          ? darray_expr->sig()->darray_type() : 0;
 
