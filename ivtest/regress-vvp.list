@@ -1032,6 +1032,7 @@ sv_class_param_self		vvp_tests/sv_class_param_self.json
 sv_class_param_static		vvp_tests/sv_class_param_static.json
 sv_class_param_string		vvp_tests/sv_class_param_string.json
 sv_class_param_type		vvp_tests/sv_class_param_type.json
+sv_class_pkg_import		vvp_tests/sv_class_pkg_import.json
 sv_class_param_type_kinds	vvp_tests/sv_class_param_type_kinds.json
 sv_class_param_type_value_fail vvp_tests/sv_class_param_type_value_fail.json
 sv_class_param_typedef_fail	vvp_tests/sv_class_param_typedef_fail.json
