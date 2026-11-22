@@ -97,7 +97,7 @@ static struct __vpiModPath*modpath_dst = 0;
 %token K_NET8 K_NET8_2S K_NET8_2U K_NET8_S
 %token K_NET_VAR
 %token K_PARAM_STR K_PARAM_L K_PARAM_REAL K_PART K_PART_PV
-%token K_PART_V K_PART_V_S K_PORT K_PORT_INFO K_PQ K_PV K_REDUCE_AND K_REDUCE_OR K_REDUCE_XOR
+%token K_PART_V K_PART_V_S K_PORT K_PORT_INFO K_PQ K_PS K_PV K_REDUCE_AND K_REDUCE_OR K_REDUCE_XOR
 %token K_REDUCE_NAND K_REDUCE_NOR K_REDUCE_XNOR K_REPEAT
 %token K_RESOLV K_RTRAN K_RTRANIF0 K_RTRANIF1
 %token K_SCOPE K_SFUNC K_SFUNC_E K_SHIFTL K_SHIFTR K_SHIFTRS
@@ -1317,6 +1317,8 @@ symbol_access
       { $$ = vpip_make_vthr_APV($3, $5, $7, $9); }
   | K_PQ '<' T_SYMBOL ',' T_NUMBER ',' T_NUMBER '>'
       { $$ = vpip_make_prop_queue_ref($3, $5, $7); }
+  | K_PS '<' T_SYMBOL ',' T_NUMBER '>'
+      { $$ = vpip_make_prop_string_ref($3, $5); }
   ;
 
   /* functor operands can only be a list of symbols. */

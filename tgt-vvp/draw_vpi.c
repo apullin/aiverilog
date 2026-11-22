@@ -402,6 +402,17 @@ static void draw_vpi_taskfunc_args(const char*call_string,
 			args[idx].text = strdup(buffer);
 			continue;
 		  }
+		  if (ivl_expr_oper1(expr) == 0 && ivl_expr_oper2(expr) == 0 &&
+		      ivl_expr_value(expr) == IVL_VT_STRING) {
+			ivl_signal_t clas = ivl_expr_signal(expr);
+			if (clas && ivl_signal_dimensions(clas) == 0) {
+			      unsigned pidx = ivl_expr_property_idx(expr);
+			      snprintf(buffer, sizeof buffer, "&PS<v%p_0,%u>",
+				       clas, pidx);
+			      args[idx].text = strdup(buffer);
+			      continue;
+			}
+		  }
 		  break;
 
 		case IVL_EX_SIGNAL:
