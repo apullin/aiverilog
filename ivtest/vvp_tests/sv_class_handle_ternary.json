@@ -1,0 +1,5 @@
+{
+    "type"   : "normal",
+    "source" : "sv_class_handle_ternary.v",
+    "iverilog-args" : [ "-g2012" ]
+}

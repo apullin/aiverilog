@@ -381,6 +381,48 @@ static int eval_object_ufunc(ivl_expr_t ex)
       return 0;
 }
 
+static int eval_object_ternary(ivl_expr_t expr)
+{
+      int errors = 0;
+      ivl_expr_t cond = ivl_expr_oper1(expr);
+      ivl_expr_t true_ex = ivl_expr_oper2(expr);
+      ivl_expr_t false_ex = ivl_expr_oper3(expr);
+
+      unsigned lab_false = local_count++;
+      unsigned lab_same = local_count++;
+      unsigned lab_out = local_count++;
+
+      int use_flag = draw_eval_condition(cond);
+      if (use_flag < 8) {
+	    int tmp_flag = allocate_flag();
+	    assert(tmp_flag >= 8);
+	    fprintf(vvp_out, "    %%flag_mov %d, %d;\n", tmp_flag, use_flag);
+	    use_flag = tmp_flag;
+      }
+
+      fprintf(vvp_out, "    %%jmp/0 T_%u.%u, %d;\n", thread_count, lab_false, use_flag);
+      errors += draw_eval_object(true_ex);
+      fprintf(vvp_out, "    %%jmp/1 T_%u.%u, %d;\n", thread_count, lab_out, use_flag);
+
+      fprintf(vvp_out, "T_%u.%u;\n", thread_count, lab_false);
+      errors += draw_eval_object(false_ex);
+      fprintf(vvp_out, "    %%jmp/0 T_%u.%u, %d;\n", thread_count, lab_out, use_flag);
+
+	/* Condition is X/Z: keep the handle if both branches refer to the
+	   same object, otherwise yield null. */
+      fprintf(vvp_out, "    %%cmp/obj;\n");
+      fprintf(vvp_out, "    %%jmp/1 T_%u.%u, 4;\n", thread_count, lab_same);
+      fprintf(vvp_out, "    %%pop/obj 2, 0;\n");
+      fprintf(vvp_out, "    %%null;\n");
+      fprintf(vvp_out, "    %%jmp T_%u.%u;\n", thread_count, lab_out);
+      fprintf(vvp_out, "T_%u.%u;\n", thread_count, lab_same);
+      fprintf(vvp_out, "    %%pop/obj 1, 0;\n");
+
+      fprintf(vvp_out, "T_%u.%u;\n", thread_count, lab_out);
+      clr_flag(use_flag);
+      return errors;
+}
+
 static ivl_type_t queue_unique_src_elem_type(ivl_expr_t arg)
 {
       ivl_type_t src_q = 0;
@@ -864,6 +906,9 @@ int draw_eval_object(ivl_expr_t ex)
 
 	  case IVL_EX_SIGNAL:
 	    return eval_object_signal(ex);
+
+	  case IVL_EX_TERNARY:
+	    return eval_object_ternary(ex);
 
 	  case IVL_EX_UFUNC:
 	    return eval_object_ufunc(ex);
