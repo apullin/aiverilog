@@ -1158,6 +1158,13 @@ signal.
 This sets the vector value into the back (qb) or front (qf) of a queue
 variable.
 
+* %setc/str/vec4 <idx>
+
+Pop an 8-bit character from the vec4 stack and replace the character at
+the index given by register <idx> (or 0 when <idx> is 0) in the string
+on top of the string stack. If flag bit 4 is set, the index is out of
+bounds, or the byte value is 0, the string is left unchanged.
+
 * %shiftl <idx>
 * %shiftr <idx>
 * %shiftr/s <idx>

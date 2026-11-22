@@ -5894,6 +5894,35 @@ bool of_PUTC_STR_VEC4(vthread_t thr, vvp_code_t cp)
       return true;
 }
 
+/*
+ * %setc/str/vec4 <mux>
+ * Replace the character at <mux> in the string on top of the string stack
+ * with the 8-bit character popped from the vec4 stack.
+ */
+bool of_SETC_STR_VEC4(vthread_t thr, vvp_code_t cp)
+{
+      unsigned muxr = cp->number;
+      int32_t mux = muxr ? thr->words[muxr].w_int : 0;
+
+      vvp_vector4_t val = thr->pop_vec4();
+      assert(val.size() == 8);
+
+      if (thr->flags[4] == BIT4_1) return true;
+      if (mux < 0) return true;
+
+      string&tmp = thr->peek_str(0);
+      if (tmp.size() <= (size_t)mux) return true;
+
+      char val_str = 0;
+      for (size_t idx = 0 ; idx < 8 ; idx += 1) {
+	    if (val.value(idx) == BIT4_1) val_str |= 1 << idx;
+      }
+      if (val_str == 0) return true;
+
+      tmp[mux] = val_str;
+      return true;
+}
+
 template <typename ELEM, class QTYPE>
 static bool qinsert(vthread_t thr, vvp_code_t cp, unsigned wid=0)
 {
